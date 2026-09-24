@@ -149,8 +149,23 @@ namespace PrivateCoin.Core
 
         public IReadOnlyList<UnspentOutput> GetUnspentOutputs(IEnumerable<string> addresses)
         {
+            return GetUnspentOutputs(addresses, Enumerable.Empty<Transaction>());
+        }
+
+        /// <summary>
+        /// Returns outputs that remain spendable after applying an ordered set of
+        /// pending transactions to the current chain state.
+        /// </summary>
+        public IReadOnlyList<UnspentOutput> GetUnspentOutputs(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             var wanted = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
-            lock (sync) return BuildUtxo().Values.Where(x => wanted.Contains(x.Output.OneTimeAddress)).ToArray();
+            lock (sync)
+            {
+                var utxo = BuildUtxo();
+                foreach (Transaction transaction in pendingTransactions) Apply(transaction, utxo, false);
+                return utxo.Values.Where(x => wanted.Contains(x.Output.OneTimeAddress)).ToArray();
+            }
         }
 
         public long GetBalance(IEnumerable<string> addresses)

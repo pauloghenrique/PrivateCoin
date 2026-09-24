@@ -62,13 +62,23 @@ namespace PrivateCoin.Core
 
         public Transaction CreateTransaction(Blockchain chain, string destinationOneTimeAddress, long amount)
         {
+            return CreateTransaction(chain, Enumerable.Empty<Transaction>(), destinationOneTimeAddress, amount);
+        }
+
+        /// <summary>
+        /// Creates a transaction using the spendable state left by the ordered
+        /// pending transactions, including any unconfirmed change owned by this wallet.
+        /// </summary>
+        public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount)
+        {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (string.IsNullOrWhiteSpace(destinationOneTimeAddress)) throw new ArgumentException("Destination is required.", nameof(destinationOneTimeAddress));
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
 
             var selected = new List<UnspentOutput>();
             long total = 0;
-            foreach (var item in chain.GetUnspentOutputs(keys.Keys))
+            foreach (var item in chain.GetUnspentOutputs(keys.Keys, pendingTransactions))
             {
                 selected.Add(item);
                 total = checked(total + item.Output.Amount);
