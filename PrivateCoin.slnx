@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PrivateCoin.Core/PrivateCoin.Core.csproj" Id="fae5cd1c-714d-4225-8bf2-b553b95bc35b" />
+  <Project Path="PrivateCoin.Desktop/PrivateCoin.Desktop.csproj" Id="82cb7847-937b-47da-80ca-34d5993f91a1" />
+</Solution>
