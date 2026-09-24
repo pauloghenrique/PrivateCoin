@@ -417,8 +417,8 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             NamedWallet selected = SelectedWallet;
-            long balance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
-            balanceLabel.Text = "Saldo: " + ((decimal)balance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            long balance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+            balanceLabel.Text = "Saldo disponível: " + ((decimal)balance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
         }
 
         private void SaveState()

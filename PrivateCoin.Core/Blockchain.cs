@@ -173,6 +173,17 @@ namespace PrivateCoin.Core
             return GetUnspentOutputs(addresses).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
+        /// <summary>
+        /// Returns the spendable balance after applying the ordered pending
+        /// transactions. This lets a validated transfer take effect immediately;
+        /// mining only confirms the accumulated transactions in a block.
+        /// </summary>
+        public long GetBalance(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            return GetUnspentOutputs(addresses, pendingTransactions)
+                .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
+        }
+
         public bool IsValid()
         {
             lock (sync)
