@@ -302,7 +302,7 @@ namespace PrivateCoin.Desktop
                 }
                 Log(source + ": assinatura, propriedade, saldo e gasto duplo validados (" + ShortId(transaction.Id) + ").", true);
                 UpdateChainSummary();
-                BeginInvoke(new Action(StartAutomaticMining));
+                if (PendingTransactionsFillBlock()) BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
             {
@@ -319,10 +319,12 @@ namespace PrivateCoin.Desktop
                 while (true)
                 {
                     Transaction[] batch = SnapshotPending();
-                    if (batch.Length == 0) break;
+                    long batchSize = Blockchain.GetTransactionBatchSize(batch);
+                    if (batchSize < Blockchain.MiningBlockSizeBytes) break;
 
                     miningStatusLabel.Text = "Minerando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Mineração automática iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
+                    Log("Mineração automática iniciada: o bloco atingiu 2 MiB com " +
+                        batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
                     NamedWallet mainWallet = wallets[0];
                     string rewardAddress = mainWallet.Wallet.CreateReceiveAddress();
@@ -351,9 +353,9 @@ namespace PrivateCoin.Desktop
             finally
             {
                 miningInProgress = false;
-                miningStatusLabel.Text = "Aguardando transações";
+                miningStatusLabel.Text = "Aguardando o bloco atingir 2 MiB";
                 UpdateChainSummary();
-                if (!IsDisposed && SnapshotPending().Length > 0)
+                if (!IsDisposed && PendingTransactionsFillBlock())
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }
@@ -429,6 +431,11 @@ namespace PrivateCoin.Desktop
         private Transaction[] SnapshotPending()
         {
             lock (pendingSync) return pendingTransactions.ToArray();
+        }
+
+        private bool PendingTransactionsFillBlock()
+        {
+            return Blockchain.GetTransactionBatchSize(SnapshotPending()) >= Blockchain.MiningBlockSizeBytes;
         }
 
         private void UpdateChainSummary()
