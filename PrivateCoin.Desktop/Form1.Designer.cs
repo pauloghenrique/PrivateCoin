@@ -77,7 +77,7 @@ namespace PrivateCoin.Desktop
             this.createTransactionButton.SetBounds(238, 324, 190, 28); this.createTransactionButton.Text = "Transferir e propagar"; this.createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
             // mining
             AddLabel("MINERAÇÃO", 24, 380, 110, true);
-            this.miningStatusLabel.SetBounds(24, 419, 500, 20); this.miningStatusLabel.Text = "Aguardando transações — mineração automática ativada";
+            this.miningStatusLabel.SetBounds(24, 419, 500, 20); this.miningStatusLabel.Text = "Aguardando o bloco atingir 2 MiB";
             this.chainStatusLabel.SetBounds(24, 463, 722, 24); this.chainStatusLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
             // validation log
             AddLabel("VALIDAÇÕES DA REDE", 24, 504, 220, true);
