@@ -379,7 +379,7 @@ namespace PrivateCoin.Desktop
                 long amount = checked((long)(coins * Blockchain.OneCoin));
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
-                Transaction transaction = selected.Wallet.CreateTransaction(blockchain, destinationTextBox.Text.Trim(), amount);
+                Transaction transaction = selected.Wallet.CreateTransaction(blockchain, SnapshotPending(), destinationTextBox.Text.Trim(), amount);
                 ValidateAndQueue(transaction, "Carteira local");
                 SaveState();
                 if (peerNode != null)
