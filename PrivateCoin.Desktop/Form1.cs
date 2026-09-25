@@ -46,7 +46,10 @@ namespace PrivateCoin.Desktop
 
                     if (walletStore.NetworkExists)
                     {
-                        blockchain = walletStore.LoadNetwork();
+                        List<Transaction> restoredPendingTransactions;
+                        blockchain = walletStore.LoadNetwork(out restoredPendingTransactions);
+                        pendingTransactions.AddRange(restoredPendingTransactions);
+                        foreach (Transaction transaction in restoredPendingTransactions) pendingIds.Add(transaction.Id);
                         if (!walletStore.WalletExists) wallets[0].Wallet.CreateReceiveAddress();
                     }
                     else
@@ -301,6 +304,7 @@ namespace PrivateCoin.Desktop
                     pendingTransactions.Add(transaction);
                 }
                 Log(source + ": assinatura, propriedade, saldo e gasto duplo validados (" + ShortId(transaction.Id) + ").", true);
+                SaveState();
                 UpdateChainSummary();
                 if (PendingTransactionsFillBlock()) BeginInvoke(new Action(StartAutomaticMining));
             }
@@ -381,7 +385,6 @@ namespace PrivateCoin.Desktop
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 Transaction transaction = selected.Wallet.CreateTransaction(blockchain, SnapshotPending(), destinationTextBox.Text.Trim(), amount);
                 ValidateAndQueue(transaction, "Carteira local");
-                SaveState();
                 if (peerNode != null)
                 {
                     await peerNode.BroadcastAsync(transaction);
@@ -424,7 +427,7 @@ namespace PrivateCoin.Desktop
         private void SaveState()
         {
             if (!persistenceAvailable) return;
-            try { walletStore.Save(wallets, blockchain); }
+            try { walletStore.Save(wallets, blockchain, SnapshotPending()); }
             catch (Exception error) { Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false); }
         }
 

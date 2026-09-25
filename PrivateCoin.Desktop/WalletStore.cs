@@ -66,16 +66,22 @@ namespace PrivateCoin.Desktop
             return AppDomain.CurrentDomain.BaseDirectory;
         }
 
-        public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain)
+        public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
         {
             if (wallets == null) throw new ArgumentNullException(nameof(wallets));
             if (blockchain == null) throw new ArgumentNullException(nameof(blockchain));
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
 
             // Store the public file first. This also makes migration from the old combined
             // wallets.dat safe: that file is not replaced until the chain has been written.
-            byte[] networkData = Serialize(blockchain.Blocks.ToList());
+            byte[] networkData = Serialize(new StoredNetworkData
+            {
+                Blocks = blockchain.Blocks.ToList(),
+                PendingTransactions = pendingTransactions.ToList()
+            });
             WriteJson(networkFilePath, new StoredNetwork
             {
+                SchemaVersion = 2,
                 Data = Convert.ToBase64String(networkData),
                 Sha256 = CalculateSha256(networkData)
             }, false);
@@ -110,8 +116,9 @@ namespace PrivateCoin.Desktop
             }
         }
 
-        public Blockchain LoadNetwork()
+        public Blockchain LoadNetwork(out List<Transaction> pendingTransactions)
         {
+            pendingTransactions = new List<Transaction>();
             StoredNetwork state = ReadJson<StoredNetwork>(networkFilePath, false);
             if (state == null)
                 throw new SerializationException("O arquivo da rede está incompleto.");
@@ -127,8 +134,21 @@ namespace PrivateCoin.Desktop
                 if (!string.Equals(calculatedHash, state.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new SerializationException("A verificação SHA-256 do arquivo da rede falhou.");
 
-                blocks = Deserialize<List<Block>>(networkData);
-                NetworkNeedsUpgrade = false;
+                if (state.SchemaVersion >= 2)
+                {
+                    StoredNetworkData storedData = Deserialize<StoredNetworkData>(networkData);
+                    if (storedData == null || storedData.Blocks == null)
+                        throw new SerializationException("Os dados da rede estão incompletos.");
+                    blocks = storedData.Blocks;
+                    pendingTransactions = storedData.PendingTransactions ?? new List<Transaction>();
+                }
+                else
+                {
+                    // Version 1 stored only the confirmed blocks in the signed payload.
+                    blocks = Deserialize<List<Block>>(networkData);
+                    NetworkNeedsUpgrade = true;
+                }
+                if (state.SchemaVersion >= 2) NetworkNeedsUpgrade = false;
             }
             else if (state.Blocks != null)
             {
@@ -138,7 +158,12 @@ namespace PrivateCoin.Desktop
             }
             else throw new SerializationException("O arquivo da rede está incompleto.");
 
-            return new Blockchain(blocks);
+            var blockchain = new Blockchain(blocks);
+            blockchain.ValidatePendingTransactions(pendingTransactions);
+            if (pendingTransactions.Any(transaction => transaction == null) ||
+                pendingTransactions.Select(transaction => transaction.Id).Distinct(StringComparer.Ordinal).Count() != pendingTransactions.Count)
+                throw new SerializationException("A fila de transações pendentes da rede é inválida.");
+            return blockchain;
         }
 
         /// <summary>Reads the original combined wallets.dat so existing installations can be migrated.</summary>
@@ -221,9 +246,17 @@ namespace PrivateCoin.Desktop
         [DataContract]
         private sealed class StoredNetwork
         {
-            [DataMember(Order = 1, EmitDefaultValue = false)] public string Data { get; set; }
-            [DataMember(Order = 2, EmitDefaultValue = false)] public string Sha256 { get; set; }
-            [DataMember(Order = 3, EmitDefaultValue = false)] public List<Block> Blocks { get; set; }
+            [DataMember(Order = 1, EmitDefaultValue = false)] public int SchemaVersion { get; set; }
+            [DataMember(Order = 2, EmitDefaultValue = false)] public string Data { get; set; }
+            [DataMember(Order = 3, EmitDefaultValue = false)] public string Sha256 { get; set; }
+            [DataMember(Order = 4, EmitDefaultValue = false)] public List<Block> Blocks { get; set; }
+        }
+
+        [DataContract]
+        private sealed class StoredNetworkData
+        {
+            [DataMember(Order = 1)] public List<Block> Blocks { get; set; }
+            [DataMember(Order = 2)] public List<Transaction> PendingTransactions { get; set; }
         }
 
         [DataContract]

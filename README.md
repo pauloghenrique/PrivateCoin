@@ -33,7 +33,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 `PrivateCoin.Desktop` oferece um painel WinForms para criar e alternar entre várias carteiras, consultar o saldo de cada uma, gerar endereços de recebimento e fazer transferências. Durante o desenvolvimento, os dados persistidos ficam separados em dois arquivos dentro da própria pasta `PrivateCoin.Desktop`. Em uma versão publicada sem o arquivo do projeto, eles ficam ao lado do executável:
 
-- `Blockchain.json` contém a blockchain completa, sem chaves privadas, em um envelope Base64 acompanhado pelo hash SHA-256 dos dados. Ao abrir o arquivo, o aplicativo confere o hash e rejeita conteúdo alterado antes de validar a cadeia. O arquivo pode ser distribuído para sincronizar os dados públicos da rede;
+- `Blockchain.json` contém a blockchain completa e a fila de transações pendentes, sem chaves privadas, em um envelope Base64 acompanhado pelo hash SHA-256 dos dados. Cada transferência validada é gravada imediatamente nesse arquivo, mesmo antes de completar os 2 MiB necessários para mineração. Ao abrir o arquivo, o aplicativo confere o hash, restaura e valida também as pendências e rejeita conteúdo alterado antes de validar a cadeia. O arquivo pode ser distribuído para sincronizar os dados públicos da rede;
 - `wallets.dat` contém apenas os nomes e as chaves privadas das carteiras locais, cifrados para o usuário atual do Windows por DPAPI, e **não deve ser distribuído**.
 
 Instalações que ainda possuam o antigo `wallets.dat` combinado são migradas automaticamente para esse formato na primeira abertura.
