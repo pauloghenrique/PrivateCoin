@@ -94,6 +94,7 @@ namespace PrivateCoin.Desktop
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            if (SnapshotPending().Length > 0) BeginInvoke(new Action(StartAutomaticMining));
             string configuredPort = ConfigurationManager.AppSettings["ListenPort"];
             if (!string.IsNullOrWhiteSpace(configuredPort)) listenPortTextBox.Text = configuredPort.Trim();
             bool autoStart;
@@ -322,7 +323,7 @@ namespace PrivateCoin.Desktop
                 Log(source + ": assinatura, propriedade, saldo e gasto duplo validados (" + ShortId(transaction.Id) + ").", true);
                 SaveState();
                 UpdateChainSummary();
-                if (PendingTransactionsFillBlock()) BeginInvoke(new Action(StartAutomaticMining));
+                BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
             {
@@ -339,11 +340,10 @@ namespace PrivateCoin.Desktop
                 while (true)
                 {
                     Transaction[] batch = SnapshotPending();
-                    long batchSize = Blockchain.GetTransactionBatchSize(batch);
-                    if (batchSize < Blockchain.MiningBlockSizeBytes) break;
+                    if (batch.Length == 0) break;
 
                     miningStatusLabel.Text = "Minerando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Mineração automática iniciada: o bloco atingiu 2 MiB com " +
+                    Log("Mineração automática iniciada após a validação de " +
                         batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
                     Block block = await Task.Run(() => blockchain.AddBlock(batch));
@@ -370,9 +370,9 @@ namespace PrivateCoin.Desktop
             finally
             {
                 miningInProgress = false;
-                miningStatusLabel.Text = "Aguardando o bloco atingir 2 MiB";
+                miningStatusLabel.Text = "Aguardando uma transferência válida";
                 UpdateChainSummary();
-                if (!IsDisposed && PendingTransactionsFillBlock())
+                if (!IsDisposed && SnapshotPending().Length > 0)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }
@@ -491,11 +491,6 @@ namespace PrivateCoin.Desktop
         private Transaction[] SnapshotPending()
         {
             lock (pendingSync) return pendingTransactions.ToArray();
-        }
-
-        private bool PendingTransactionsFillBlock()
-        {
-            return Blockchain.GetTransactionBatchSize(SnapshotPending()) >= Blockchain.MiningBlockSizeBytes;
         }
 
         private void UpdateChainSummary()

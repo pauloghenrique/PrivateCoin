@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -15,7 +13,6 @@ namespace PrivateCoin.Core
         public const long WalletCreationReward = 6L * OneCoin;
         public const long DistributionSupply = 180000L * OneCoin;
         public const int RewardedWalletLimit = (int)(DistributionSupply / WalletCreationReward);
-        public const int MiningBlockSizeBytes = 2 * 1024 * 1024;
         public const long MaximumSupply = DistributionSupply;
         private const string ProofPrefix = "000";
         private readonly object sync = new object();
@@ -37,21 +34,6 @@ namespace PrivateCoin.Core
         }
 
         public IReadOnlyList<Block> Blocks { get { lock (sync) return blocks.ToArray(); } }
-
-        /// <summary>Returns the encoded size used to decide when pending transactions fill a mining block.</summary>
-        public static long GetTransactionBatchSize(IEnumerable<Transaction> transactions)
-        {
-            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
-            var batch = transactions.ToList();
-            if (batch.Any(transaction => transaction == null)) throw new ArgumentException("Transactions cannot contain null values.", nameof(transactions));
-
-            var serializer = new DataContractJsonSerializer(typeof(List<Transaction>));
-            using (var stream = new MemoryStream())
-            {
-                serializer.WriteObject(stream, batch);
-                return stream.Length;
-            }
-        }
 
         public Block AddBlock(IEnumerable<Transaction> transactions)
         {
