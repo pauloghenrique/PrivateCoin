@@ -74,4 +74,6 @@ A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 a
 
 `DistributeReward` reserva **30%** da recompensa ao criador escolhido e distribui os **70%** restantes entre os validadores que confirmaram corretamente, proporcionalmente às garantias bloqueadas. O arredondamento da menor unidade é determinístico e a soma das parcelas é sempre exatamente a recompensa prevista para a altura. O criador não pode confirmar o próprio bloco.
 
+A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitária e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 PRIVATE**.
+
 Essas rotinas são a política de consenso que deverá ser usada pelo protocolo de votação. Antes de uso em produção, o bloqueio/desbloqueio da garantia, as assinaturas dos votos, quórum, penalidades (*slashing*) e mensagens P2P de proposta/confirmação ainda precisam ser persistidos e validados na cadeia.
