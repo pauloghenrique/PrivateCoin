@@ -49,6 +49,44 @@ namespace PrivateCoin.Core
             }
         }
 
+        public Block AddProofOfStakeBlock(IEnumerable<Transaction> transactions, IEnumerable<ValidatorStake> validators)
+        {
+            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
+            if (validators == null) throw new ArgumentNullException(nameof(validators));
+            lock (sync)
+            {
+                var pending = transactions.ToList();
+                ValidateTransactions(pending);
+                ValidatorStake[] active = validators.ToArray();
+                if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
+                int height = blocks.Count;
+                ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
+                ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
+                IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
+                var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
+                foreach (ValidatorReward share in rewards)
+                    reward.Outputs.Add(new TransactionOutput { Amount = share.Amount, OneTimeAddress = share.RewardAddress });
+                reward.Id = reward.CalculateId();
+                var block = new Block
+                {
+                    Height = height,
+                    PreviousHash = blocks[blocks.Count - 1].Hash,
+                    TimestampUtcTicks = reward.TimestampUtcTicks,
+                    Transactions = new[] { reward }.Concat(pending).ToList(),
+                    Validators = active.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item => new BlockValidator
+                    {
+                        ValidatorId = item.ValidatorId,
+                        RewardAddress = item.RewardAddress,
+                        LockedAmount = item.LockedAmount,
+                        IsCreator = item.ValidatorId == creator.ValidatorId
+                    }).ToList()
+                };
+                Mine(block);
+                blocks.Add(block);
+                return block;
+            }
+        }
+
         /// <summary>
         /// Creates a block that distributes six coins to a newly-created wallet.
         /// Distribution stops permanently after 180,000 coins have been issued.
@@ -185,12 +223,19 @@ namespace PrivateCoin.Core
             Block genesis = blocks[0];
             if (genesis.Transactions.Count != 0) throw new InvalidOperationException("The genesis block must not issue tokens.");
             long issued = 0;
+            long validatorIssued = 0;
 
             for (int blockIndex = 1; blockIndex < blocks.Count; blockIndex++)
             {
                 Block block = blocks[blockIndex];
                 int regularTransactionIndex = 0;
-                if (block.Transactions.Count > 0 && block.Transactions[0].Inputs.Count == 0)
+                if (block.Validators != null && block.Validators.Count > 0)
+                {
+                    ValidateProofOfStakeBlock(block, blocks[blockIndex - 1].Hash, utxo);
+                    validatorIssued = checked(validatorIssued + ProofOfStake.GetBlockReward(block.Height));
+                    regularTransactionIndex = 1;
+                }
+                else if (block.Transactions.Count > 0 && block.Transactions[0].Inputs.Count == 0)
                 {
                     Transaction reward = block.Transactions[0];
                     if (!IsWalletCreationReward(reward)) throw new InvalidOperationException("Invalid wallet creation reward.");
@@ -203,7 +248,29 @@ namespace PrivateCoin.Core
                 for (int transactionIndex = regularTransactionIndex; transactionIndex < block.Transactions.Count; transactionIndex++)
                     Apply(block.Transactions[transactionIndex], utxo, false);
             }
-            if (issued > MaximumSupply) throw new InvalidOperationException("Invalid supply.");
+            if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
+        }
+
+        private static void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo)
+        {
+            if (block.Transactions.Count == 0) throw new InvalidOperationException("A proof-of-stake block must contain its reward.");
+            BlockValidator[] records = block.Validators.ToArray();
+            if (records.Length < 2 || records.Count(item => item.IsCreator) != 1)
+                throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
+            var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount)).ToArray();
+            ValidatorStake expectedCreator = ProofOfStake.SelectCreator(stakes, previousHash, block.Height);
+            BlockValidator recordedCreator = records.Single(item => item.IsCreator);
+            if (recordedCreator.ValidatorId != expectedCreator.ValidatorId)
+                throw new InvalidOperationException("The recorded validator was not selected to create this block.");
+            IReadOnlyList<ValidatorReward> expected = ProofOfStake.DistributeReward(block.Height, expectedCreator,
+                stakes.Where(item => item.ValidatorId != expectedCreator.ValidatorId));
+            Transaction reward = block.Transactions[0];
+            if (reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != expected.Count)
+                throw new InvalidOperationException("Invalid validator reward transaction.");
+            for (int index = 0; index < expected.Count; index++)
+                if (reward.Outputs[index].Amount != expected[index].Amount || reward.Outputs[index].OneTimeAddress != expected[index].RewardAddress)
+                    throw new InvalidOperationException("The validator reward distribution is incorrect.");
+            Apply(reward, utxo, true);
         }
 
         private static bool IsWalletCreationReward(Transaction transaction)

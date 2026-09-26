@@ -8,6 +8,15 @@ using System.Text;
 namespace PrivateCoin.Core
 {
     [DataContract]
+    public sealed class BlockValidator
+    {
+        [DataMember(Order = 1)] public string ValidatorId { get; set; }
+        [DataMember(Order = 2)] public string RewardAddress { get; set; }
+        [DataMember(Order = 3)] public long LockedAmount { get; set; }
+        [DataMember(Order = 4)] public bool IsCreator { get; set; }
+    }
+
+    [DataContract]
     public sealed class TransactionInput
     {
         [DataMember(Order = 1)] public string TransactionId { get; set; }
@@ -57,12 +66,15 @@ namespace PrivateCoin.Core
         [DataMember(Order = 4)] public long Nonce { get; set; }
         [DataMember(Order = 5)] public List<Transaction> Transactions { get; set; } = new List<Transaction>();
         [DataMember(Order = 6)] public string Hash { get; set; }
+        [DataMember(Order = 7, EmitDefaultValue = false)] public List<BlockValidator> Validators { get; set; }
 
         internal string CalculateHash()
         {
+            string validatorProof = Validators == null ? string.Empty : string.Join("|", Validators.Select(v =>
+                v.ValidatorId + ":" + v.RewardAddress + ":" + v.LockedAmount.ToString(CultureInfo.InvariantCulture) + ":" + v.IsCreator));
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
-                string.Join("|", Transactions.Select(t => t.Id)));
+                string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof));
         }
     }
 

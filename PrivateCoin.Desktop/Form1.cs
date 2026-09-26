@@ -342,11 +342,18 @@ namespace PrivateCoin.Desktop
                     Transaction[] batch = SnapshotPending();
                     if (batch.Length == 0) break;
 
-                    miningStatusLabel.Text = "Minerando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Mineração automática iniciada após a validação de " +
+                    ValidatorStake[] activeValidators = wallets.Where(item => item.IsValidator).Select(item => item.Validator).ToArray();
+                    if (activeValidators.Length < 2)
+                    {
+                        miningStatusLabel.Text = "Aguardando pelo menos 2 validadores ativos";
+                        Log("O bloco aguarda outro validador: um criador não pode confirmar o próprio bloco.", false);
+                        break;
+                    }
+                    miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
+                    Log("Consenso proof-of-stake iniciado após a validação de " +
                         batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
-                    Block block = await Task.Run(() => blockchain.AddBlock(batch));
+                    Block block = await Task.Run(() => blockchain.AddProofOfStakeBlock(batch, activeValidators));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -355,8 +362,11 @@ namespace PrivateCoin.Desktop
                             pendingIds.Remove(transaction.Id);
                         }
                     }
-                    Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " minerado e validado automaticamente: " + ShortId(block.Hash) +
-                        ". O bloco apenas confirma transações e não emite novos tokens.", true);
+                    BlockValidator creator = block.Validators.Single(item => item.IsCreator);
+                    decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
+                    Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
+                        "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
+                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE: " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -370,9 +380,11 @@ namespace PrivateCoin.Desktop
             finally
             {
                 miningInProgress = false;
-                miningStatusLabel.Text = "Aguardando uma transferência válida";
+                miningStatusLabel.Text = wallets.Count(item => item.IsValidator) < 2
+                    ? "Aguardando pelo menos 2 validadores ativos"
+                    : "Aguardando uma transferência válida";
                 UpdateChainSummary();
-                if (!IsDisposed && SnapshotPending().Length > 0)
+                if (!IsDisposed && wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }
@@ -441,6 +453,8 @@ namespace PrivateCoin.Desktop
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
                     " PRIVATE bloqueados como garantia para validação e criação de blocos.", true);
+                if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
+                    BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
             {
