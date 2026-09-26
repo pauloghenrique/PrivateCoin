@@ -4,9 +4,8 @@
 
 ## Características
 
-- saldo inicial de **1.000.000 PRIVATE**, com 8 casas decimais, creditado à primeira carteira no bloco gênese;
-- recompensa inicial de mineração de **18 PRIVATE** para a carteira principal, reduzida pela metade a cada 180.000 blocos;
-- recompensa promocional de **18 PRIVATE** ao criar uma carteira, disponível somente antes do primeiro halving;
+- bloco gênese sem emissão e recompensa promocional de **6 PRIVATE** por nova carteira, limitada a 180.000 PRIVATE;
+- recompensa proof-of-stake em quatro fases, paga ao criador e aos confirmadores de cada bloco;
 - blocos ligados por SHA-256 e prova de trabalho;
 - política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
@@ -43,7 +42,7 @@ Instalações que ainda possuam o antigo `wallets.dat` combinado são migradas a
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de PRIVATE e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 PRIVATE em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 PRIVATE for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada altera imediatamente o **saldo disponível** das carteiras e inicia automaticamente a criação de um bloco, sem exigir tamanho mínimo nem um botão. Se outras transações já estiverem pendentes nesse instante, elas são validadas e confirmadas no mesmo lote; o novo bloco é então propagado aos pares conectados. Esses blocos de confirmação não emitem tokens adicionais. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
+O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de PRIVATE e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 PRIVATE em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 PRIVATE for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada altera imediatamente o **saldo disponível** e aguarda pelo menos dois validadores ativos. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
 
 ### Descoberta automática de nós
 
@@ -76,4 +75,6 @@ A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 a
 
 A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitária e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 PRIVATE**.
 
-Essas rotinas são a política de consenso que deverá ser usada pelo protocolo de votação. Antes de uso em produção, o bloqueio/desbloqueio da garantia, as assinaturas dos votos, quórum, penalidades (*slashing*) e mensagens P2P de proposta/confirmação ainda precisam ser persistidos e validados na cadeia.
+Ao existir uma transferência pendente e pelo menos dois validadores locais ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
+
+Antes de uso em produção, o bloqueio das garantias e as assinaturas individuais dos votos ainda devem ser transformados em transações de consenso globais. Nesta versão, a lista de validadores ativos é formada pelas carteiras da instalação que cria o bloco.
