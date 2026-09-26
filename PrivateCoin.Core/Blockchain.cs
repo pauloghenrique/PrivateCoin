@@ -12,11 +12,13 @@ namespace PrivateCoin.Core
     {
         public const int DecimalPlaces = 8;
         public const long OneCoin = 100000000L;
-        public const long WalletCreationReward = 6L * OneCoin;
-        public const long DistributionSupply = 180000L * OneCoin;
-        public const int RewardedWalletLimit = (int)(DistributionSupply / WalletCreationReward);
+        public const long InitialSupply = 0L;
+        public const long WalletCreationDistribution = 180000L * OneCoin;
+        public const long MaximumWalletCreationReward = 18L * OneCoin;
+        public const long InitialMiningReward = 18L * OneCoin;
+        public const int HalvingInterval = 180000;
         public const int MiningBlockSizeBytes = 2 * 1024 * 1024;
-        public const long MaximumSupply = DistributionSupply;
+        public const long MaximumSupply = WalletCreationDistribution + (InitialMiningReward * HalvingInterval * 2L);
         private const string ProofPrefix = "000";
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
@@ -27,6 +29,9 @@ namespace PrivateCoin.Core
             Mine(genesis);
             blocks.Add(genesis);
         }
+
+        [Obsolete("The genesis block no longer credits an address. Use Blockchain() instead.")]
+        public Blockchain(string genesisOneTimeAddress) : this() { }
 
         /// <summary>Restores and validates an existing chain.</summary>
         public Blockchain(IEnumerable<Block> existingBlocks)
@@ -61,6 +66,14 @@ namespace PrivateCoin.Core
                 var pending = transactions.ToList();
                 ValidateTransactions(pending);
                 var block = new Block { Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
+                long reward = GetMiningReward(block.Height);
+                if (reward > 0)
+                {
+                    var rewardTransaction = new Transaction { TimestampUtcTicks = block.TimestampUtcTicks, Kind = TransactionKind.MiningReward };
+                    rewardTransaction.Outputs.Add(new TransactionOutput { Amount = reward, OneTimeAddress = miningRewardAddress });
+                    rewardTransaction.Id = rewardTransaction.CalculateId();
+                    block.Transactions.Insert(0, rewardTransaction);
+                }
                 Mine(block);
                 blocks.Add(block);
                 return block;
@@ -68,31 +81,36 @@ namespace PrivateCoin.Core
         }
 
         /// <summary>
-        /// Creates a block that distributes six coins to a newly-created wallet.
-        /// Distribution stops permanently after 180,000 coins have been issued.
+        /// Creates a block with a cryptographically random reward for a new wallet.
+        /// Rewards are whole PRIVATE amounts and stop permanently when the shared
+        /// 180,000 PRIVATE distribution pool has been exhausted.
         /// </summary>
         public bool TryAddWalletCreationReward(string rewardAddress, out Block rewardBlock)
         {
             if (string.IsNullOrWhiteSpace(rewardAddress)) throw new ArgumentException("A wallet reward address is required.", nameof(rewardAddress));
             lock (sync)
             {
-                int rewardedWallets = CountWalletCreationRewards();
-                if (rewardedWallets >= RewardedWalletLimit)
+                long distributed = GetWalletCreationDistribution();
+                long remaining = WalletCreationDistribution - distributed;
+                if (remaining <= 0)
                 {
                     rewardBlock = null;
                     return false;
                 }
 
-                var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
-                reward.Outputs.Add(new TransactionOutput { Amount = WalletCreationReward, OneTimeAddress = rewardAddress });
-                reward.Id = reward.CalculateId();
+                long maximum = Math.Min(MaximumWalletCreationReward, remaining);
+                long reward = NextRandomWholeCoinAmount(maximum);
+                var rewardTransaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Kind = TransactionKind.WalletCreationReward };
+                rewardTransaction.Outputs.Add(new TransactionOutput { Amount = reward, OneTimeAddress = rewardAddress });
+                rewardTransaction.Id = rewardTransaction.CalculateId();
+
                 rewardBlock = new Block
                 {
                     Height = blocks.Count,
                     PreviousHash = blocks[blocks.Count - 1].Hash,
-                    TimestampUtcTicks = reward.TimestampUtcTicks
+                    TimestampUtcTicks = DateTime.UtcNow.Ticks
                 };
-                rewardBlock.Transactions.Add(reward);
+                rewardBlock.Transactions.Add(rewardTransaction);
                 Mine(rewardBlock);
                 blocks.Add(rewardBlock);
                 return true;
@@ -203,32 +221,79 @@ namespace PrivateCoin.Core
             Block genesis = blocks[0];
             if (genesis.Transactions.Count != 0) throw new InvalidOperationException("The genesis block must not issue tokens.");
             long issued = 0;
+            long walletCreationDistribution = 0;
 
             for (int blockIndex = 1; blockIndex < blocks.Count; blockIndex++)
             {
                 Block block = blocks[blockIndex];
+                if (IsWalletCreationRewardBlock(block))
+                {
+                    Transaction walletReward = block.Transactions[0];
+                    long amount = walletReward.Outputs.Count == 1 ? walletReward.Outputs[0].Amount : 0;
+                    if (amount <= 0 || amount > MaximumWalletCreationReward || amount % OneCoin != 0 ||
+                        amount > WalletCreationDistribution - walletCreationDistribution)
+                        throw new InvalidOperationException("Invalid wallet creation reward.");
+                    Apply(walletReward, utxo, true);
+                    walletCreationDistribution = checked(walletCreationDistribution + amount);
+                    issued = checked(issued + amount);
+                    continue;
+                }
+
+                long expectedReward = GetMiningReward(blockIndex);
                 int regularTransactionIndex = 0;
                 if (block.Transactions.Count > 0 && block.Transactions[0].Inputs.Count == 0)
                 {
                     Transaction reward = block.Transactions[0];
-                    if (!IsWalletCreationReward(reward)) throw new InvalidOperationException("Invalid wallet creation reward.");
-                    if (block.Transactions.Count != 1) throw new InvalidOperationException("A wallet creation reward must have its own block.");
+                    if (reward.Kind != TransactionKind.MiningReward || reward.Inputs.Count != 0 ||
+                        reward.Outputs.Count != 1 || reward.Outputs[0].Amount != expectedReward)
+                        throw new InvalidOperationException("Invalid mining reward.");
                     Apply(reward, utxo, true);
                     issued = checked(issued + WalletCreationReward);
                     if (issued > DistributionSupply) throw new InvalidOperationException("The wallet distribution supply was exceeded.");
                     regularTransactionIndex = 1;
                 }
                 for (int transactionIndex = regularTransactionIndex; transactionIndex < block.Transactions.Count; transactionIndex++)
+                {
+                    if (block.Transactions[transactionIndex].Kind != TransactionKind.Transfer)
+                        throw new InvalidOperationException("Unexpected reward transaction.");
                     Apply(block.Transactions[transactionIndex], utxo, false);
+                }
             }
             if (issued > MaximumSupply) throw new InvalidOperationException("Invalid supply.");
         }
 
-        private static bool IsWalletCreationReward(Transaction transaction)
+        private long GetWalletCreationDistribution()
         {
-            return transaction != null && transaction.Id == transaction.CalculateId() && transaction.Inputs.Count == 0 &&
-                transaction.Outputs.Count == 1 && transaction.Outputs[0].Amount == WalletCreationReward &&
-                !string.IsNullOrWhiteSpace(transaction.Outputs[0].OneTimeAddress);
+            return blocks.Where(IsWalletCreationRewardBlock)
+                .Aggregate(0L, (total, block) => checked(total + block.Transactions[0].Outputs[0].Amount));
+        }
+
+        private static bool IsWalletCreationRewardBlock(Block block)
+        {
+            return block.Transactions.Count == 1 && block.Transactions[0] != null &&
+                block.Transactions[0].Kind == TransactionKind.WalletCreationReward;
+        }
+
+        private static long NextRandomWholeCoinAmount(long maximumAmount)
+        {
+            int maximumCoins = checked((int)(maximumAmount / OneCoin));
+            if (maximumCoins <= 1) return OneCoin;
+
+            // Rejection sampling avoids the modulo bias produced by a simple remainder.
+            uint range = (uint)maximumCoins;
+            uint limit = uint.MaxValue - (uint.MaxValue % range);
+            var bytes = new byte[sizeof(uint)];
+            using (RandomNumberGenerator generator = RandomNumberGenerator.Create())
+            {
+                uint value;
+                do
+                {
+                    generator.GetBytes(bytes);
+                    value = BitConverter.ToUInt32(bytes, 0);
+                }
+                while (value >= limit);
+                return ((value % range) + 1L) * OneCoin;
+            }
         }
 
         private Dictionary<string, UnspentOutput> BuildUtxo()
@@ -246,6 +311,9 @@ namespace PrivateCoin.Core
         private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint)
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
+            if ((allowMint && transaction.Kind == TransactionKind.Transfer) ||
+                (!allowMint && transaction.Kind != TransactionKind.Transfer))
+                throw new InvalidOperationException("Invalid transaction kind.");
             if (transaction.Inputs.Count == 0 && !allowMint) throw new InvalidOperationException("Minting is only allowed for genesis and mining rewards.");
             long inputTotal = 0;
             var used = new HashSet<string>();

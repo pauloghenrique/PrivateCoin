@@ -8,6 +8,14 @@ using System.Text;
 namespace PrivateCoin.Core
 {
     [DataContract]
+    public enum TransactionKind
+    {
+        [EnumMember] Transfer = 0,
+        [EnumMember] MiningReward = 1,
+        [EnumMember] WalletCreationReward = 2
+    }
+
+    [DataContract]
     public sealed class TransactionInput
     {
         [DataMember(Order = 1)] public string TransactionId { get; set; }
@@ -31,10 +39,12 @@ namespace PrivateCoin.Core
         [DataMember(Order = 2)] public long TimestampUtcTicks { get; set; }
         [DataMember(Order = 3)] public List<TransactionInput> Inputs { get; set; } = new List<TransactionInput>();
         [DataMember(Order = 4)] public List<TransactionOutput> Outputs { get; set; } = new List<TransactionOutput>();
+        [DataMember(Order = 5)] public TransactionKind Kind { get; set; }
 
         internal string SigningPayload()
         {
-            var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture));
+            var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture))
+                .Append('|').Append(((int)Kind).ToString(CultureInfo.InvariantCulture));
             foreach (var input in Inputs)
                 value.Append('|').Append(input.TransactionId).Append(':').Append(input.OutputIndex.ToString(CultureInfo.InvariantCulture));
             foreach (var output in Outputs)
