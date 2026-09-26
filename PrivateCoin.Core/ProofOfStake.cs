@@ -5,6 +5,25 @@ using System.Linq;
 
 namespace PrivateCoin.Core
 {
+    /// <summary>An immutable phase in the validator reward schedule.</summary>
+    public sealed class RewardPhase
+    {
+        internal RewardPhase(int number, int firstHeight, int lastHeight, long rewardPerBlock)
+        {
+            Number = number;
+            FirstHeight = firstHeight;
+            LastHeight = lastHeight;
+            RewardPerBlock = rewardPerBlock;
+        }
+
+        public int Number { get; }
+        public int FirstHeight { get; }
+        public int LastHeight { get; }
+        public long RewardPerBlock { get; }
+        public int BlockCount => LastHeight - FirstHeight + 1;
+        public long TotalReward => checked((long)BlockCount * RewardPerBlock);
+    }
+
     /// <summary>A validator's coins locked as collateral for consensus.</summary>
     public sealed class ValidatorStake
     {
@@ -52,13 +71,24 @@ namespace PrivateCoin.Core
         public const int ConfirmerPercentage = 70;
         public const long MaximumSupply = 17820000L * Blockchain.OneCoin;
 
+        private static readonly RewardPhase[] rewardPhases =
+        {
+            new RewardPhase(1, 1, BlocksPerPhase, 361L * Blockchain.OneCoin / 100L),
+            new RewardPhase(2, BlocksPerPhase + 1, 2 * BlocksPerPhase, 280L * Blockchain.OneCoin / 100L),
+            new RewardPhase(3, 2 * BlocksPerPhase + 1, 3 * BlocksPerPhase, 150L * Blockchain.OneCoin / 100L),
+            new RewardPhase(4, 3 * BlocksPerPhase + 1, RewardedBlockCount, Blockchain.OneCoin)
+        };
+
+        /// <summary>Returns a copy of the complete, auditable emission schedule.</summary>
+        public static IReadOnlyList<RewardPhase> RewardPhases => rewardPhases.ToArray();
+
+        /// <summary>Total amount issued by all rewarded blocks in atomic units.</summary>
+        public static long ScheduledIssuance => rewardPhases.Aggregate(0L, (total, phase) => checked(total + phase.TotalReward));
+
         public static long GetBlockReward(int height)
         {
-            if (height <= 0 || height > RewardedBlockCount) return 0;
-            if (height <= BlocksPerPhase) return 361L * Blockchain.OneCoin / 100L;
-            if (height <= 2 * BlocksPerPhase) return 280L * Blockchain.OneCoin / 100L;
-            if (height <= 3 * BlocksPerPhase) return 150L * Blockchain.OneCoin / 100L;
-            return Blockchain.OneCoin;
+            RewardPhase phase = rewardPhases.FirstOrDefault(item => height >= item.FirstHeight && height <= item.LastHeight);
+            return phase == null ? 0 : phase.RewardPerBlock;
         }
 
         /// <summary>
