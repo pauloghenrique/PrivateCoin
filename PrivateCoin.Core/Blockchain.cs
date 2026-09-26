@@ -58,10 +58,9 @@ namespace PrivateCoin.Core
             }
         }
 
-        public Block AddBlock(IEnumerable<Transaction> transactions, string miningRewardAddress)
+        public Block AddBlock(IEnumerable<Transaction> transactions)
         {
             if (transactions == null) throw new ArgumentNullException(nameof(transactions));
-            if (string.IsNullOrWhiteSpace(miningRewardAddress)) throw new ArgumentException("A mining reward address is required.", nameof(miningRewardAddress));
             lock (sync)
             {
                 var pending = transactions.ToList();
@@ -118,12 +117,9 @@ namespace PrivateCoin.Core
             }
         }
 
-        /// <summary>Returns the block subsidy, halved after every 180,000 mined blocks.</summary>
-        public static long GetMiningReward(int blockHeight)
+        private int CountWalletCreationRewards()
         {
-            if (blockHeight <= 0) return 0;
-            int halvings = (blockHeight - 1) / HalvingInterval;
-            return halvings >= 63 ? 0 : InitialMiningReward >> halvings;
+            return blocks.Skip(1).Count(block => block.Transactions.Count > 0 && IsWalletCreationReward(block.Transactions[0]));
         }
 
         /// <summary>
@@ -245,15 +241,15 @@ namespace PrivateCoin.Core
 
                 long expectedReward = GetMiningReward(blockIndex);
                 int regularTransactionIndex = 0;
-                if (expectedReward > 0)
+                if (block.Transactions.Count > 0 && block.Transactions[0].Inputs.Count == 0)
                 {
-                    if (block.Transactions.Count == 0) throw new InvalidOperationException("Missing mining reward.");
                     Transaction reward = block.Transactions[0];
                     if (reward.Kind != TransactionKind.MiningReward || reward.Inputs.Count != 0 ||
                         reward.Outputs.Count != 1 || reward.Outputs[0].Amount != expectedReward)
                         throw new InvalidOperationException("Invalid mining reward.");
                     Apply(reward, utxo, true);
-                    issued = checked(issued + expectedReward);
+                    issued = checked(issued + WalletCreationReward);
+                    if (issued > DistributionSupply) throw new InvalidOperationException("The wallet distribution supply was exceeded.");
                     regularTransactionIndex = 1;
                 }
                 for (int transactionIndex = regularTransactionIndex; transactionIndex < block.Transactions.Count; transactionIndex++)

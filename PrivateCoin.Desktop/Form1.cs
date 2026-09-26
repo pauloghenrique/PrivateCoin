@@ -50,7 +50,8 @@ namespace PrivateCoin.Desktop
                         blockchain = walletStore.LoadNetwork(out restoredPendingTransactions);
                         pendingTransactions.AddRange(restoredPendingTransactions);
                         foreach (Transaction transaction in restoredPendingTransactions) pendingIds.Add(transaction.Id);
-                        if (!walletStore.WalletExists) wallets[0].Wallet.CreateReceiveAddress();
+                        if (!walletStore.WalletExists)
+                            AddInitialWalletReward(blockchain, wallets[0].Wallet);
                     }
                     else
                         blockchain = CreateBlockchain(wallets[0].Wallet);
@@ -338,9 +339,7 @@ namespace PrivateCoin.Desktop
                     Log("Mineração automática iniciada: o bloco atingiu 2 MiB com " +
                         batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
-                    NamedWallet mainWallet = wallets[0];
-                    string rewardAddress = mainWallet.Wallet.CreateReceiveAddress();
-                    Block block = await Task.Run(() => blockchain.AddBlock(batch, rewardAddress));
+                    Block block = await Task.Run(() => blockchain.AddBlock(batch));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -349,9 +348,8 @@ namespace PrivateCoin.Desktop
                             pendingIds.Remove(transaction.Id);
                         }
                     }
-                    decimal reward = (decimal)Blockchain.GetMiningReward(block.Height) / Blockchain.OneCoin;
                     Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " minerado e validado automaticamente: " + ShortId(block.Hash) +
-                        ". Recompensa de " + reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE creditada à carteira principal.", true);
+                        ". O bloco apenas confirma transações e não emite novos tokens.", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();

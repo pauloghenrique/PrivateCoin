@@ -52,6 +52,7 @@
     <Compile Include="Crypto.cs" />
     <Compile Include="Models.cs" />
     <Compile Include="PeerNode.cs" />
+    <Compile Include="ProofOfStake.cs" />
     <Compile Include="Wallet.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
