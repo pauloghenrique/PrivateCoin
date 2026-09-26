@@ -396,6 +396,9 @@ namespace PrivateCoin.Desktop
                 long amount = checked((long)(coins * Blockchain.OneCoin));
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
+                long balance = blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                if (amount > balance - selected.LockedStake)
+                    throw new InvalidOperationException("Saldo disponível insuficiente. Os tokens bloqueados como garantia não podem ser transferidos.");
                 Transaction transaction = selected.Wallet.CreateTransaction(blockchain, SnapshotPending(), destinationTextBox.Text.Trim(), amount);
                 ValidateAndQueue(transaction, "Carteira local");
                 if (peerNode != null)
@@ -408,6 +411,40 @@ namespace PrivateCoin.Desktop
             catch (Exception error)
             {
                 Log("Não foi possível criar a transação: " + error.Message, false);
+            }
+        }
+
+        private void ActivateValidatorButtonClick(object sender, EventArgs e)
+        {
+            decimal coins;
+            if (!decimal.TryParse(stakeAmountTextBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out coins) || coins <= 0)
+            {
+                Log("Informe uma garantia PRIVATE maior que zero.", false);
+                return;
+            }
+
+            try
+            {
+                long amount = checked((long)(coins * Blockchain.OneCoin));
+                if (coins * Blockchain.OneCoin != amount)
+                    throw new InvalidOperationException("A garantia aceita no máximo 8 casas decimais.");
+
+                NamedWallet selected = SelectedWallet;
+                if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
+                if (selected.IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
+                long balance = blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                if (amount > balance) throw new InvalidOperationException("Saldo insuficiente para bloquear essa garantia.");
+
+                string rewardAddress = selected.Wallet.CreateReceiveAddress();
+                selected.ActivateValidator(amount, rewardAddress);
+                SaveState();
+                UpdateWalletSummary();
+                Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
+                    " PRIVATE bloqueados como garantia para validação e criação de blocos.", true);
+            }
+            catch (Exception error)
+            {
+                Log("Não foi possível ativar o validador: " + error.Message, false);
             }
         }
 
@@ -433,8 +470,15 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             NamedWallet selected = SelectedWallet;
-            long balance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
-            balanceLabel.Text = "Saldo disponível: " + ((decimal)balance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+            long lockedStake = selected == null ? 0 : selected.LockedStake;
+            long availableBalance = Math.Max(0, totalBalance - lockedStake);
+            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            validatorStatusLabel.Text = lockedStake == 0
+                ? "Validador inativo"
+                : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
+            activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
         }
 
         private void SaveState()
