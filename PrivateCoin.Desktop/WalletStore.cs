@@ -11,14 +11,35 @@ namespace PrivateCoin.Desktop
 {
     internal sealed class NamedWallet : IDisposable
     {
-        public NamedWallet(string name, Wallet wallet)
+        public NamedWallet(string name, Wallet wallet, long lockedStake = 0, string validatorRewardAddress = null)
         {
+            if (lockedStake < 0) throw new ArgumentOutOfRangeException(nameof(lockedStake));
+            if (lockedStake > 0 && string.IsNullOrWhiteSpace(validatorRewardAddress))
+                throw new ArgumentException("Um endereço de recompensa é necessário para restaurar um validador.", nameof(validatorRewardAddress));
             Name = name;
             Wallet = wallet;
+            LockedStake = lockedStake;
+            ValidatorRewardAddress = validatorRewardAddress;
         }
 
         public string Name { get; private set; }
         public Wallet Wallet { get; private set; }
+        public long LockedStake { get; private set; }
+        public string ValidatorRewardAddress { get; private set; }
+        public bool IsValidator => LockedStake > 0;
+        public ValidatorStake Validator => IsValidator
+            ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake)
+            : null;
+
+        public ValidatorStake ActivateValidator(long amount, string rewardAddress)
+        {
+            if (IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
+            var stake = new ValidatorStake(Name, rewardAddress, amount);
+            LockedStake = amount;
+            ValidatorRewardAddress = rewardAddress;
+            return stake;
+        }
+
         public override string ToString() => Name;
         public void Dispose() => Wallet.Dispose();
     }
@@ -91,7 +112,9 @@ namespace PrivateCoin.Desktop
                 Wallets = wallets.Select(item => new StoredWallet
                 {
                     Name = item.Name,
-                    PrivateKeys = item.Wallet.ExportPrivateKeys().ToList()
+                    PrivateKeys = item.Wallet.ExportPrivateKeys().ToList(),
+                    LockedStake = item.LockedStake,
+                    ValidatorRewardAddress = item.ValidatorRewardAddress
                 }).ToList()
             }, true);
         }
@@ -106,7 +129,8 @@ namespace PrivateCoin.Desktop
             try
             {
                 foreach (StoredWallet item in state.Wallets)
-                    wallets.Add(new NamedWallet(item.Name, Wallet.FromPrivateKeys(item.PrivateKeys)));
+                    wallets.Add(new NamedWallet(item.Name, Wallet.FromPrivateKeys(item.PrivateKeys),
+                        item.LockedStake, item.ValidatorRewardAddress));
                 return wallets;
             }
             catch
@@ -271,6 +295,8 @@ namespace PrivateCoin.Desktop
         {
             [DataMember(Order = 1)] public string Name { get; set; }
             [DataMember(Order = 2)] public List<string> PrivateKeys { get; set; }
+            [DataMember(Order = 3, EmitDefaultValue = false)] public long LockedStake { get; set; }
+            [DataMember(Order = 4, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
         }
     }
 }
