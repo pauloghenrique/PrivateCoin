@@ -4,9 +4,9 @@
 
 ## Características
 
-- saldo inicial de **1.000.000 PRIVATE**, com 8 casas decimais, creditado à primeira carteira no bloco gênese;
+- bloco gênese sem emissão ou saldo inicial de tokens;
 - recompensa inicial de mineração de **18 PRIVATE** para a carteira principal, reduzida pela metade a cada 180.000 blocos;
-- recompensa promocional de **18 PRIVATE** ao criar uma carteira, disponível somente antes do primeiro halving;
+- distribuição dos primeiros **180.000 PRIVATE** na criação de carteiras, em recompensas inteiras sorteadas criptograficamente entre 1 e 18 PRIVATE, sem uma sequência previsível e limitada ao saldo restante desse lote;
 - blocos ligados por SHA-256 e prova de trabalho;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
@@ -19,8 +19,10 @@
 using (var alice = new Wallet())
 using (var bob = new Wallet())
 {
-    var chain = new Blockchain(alice.CreateReceiveAddress());
-    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 25 * Blockchain.OneCoin);
+    var chain = new Blockchain();
+    Block creationReward;
+    chain.TryAddWalletCreationReward(alice.CreateReceiveAddress(), out creationReward);
+    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 1 * Blockchain.OneCoin);
     chain.AddBlock(new[] { payment }, alice.CreateReceiveAddress());
 }
 ```
@@ -40,7 +42,7 @@ Instalações que ainda possuam o antigo `wallets.dat` combinado são migradas a
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Antes do primeiro halving, cada nova carteira recebe a recompensa inicial de 18 PRIVATE em um bloco que é salvo e propagado automaticamente; a partir do bloco em que a recompensa é reduzida, novas carteiras são criadas sem esse bônus. Uma transferência validada altera imediatamente o **saldo disponível** das carteiras e seus tokens já podem ser usados em outra transferência, mesmo enquanto ela aguarda confirmação. As transações válidas ficam na fila até que seu conteúdo serializado atinja **2 MiB** (2 × 1024 × 1024 bytes); somente nesse momento a mineração começa automaticamente, sem exigir um botão, para confirmar o lote em um novo bloco e propagá-lo aos pares conectados. Cada bloco minerado credita a recompensa à carteira principal; após cada intervalo de 180.000 blocos, a recompensa é reduzida pela metade. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
+O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. O bloco gênese nasce sem tokens. Enquanto houver saldo no lote inicial de 180.000 PRIVATE, cada nova carteira recebe em um bloco próprio uma quantidade inteira escolhida aleatoriamente entre 1 e 18 PRIVATE (ou até o saldo restante); depois que o lote termina, novas carteiras são criadas sem bônus. Uma transferência validada altera imediatamente o **saldo disponível** das carteiras e seus tokens já podem ser usados em outra transferência, mesmo enquanto ela aguarda confirmação. As transações válidas ficam na fila até que seu conteúdo serializado atinja **2 MiB** (2 × 1024 × 1024 bytes); somente nesse momento a mineração começa automaticamente, sem exigir um botão, para confirmar o lote em um novo bloco e propagá-lo aos pares conectados. Cada bloco minerado credita a recompensa à carteira principal; após cada intervalo de 180.000 blocos, a recompensa é reduzida pela metade. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
 
 ### Descoberta automática de nós
 
