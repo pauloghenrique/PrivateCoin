@@ -20,9 +20,11 @@
 using (var alice = new Wallet())
 using (var bob = new Wallet())
 {
-    var chain = new Blockchain(alice.CreateReceiveAddress());
-    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 25 * Blockchain.OneCoin);
-    chain.AddBlock(new[] { payment }, alice.CreateReceiveAddress());
+    var chain = new Blockchain();
+    Block rewardBlock;
+    chain.TryAddWalletCreationReward(alice.CreateReceiveAddress(), out rewardBlock);
+    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 5 * Blockchain.OneCoin);
+    chain.AddBlock(new[] { payment });
 }
 ```
 
