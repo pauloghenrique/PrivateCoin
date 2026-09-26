@@ -54,7 +54,7 @@ namespace PrivateCoin.Desktop
                             AddInitialWalletReward(blockchain, wallets[0].Wallet);
                     }
                     else
-                        blockchain = CreateBlockchain(wallets[0].Wallet);
+                        blockchain = new Blockchain(wallets[0].Wallet.CreateReceiveAddress());
 
                     if (!walletStore.WalletExists || !walletStore.NetworkExists || walletStore.NetworkNeedsUpgrade)
                     {
@@ -71,18 +71,10 @@ namespace PrivateCoin.Desktop
                     "PrivateCoin", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 var recoveryWallet = new NamedWallet("Carteira temporária", new Wallet());
                 wallets.Add(recoveryWallet);
-                blockchain = CreateBlockchain(recoveryWallet.Wallet);
+                blockchain = new Blockchain(recoveryWallet.Wallet.CreateReceiveAddress());
             }
             RefreshWalletList(0);
             UpdateChainSummary();
-        }
-
-        private static Blockchain CreateBlockchain(Wallet firstWallet)
-        {
-            var result = new Blockchain();
-            Block rewardBlock;
-            result.TryAddWalletCreationReward(firstWallet.CreateReceiveAddress(), out rewardBlock);
-            return result;
         }
 
         protected override void OnShown(EventArgs e)
@@ -126,13 +118,13 @@ namespace PrivateCoin.Desktop
 
                 if (rewarded)
                 {
-                    decimal reward = (decimal)rewardBlock.Transactions[0].Outputs[0].Amount / Blockchain.OneCoin;
+                    decimal reward = (decimal)Blockchain.GetMiningReward(rewardBlock.Height) / Blockchain.OneCoin;
                     Log("Carteira “" + name + "” criada com recompensa de " +
-                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE sorteada aleatoriamente.", true);
+                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE antes do primeiro halving.", true);
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 }
                 else
-                    Log("Carteira “" + name + "” criada e salva. Os 180.000 PRIVATE da distribuição inicial já terminaram.", true);
+                    Log("Carteira “" + name + "” criada e salva. A recompensa de criação terminou no primeiro halving.", true);
 
                 UpdateChainSummary();
             }
