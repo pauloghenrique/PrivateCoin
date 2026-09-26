@@ -9,6 +9,7 @@
 - cada parcela é enviada a um endereço descartável gerado aleatoriamente e registrada imediatamente em um novo bloco;
 - blocos de confirmação não criam tokens nem pagam recompensa de mineração;
 - blocos ligados por SHA-256 e prova de trabalho;
+- política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
@@ -58,3 +59,20 @@ Também é possível definir os seeds sem alterar o arquivo por meio da variáve
 Pelo menos um seed precisa estar permanentemente online, ter IP/DNS público e encaminhar a porta TCP configurada para o computador que executa o nó. Nós atrás de CGNAT continuam precisando de IPv4 público, encaminhamento de porta, VPN ou relay; descoberta de pares não atravessa NAT por si só.
 
 > Esta é uma base técnica, não software pronto para custodiar dinheiro real. Uma rede de produção também precisa de descoberta autenticada de pares, protocolo de consenso/forks, proteção contra Sybil/DoS, auditoria criptográfica e backups seguros.
+
+## Emissão e validadores
+
+A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 PRIVATE**:
+
+| Fase | Alturas | Recompensa por bloco | Total da fase |
+| --- | ---: | ---: | ---: |
+| 1 | 1–2.000.000 | 3,61 PRIVATE | 7.220.000 PRIVATE |
+| 2 | 2.000.001–4.000.000 | 2,80 PRIVATE | 5.600.000 PRIVATE |
+| 3 | 4.000.001–6.000.000 | 1,50 PRIVATE | 3.000.000 PRIVATE |
+| 4 | 6.000.001–8.000.000 | 1,00 PRIVATE | 2.000.000 PRIVATE |
+
+`ProofOfStake` representa as regras determinísticas do consenso. Os participantes informam as moedas bloqueadas em garantia por meio de `ValidatorStake`; `SelectCreator` escolhe o criador de forma ponderada pelo valor bloqueado, usando a hash anterior e a altura como semente. Em cada nova altura o sorteio é refeito, portanto um participante pode criar um bloco em uma rodada e confirmar outro bloco em uma rodada posterior.
+
+`DistributeReward` reserva **30%** da recompensa ao criador escolhido e distribui os **70%** restantes entre os validadores que confirmaram corretamente, proporcionalmente às garantias bloqueadas. O arredondamento da menor unidade é determinístico e a soma das parcelas é sempre exatamente a recompensa prevista para a altura. O criador não pode confirmar o próprio bloco.
+
+Essas rotinas são a política de consenso que deverá ser usada pelo protocolo de votação. Antes de uso em produção, o bloqueio/desbloqueio da garantia, as assinaturas dos votos, quórum, penalidades (*slashing*) e mensagens P2P de proposta/confirmação ainda precisam ser persistidos e validados na cadeia.
