@@ -54,7 +54,7 @@ namespace PrivateCoin.Desktop
                             AddInitialWalletReward(blockchain, wallets[0].Wallet);
                     }
                     else
-                        blockchain = CreateBlockchainForWallet(wallets[0].Wallet);
+                        blockchain = new Blockchain(wallets[0].Wallet.CreateReceiveAddress());
 
                     if (!walletStore.WalletExists || !walletStore.NetworkExists || walletStore.NetworkNeedsUpgrade)
                     {
@@ -71,24 +71,10 @@ namespace PrivateCoin.Desktop
                     "PrivateCoin", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 var recoveryWallet = new NamedWallet("Carteira temporária", new Wallet());
                 wallets.Add(recoveryWallet);
-                blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
+                blockchain = new Blockchain(recoveryWallet.Wallet.CreateReceiveAddress());
             }
             RefreshWalletList(0);
             UpdateChainSummary();
-        }
-
-        private static Blockchain CreateBlockchainForWallet(Wallet wallet)
-        {
-            var chain = new Blockchain();
-            AddInitialWalletReward(chain, wallet);
-            return chain;
-        }
-
-        private static void AddInitialWalletReward(Blockchain chain, Wallet wallet)
-        {
-            Block rewardBlock;
-            if (!chain.TryAddWalletCreationReward(wallet.CreateReceiveAddress(), out rewardBlock))
-                throw new InvalidOperationException("Não foi possível distribuir a recompensa da nova carteira.");
         }
 
         protected override void OnShown(EventArgs e)
@@ -132,14 +118,13 @@ namespace PrivateCoin.Desktop
 
                 if (rewarded)
                 {
-                    decimal reward = (decimal)Blockchain.WalletCreationReward / Blockchain.OneCoin;
+                    decimal reward = (decimal)Blockchain.GetMiningReward(rewardBlock.Height) / Blockchain.OneCoin;
                     Log("Carteira “" + name + "” criada com recompensa de " +
-                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE no bloco #" +
-                        rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
+                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE antes do primeiro halving.", true);
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 }
                 else
-                    Log("Carteira “" + name + "” criada e salva. Os 180.000 PRIVATE reservados para novas carteiras já foram distribuídos.", true);
+                    Log("Carteira “" + name + "” criada e salva. A recompensa de criação terminou no primeiro halving.", true);
 
                 UpdateChainSummary();
             }

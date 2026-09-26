@@ -4,10 +4,9 @@
 
 ## Características
 
-- bloco gênese sem tokens pré-criados;
-- os primeiros **180.000 PRIVATE** são distribuídos em parcelas de **6 PRIVATE** às novas carteiras (até 30.000 carteiras);
-- cada parcela é enviada a um endereço descartável gerado aleatoriamente e registrada imediatamente em um novo bloco;
-- blocos de confirmação não criam tokens nem pagam recompensa de mineração;
+- saldo inicial de **1.000.000 PRIVATE**, com 8 casas decimais, creditado à primeira carteira no bloco gênese;
+- recompensa inicial de mineração de **18 PRIVATE** para a carteira principal, reduzida pela metade a cada 180.000 blocos;
+- recompensa promocional de **18 PRIVATE** ao criar uma carteira, disponível somente antes do primeiro halving;
 - blocos ligados por SHA-256 e prova de trabalho;
 - política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
@@ -21,11 +20,9 @@
 using (var alice = new Wallet())
 using (var bob = new Wallet())
 {
-    var chain = new Blockchain();
-    Block rewardBlock;
-    chain.TryAddWalletCreationReward(alice.CreateReceiveAddress(), out rewardBlock);
-    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 2 * Blockchain.OneCoin);
-    chain.AddBlock(new[] { payment });
+    var chain = new Blockchain(alice.CreateReceiveAddress());
+    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 25 * Blockchain.OneCoin);
+    chain.AddBlock(new[] { payment }, alice.CreateReceiveAddress());
 }
 ```
 
