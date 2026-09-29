@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 /PrivateCoin.Desktop/wallets.dat
 /PrivateCoin.Desktop/Blockchain.json
+/PrivateCoin.Desktop/recovery.dat
