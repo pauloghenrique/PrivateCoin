@@ -118,7 +118,7 @@ namespace PrivateCoin.Desktop
 
             createWalletButton.Enabled = false;
             string recoveryPhrase = RecoveryPhraseGenerator.Generate();
-            var namedWallet = new NamedWallet(name, new Wallet(), 0, null, recoveryPhrase);
+            var namedWallet = new NamedWallet(name, Wallet.FromSeed(RecoveryPhraseGenerator.ToSeed(recoveryPhrase), 0), 0, null, recoveryPhrase, true);
             bool walletAdded = false;
             try
             {
@@ -183,7 +183,7 @@ namespace PrivateCoin.Desktop
 
             try
             {
-                NamedWallet recovered = walletStore.Recover(phrase, name);
+                NamedWallet recovered = walletStore.Recover(phrase, name, blockchain);
                 if (recovered.Wallet.OwnedOneTimeAddresses.Any(address =>
                     wallets.Any(item => item.Wallet.OwnedOneTimeAddresses.Contains(address))))
                 {
@@ -194,7 +194,7 @@ namespace PrivateCoin.Desktop
                 RefreshWalletList(wallets.Count - 1);
                 SaveState();
                 UpdateChainSummary();
-                Log("Carteira “" + recovered.Name + "” recuperada com todas as chaves disponíveis na cópia portátil.", true);
+                Log("Carteira “" + recovered.Name + "” recuperada diretamente pela frase.", true);
             }
             catch (Exception error)
             {

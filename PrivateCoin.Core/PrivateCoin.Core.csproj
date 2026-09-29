@@ -34,6 +34,7 @@
     <Reference Include="System"/>
     
     <Reference Include="System.Core"/>
+    <Reference Include="System.Numerics"/>
     <Reference Include="System.Xml.Linq"/>
     <Reference Include="System.Data.DataSetExtensions"/>
     
@@ -50,6 +51,7 @@
   <ItemGroup>
     <Compile Include="Blockchain.cs" />
     <Compile Include="Crypto.cs" />
+    <Compile Include="DeterministicRsa.cs" />
     <Compile Include="Models.cs" />
     <Compile Include="PeerNode.cs" />
     <Compile Include="ProofOfStake.cs" />
