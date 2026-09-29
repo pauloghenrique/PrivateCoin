@@ -28,13 +28,13 @@ namespace PrivateCoin.Desktop
         public string ValidatorRewardAddress { get; private set; }
         public bool IsValidator => LockedStake > 0;
         public ValidatorStake Validator => IsValidator
-            ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake)
+            ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake, Wallet.OwnedOneTimeAddresses)
             : null;
 
         public ValidatorStake ActivateValidator(long amount, string rewardAddress)
         {
             if (IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
-            var stake = new ValidatorStake(Name, rewardAddress, amount);
+            var stake = new ValidatorStake(Name, rewardAddress, amount, Wallet.OwnedOneTimeAddresses);
             LockedStake = amount;
             ValidatorRewardAddress = rewardAddress;
             return stake;

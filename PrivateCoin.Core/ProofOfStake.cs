@@ -28,18 +28,33 @@ namespace PrivateCoin.Core
     public sealed class ValidatorStake
     {
         public ValidatorStake(string validatorId, string rewardAddress, long lockedAmount)
+            : this(validatorId, rewardAddress, lockedAmount, new[] { rewardAddress })
+        {
+        }
+
+        public ValidatorStake(string validatorId, string rewardAddress, long lockedAmount, IEnumerable<string> ownedAddresses)
         {
             if (string.IsNullOrWhiteSpace(validatorId)) throw new ArgumentException("A validator id is required.", nameof(validatorId));
             if (string.IsNullOrWhiteSpace(rewardAddress)) throw new ArgumentException("A reward address is required.", nameof(rewardAddress));
             if (lockedAmount <= 0) throw new ArgumentOutOfRangeException(nameof(lockedAmount));
+            if (ownedAddresses == null) throw new ArgumentNullException(nameof(ownedAddresses));
+            string[] addresses = ownedAddresses.OrderBy(item => item, StringComparer.Ordinal).ToArray();
+            if (addresses.Length == 0 || addresses.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("At least one valid owned address is required.", nameof(ownedAddresses));
+            if (addresses.Distinct(StringComparer.Ordinal).Count() != addresses.Length)
+                throw new ArgumentException("Owned addresses must be unique.", nameof(ownedAddresses));
+            if (!addresses.Contains(rewardAddress, StringComparer.Ordinal))
+                throw new ArgumentException("The reward address must belong to the validator.", nameof(ownedAddresses));
             ValidatorId = validatorId;
             RewardAddress = rewardAddress;
             LockedAmount = lockedAmount;
+            OwnedAddresses = addresses;
         }
 
         public string ValidatorId { get; }
         public string RewardAddress { get; }
         public long LockedAmount { get; }
+        public IReadOnlyCollection<string> OwnedAddresses { get; }
     }
 
     /// <summary>The portion of a block reward assigned by the protocol.</summary>

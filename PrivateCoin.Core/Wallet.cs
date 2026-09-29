@@ -24,6 +24,15 @@ namespace PrivateCoin.Core
 
         public IReadOnlyCollection<string> OwnedOneTimeAddresses => keys.Keys.ToArray();
 
+        /// <summary>Indicates whether this wallet sends or receives value in a transaction.</summary>
+        public bool IsParticipant(Transaction transaction)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            return transaction.Inputs.Any(input => !string.IsNullOrWhiteSpace(input.PublicKey) &&
+                    keys.ContainsKey(Crypto.Sha256(input.PublicKey))) ||
+                transaction.Outputs.Any(output => keys.ContainsKey(output.OneTimeAddress));
+        }
+
         /// <summary>Restores a wallet from RSA private keys previously exported by this class.</summary>
         public static Wallet FromPrivateKeys(IEnumerable<string> privateKeys)
         {
