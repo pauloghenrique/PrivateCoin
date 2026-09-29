@@ -37,6 +37,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 - `Blockchain.json` contém a blockchain completa e a fila de transações pendentes, sem chaves privadas, em um envelope Base64 acompanhado pelo hash SHA-256 dos dados. Cada transferência validada é gravada imediatamente nesse arquivo enquanto aguarda a criação do bloco. Ao abrir o arquivo, o aplicativo confere o hash, restaura e valida também as pendências e rejeita conteúdo alterado antes de validar a cadeia. O arquivo pode ser distribuído para sincronizar os dados públicos da rede;
 - `wallets.dat` contém os nomes, as chaves privadas e as garantias de validador das carteiras locais, cifrados para o usuário atual do Windows por DPAPI, e **não deve ser distribuído**.
+- `recovery.dat` mantém cópias portáteis das chaves, individualmente cifradas e autenticadas pela frase de 12 palavras. Guarde uma cópia desse arquivo junto do backup da blockchain: a frase não é armazenada nele e, sozinha, não contém as chaves RSA. Use **Recuperar com frase** para importar a carteira em outra instalação.
 
 Instalações que ainda possuam o antigo `wallets.dat` combinado são migradas automaticamente para esse formato na primeira abertura.
 
