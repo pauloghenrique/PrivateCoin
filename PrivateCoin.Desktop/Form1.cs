@@ -50,8 +50,9 @@ namespace PrivateCoin.Desktop
                         blockchain = walletStore.LoadNetwork(out restoredPendingTransactions);
                         pendingTransactions.AddRange(restoredPendingTransactions);
                         foreach (Transaction transaction in restoredPendingTransactions) pendingIds.Add(transaction.Id);
-                        if (!walletStore.WalletExists)
-                            AddInitialWalletReward(blockchain, wallets[0].Wallet);
+                        // Losing wallets.dat must not mutate the public chain or consume a
+                        // new-wallet reward.  The temporary local wallet only keeps the UI
+                        // usable until the user restores the real wallet from its phrase.
                     }
                     else
                         blockchain = CreateBlockchainForWallet(wallets[0].Wallet);
@@ -170,7 +171,7 @@ namespace PrivateCoin.Desktop
             }
         }
 
-        private void RecoverWalletButtonClick(object sender, EventArgs e)
+        private async void RecoverWalletButtonClick(object sender, EventArgs e)
         {
             string name;
             string phrase;
@@ -181,9 +182,14 @@ namespace PrivateCoin.Desktop
                 return;
             }
 
+            recoverWalletButton.Enabled = false;
+            Log("Recuperando a carteira. A reconstrução das chaves pode levar alguns instantes...", true);
             try
             {
-                NamedWallet recovered = walletStore.Recover(phrase, name, blockchain);
+                // Rebuilding deterministic RSA keys is deliberately expensive. Running it
+                // away from the UI thread prevents Windows from reporting the application
+                // as unresponsive while the recovery gap is scanned.
+                NamedWallet recovered = await Task.Run(() => walletStore.Recover(phrase, name, blockchain));
                 if (recovered.Wallet.OwnedOneTimeAddresses.Any(address =>
                     wallets.Any(item => item.Wallet.OwnedOneTimeAddresses.Contains(address))))
                 {
@@ -199,6 +205,10 @@ namespace PrivateCoin.Desktop
             catch (Exception error)
             {
                 Log("Não foi possível recuperar a carteira: " + error.Message, false);
+            }
+            finally
+            {
+                recoverWalletButton.Enabled = true;
             }
         }
 
