@@ -117,8 +117,8 @@ namespace PrivateCoin.Desktop
             }
 
             createWalletButton.Enabled = false;
-            var namedWallet = new NamedWallet(name, new Wallet());
             string recoveryPhrase = RecoveryPhraseGenerator.Generate();
+            var namedWallet = new NamedWallet(name, new Wallet(), 0, null, recoveryPhrase);
             bool walletAdded = false;
             try
             {
@@ -167,6 +167,38 @@ namespace PrivateCoin.Desktop
             finally
             {
                 createWalletButton.Enabled = true;
+            }
+        }
+
+        private void RecoverWalletButtonClick(object sender, EventArgs e)
+        {
+            string name;
+            string phrase;
+            if (!RecoveryWalletDialog.Prompt(this, out name, out phrase)) return;
+            if (wallets.Any(item => string.Equals(item.Name, name, StringComparison.CurrentCultureIgnoreCase)))
+            {
+                Log("Já existe uma carteira com esse nome.", false);
+                return;
+            }
+
+            try
+            {
+                NamedWallet recovered = walletStore.Recover(phrase, name);
+                if (recovered.Wallet.OwnedOneTimeAddresses.Any(address =>
+                    wallets.Any(item => item.Wallet.OwnedOneTimeAddresses.Contains(address))))
+                {
+                    recovered.Dispose();
+                    throw new InvalidOperationException("Essa carteira já está aberta.");
+                }
+                wallets.Add(recovered);
+                RefreshWalletList(wallets.Count - 1);
+                SaveState();
+                UpdateChainSummary();
+                Log("Carteira “" + recovered.Name + "” recuperada com todas as chaves disponíveis na cópia portátil.", true);
+            }
+            catch (Exception error)
+            {
+                Log("Não foi possível recuperar a carteira: " + error.Message, false);
             }
         }
 

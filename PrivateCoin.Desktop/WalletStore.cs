@@ -6,12 +6,13 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace PrivateCoin.Desktop
 {
     internal sealed class NamedWallet : IDisposable
     {
-        public NamedWallet(string name, Wallet wallet, long lockedStake = 0, string validatorRewardAddress = null)
+        public NamedWallet(string name, Wallet wallet, long lockedStake = 0, string validatorRewardAddress = null, string recoveryPhrase = null)
         {
             if (lockedStake < 0) throw new ArgumentOutOfRangeException(nameof(lockedStake));
             if (lockedStake > 0 && string.IsNullOrWhiteSpace(validatorRewardAddress))
@@ -20,12 +21,14 @@ namespace PrivateCoin.Desktop
             Wallet = wallet;
             LockedStake = lockedStake;
             ValidatorRewardAddress = validatorRewardAddress;
+            RecoveryPhrase = recoveryPhrase;
         }
 
         public string Name { get; private set; }
         public Wallet Wallet { get; private set; }
         public long LockedStake { get; private set; }
         public string ValidatorRewardAddress { get; private set; }
+        public string RecoveryPhrase { get; private set; }
         public bool IsValidator => LockedStake > 0;
         public ValidatorStake Validator => IsValidator
             ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake, Wallet.OwnedOneTimeAddresses)
@@ -52,12 +55,14 @@ namespace PrivateCoin.Desktop
         private static readonly byte[] Entropy = { 80, 114, 105, 118, 97, 116, 101, 67, 111, 105, 110 };
         private readonly string walletFilePath;
         private readonly string networkFilePath;
+        private readonly string recoveryFilePath;
 
         public WalletStore()
         {
             string directory = FindProjectDirectory();
             walletFilePath = Path.Combine(directory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
+            recoveryFilePath = Path.Combine(directory, "recovery.dat");
             string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
             if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
                 File.Move(previousNetworkFilePath, networkFilePath);
@@ -114,10 +119,88 @@ namespace PrivateCoin.Desktop
                     Name = item.Name,
                     PrivateKeys = item.Wallet.ExportPrivateKeys().ToList(),
                     LockedStake = item.LockedStake,
-                    ValidatorRewardAddress = item.ValidatorRewardAddress
+                    ValidatorRewardAddress = item.ValidatorRewardAddress,
+                    RecoveryPhrase = item.RecoveryPhrase
                 }).ToList()
             }, true);
+            SaveRecoveryCopies(wallets.Where(item => !string.IsNullOrWhiteSpace(item.RecoveryPhrase)));
         }
+
+        public NamedWallet Recover(string phrase, string requestedName)
+        {
+            string normalized;
+            if (!RecoveryPhraseGenerator.TryNormalize(phrase, out normalized))
+                throw new ArgumentException("A frase deve conter exatamente as 12 palavras válidas, na ordem original.", nameof(phrase));
+            if (!File.Exists(recoveryFilePath))
+                throw new FileNotFoundException("O arquivo portátil recovery.dat não foi encontrado. A frase e esse arquivo são necessários para restaurar as chaves.");
+
+            StoredRecoveryCollection collection = ReadJson<StoredRecoveryCollection>(recoveryFilePath, false);
+            StoredRecovery record = collection == null || collection.Wallets == null
+                ? null : collection.Wallets.FirstOrDefault(item => item.Id == CalculateSha256(Encoding.UTF8.GetBytes(normalized)));
+            if (record == null) throw new InvalidOperationException("Nenhuma cópia de recuperação corresponde a essa frase.");
+            StoredRecoveryWallet restored = DecryptRecovery(record, normalized);
+            string name = string.IsNullOrWhiteSpace(requestedName) ? restored.Name : requestedName.Trim();
+            return new NamedWallet(name, Wallet.FromPrivateKeys(restored.PrivateKeys), restored.LockedStake,
+                restored.ValidatorRewardAddress, normalized);
+        }
+
+        private void SaveRecoveryCopies(IEnumerable<NamedWallet> recoverableWallets)
+        {
+            StoredRecoveryCollection collection = File.Exists(recoveryFilePath)
+                ? ReadJson<StoredRecoveryCollection>(recoveryFilePath, false) : new StoredRecoveryCollection();
+            if (collection == null) collection = new StoredRecoveryCollection();
+            if (collection.Wallets == null) collection.Wallets = new List<StoredRecovery>();
+            foreach (NamedWallet wallet in recoverableWallets)
+            {
+                string normalized;
+                if (!RecoveryPhraseGenerator.TryNormalize(wallet.RecoveryPhrase, out normalized)) continue;
+                string id = CalculateSha256(Encoding.UTF8.GetBytes(normalized));
+                collection.Wallets.RemoveAll(item => item.Id == id);
+                collection.Wallets.Add(EncryptRecovery(new StoredRecoveryWallet
+                {
+                    Name = wallet.Name,
+                    PrivateKeys = wallet.Wallet.ExportPrivateKeys().ToList(),
+                    LockedStake = wallet.LockedStake,
+                    ValidatorRewardAddress = wallet.ValidatorRewardAddress
+                }, normalized, id));
+            }
+            WriteJson(recoveryFilePath, collection, false);
+        }
+
+        private static StoredRecovery EncryptRecovery(StoredRecoveryWallet wallet, string phrase, string id)
+        {
+            byte[] salt = RandomBytes(16), iv = RandomBytes(16), material;
+            using (var derive = new Rfc2898DeriveBytes(phrase, salt, 100000)) material = derive.GetBytes(64);
+            byte[] cipher;
+            byte[] plain = Serialize(wallet);
+            using (Aes aes = Aes.Create())
+            {
+                aes.Key = material.Take(32).ToArray(); aes.IV = iv;
+                using (ICryptoTransform encryptor = aes.CreateEncryptor()) cipher = encryptor.TransformFinalBlock(plain, 0, plain.Length);
+            }
+            byte[] authenticated = salt.Concat(iv).Concat(cipher).ToArray();
+            byte[] mac;
+            using (var hmac = new HMACSHA256(material.Skip(32).ToArray())) mac = hmac.ComputeHash(authenticated);
+            return new StoredRecovery { Id = id, Salt = Convert.ToBase64String(salt), Iv = Convert.ToBase64String(iv), Data = Convert.ToBase64String(cipher), Hmac = Convert.ToBase64String(mac) };
+        }
+
+        private static StoredRecoveryWallet DecryptRecovery(StoredRecovery record, string phrase)
+        {
+            byte[] salt = Convert.FromBase64String(record.Salt), iv = Convert.FromBase64String(record.Iv), cipher = Convert.FromBase64String(record.Data), material;
+            using (var derive = new Rfc2898DeriveBytes(phrase, salt, 100000)) material = derive.GetBytes(64);
+            byte[] authenticated = salt.Concat(iv).Concat(cipher).ToArray(), expected;
+            using (var hmac = new HMACSHA256(material.Skip(32).ToArray())) expected = hmac.ComputeHash(authenticated);
+            if (!SlowEquals(expected, Convert.FromBase64String(record.Hmac))) throw new CryptographicException("A cópia de recuperação está corrompida.");
+            using (Aes aes = Aes.Create())
+            {
+                aes.Key = material.Take(32).ToArray(); aes.IV = iv;
+                using (ICryptoTransform decryptor = aes.CreateDecryptor())
+                    return Deserialize<StoredRecoveryWallet>(decryptor.TransformFinalBlock(cipher, 0, cipher.Length));
+            }
+        }
+
+        private static byte[] RandomBytes(int count) { var bytes = new byte[count]; using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes); return bytes; }
+        private static bool SlowEquals(byte[] left, byte[] right) { if (left.Length != right.Length) return false; int difference = 0; for (int i = 0; i < left.Length; i++) difference |= left[i] ^ right[i]; return difference == 0; }
 
         public List<NamedWallet> LoadWallets()
         {
@@ -130,7 +213,7 @@ namespace PrivateCoin.Desktop
             {
                 foreach (StoredWallet item in state.Wallets)
                     wallets.Add(new NamedWallet(item.Name, Wallet.FromPrivateKeys(item.PrivateKeys),
-                        item.LockedStake, item.ValidatorRewardAddress));
+                        item.LockedStake, item.ValidatorRewardAddress, item.RecoveryPhrase));
                 return wallets;
             }
             catch
@@ -297,6 +380,11 @@ namespace PrivateCoin.Desktop
             [DataMember(Order = 2)] public List<string> PrivateKeys { get; set; }
             [DataMember(Order = 3, EmitDefaultValue = false)] public long LockedStake { get; set; }
             [DataMember(Order = 4, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
+            [DataMember(Order = 5, EmitDefaultValue = false)] public string RecoveryPhrase { get; set; }
         }
+
+        [DataContract] private sealed class StoredRecoveryCollection { [DataMember(Order = 1)] public List<StoredRecovery> Wallets { get; set; } = new List<StoredRecovery>(); }
+        [DataContract] private sealed class StoredRecovery { [DataMember(Order = 1)] public string Id { get; set; } [DataMember(Order = 2)] public string Salt { get; set; } [DataMember(Order = 3)] public string Iv { get; set; } [DataMember(Order = 4)] public string Data { get; set; } [DataMember(Order = 5)] public string Hmac { get; set; } }
+        [DataContract] private sealed class StoredRecoveryWallet { [DataMember(Order = 1)] public string Name { get; set; } [DataMember(Order = 2)] public List<string> PrivateKeys { get; set; } [DataMember(Order = 3, EmitDefaultValue = false)] public long LockedStake { get; set; } [DataMember(Order = 4, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; } }
     }
 }

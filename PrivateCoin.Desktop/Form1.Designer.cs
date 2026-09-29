@@ -13,6 +13,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.ComboBox walletComboBox;
         private System.Windows.Forms.TextBox walletNameTextBox;
         private System.Windows.Forms.Button createWalletButton;
+        private System.Windows.Forms.Button recoverWalletButton;
         private System.Windows.Forms.Label balanceLabel;
         private System.Windows.Forms.Button newAddressButton;
         private System.Windows.Forms.TextBox destinationTextBox;
@@ -43,6 +44,7 @@ namespace PrivateCoin.Desktop
             this.walletComboBox = new System.Windows.Forms.ComboBox();
             this.walletNameTextBox = new System.Windows.Forms.TextBox();
             this.createWalletButton = new System.Windows.Forms.Button();
+            this.recoverWalletButton = new System.Windows.Forms.Button();
             this.balanceLabel = new System.Windows.Forms.Label();
             this.newAddressButton = new System.Windows.Forms.Button();
             this.destinationTextBox = new System.Windows.Forms.TextBox();
@@ -73,6 +75,7 @@ namespace PrivateCoin.Desktop
             AddLabel("Nova", 24, 219, 80, false);
             this.walletNameTextBox.SetBounds(108, 215, 260, 23);
             this.createWalletButton.SetBounds(378, 213, 150, 28); this.createWalletButton.Text = "Criar carteira"; this.createWalletButton.Click += new System.EventHandler(this.CreateWalletButtonClick);
+            this.recoverWalletButton.SetBounds(538, 213, 208, 28); this.recoverWalletButton.Text = "Recuperar com frase"; this.recoverWalletButton.Click += new System.EventHandler(this.RecoverWalletButtonClick);
             AddLabel("Receber em", 24, 256, 80, false);
             this.receiveAddressTextBox.SetBounds(108, 252, 500, 23); this.receiveAddressTextBox.ReadOnly = true;
             this.newAddressButton.SetBounds(618, 250, 128, 28); this.newAddressButton.Text = "Novo endereço"; this.newAddressButton.Click += new System.EventHandler(this.NewAddressButtonClick);
@@ -99,7 +102,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.WhiteSmoke;
             this.ClientSize = new System.Drawing.Size(770, 834);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;

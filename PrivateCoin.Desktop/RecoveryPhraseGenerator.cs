@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using System.Linq;
 
 namespace PrivateCoin.Desktop
 {
@@ -36,6 +37,15 @@ namespace PrivateCoin.Desktop
             for (int index = 0; index < words.Length; index++)
                 words[index] = EnglishWords[randomBytes[index] & (EnglishWords.Length - 1)];
             return string.Join(" ", words);
+        }
+
+        public static bool TryNormalize(string phrase, out string normalized)
+        {
+            normalized = string.Join(" ", (phrase ?? string.Empty)
+                .Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(word => word.ToLowerInvariant()));
+            string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            return words.Length == 12 && words.All(word => EnglishWords.Contains(word, StringComparer.Ordinal));
         }
     }
 }
