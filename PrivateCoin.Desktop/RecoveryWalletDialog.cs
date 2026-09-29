@@ -19,7 +19,7 @@ namespace PrivateCoin.Desktop
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
 
-            var help = new Label { Text = "Informe as 12 palavras na ordem original. O arquivo recovery.dat deve estar ao lado do aplicativo.", AutoSize = false };
+            var help = new Label { Text = "Informe as 12 palavras na ordem original. Nenhum arquivo de carteira é necessário.", AutoSize = false };
             help.SetBounds(18, 16, 514, 38);
             var nameLabel = new Label { Text = "Nome" }; nameLabel.SetBounds(18, 65, 75, 22);
             nameTextBox.SetBounds(100, 62, 432, 23);

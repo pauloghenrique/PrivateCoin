@@ -11,14 +11,38 @@ namespace PrivateCoin.Core
     {
         private readonly Dictionary<string, RSACryptoServiceProvider> keys =
             new Dictionary<string, RSACryptoServiceProvider>(StringComparer.Ordinal);
+        private readonly byte[] deterministicSeed;
+        private int nextKeyIndex;
+
+        public Wallet() { }
+
+        private Wallet(byte[] seed)
+        {
+            deterministicSeed = (byte[])seed.Clone();
+        }
+
+        public static Wallet FromSeed(byte[] seed, int addressCount)
+        {
+            if (addressCount < 0) throw new ArgumentOutOfRangeException(nameof(addressCount));
+            var wallet = new Wallet(seed);
+            try
+            {
+                for (int index = 0; index < addressCount; index++) wallet.CreateReceiveAddress();
+                return wallet;
+            }
+            catch { wallet.Dispose(); throw; }
+        }
 
         public string CreateReceiveAddress()
         {
-            var key = new RSACryptoServiceProvider(2048);
+            var key = deterministicSeed == null
+                ? new RSACryptoServiceProvider(2048)
+                : DeterministicRsa.Create(deterministicSeed, nextKeyIndex);
             key.PersistKeyInCsp = false;
             string publicKey = key.ToXmlString(false);
             string address = Crypto.Sha256(publicKey);
             keys.Add(address, key);
+            nextKeyIndex++;
             return address;
         }
 

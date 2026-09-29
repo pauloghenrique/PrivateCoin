@@ -1,6 +1,7 @@
 using System;
 using System.Security.Cryptography;
 using System.Linq;
+using System.Text;
 
 namespace PrivateCoin.Desktop
 {
@@ -46,6 +47,12 @@ namespace PrivateCoin.Desktop
                 .Select(word => word.ToLowerInvariant()));
             string[] words = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             return words.Length == 12 && words.All(word => EnglishWords.Contains(word, StringComparer.Ordinal));
+        }
+
+        public static byte[] ToSeed(string normalizedPhrase)
+        {
+            using (SHA256 algorithm = SHA256.Create())
+                return algorithm.ComputeHash(Encoding.UTF8.GetBytes("PrivateCoin wallet seed v1|" + normalizedPhrase));
         }
     }
 }

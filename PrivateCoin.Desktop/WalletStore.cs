@@ -12,7 +12,7 @@ namespace PrivateCoin.Desktop
 {
     internal sealed class NamedWallet : IDisposable
     {
-        public NamedWallet(string name, Wallet wallet, long lockedStake = 0, string validatorRewardAddress = null, string recoveryPhrase = null)
+        public NamedWallet(string name, Wallet wallet, long lockedStake = 0, string validatorRewardAddress = null, string recoveryPhrase = null, bool isDeterministic = false)
         {
             if (lockedStake < 0) throw new ArgumentOutOfRangeException(nameof(lockedStake));
             if (lockedStake > 0 && string.IsNullOrWhiteSpace(validatorRewardAddress))
@@ -22,6 +22,7 @@ namespace PrivateCoin.Desktop
             LockedStake = lockedStake;
             ValidatorRewardAddress = validatorRewardAddress;
             RecoveryPhrase = recoveryPhrase;
+            IsDeterministic = isDeterministic;
         }
 
         public string Name { get; private set; }
@@ -29,6 +30,7 @@ namespace PrivateCoin.Desktop
         public long LockedStake { get; private set; }
         public string ValidatorRewardAddress { get; private set; }
         public string RecoveryPhrase { get; private set; }
+        public bool IsDeterministic { get; private set; }
         public bool IsValidator => LockedStake > 0;
         public ValidatorStake Validator => IsValidator
             ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake, Wallet.OwnedOneTimeAddresses)
@@ -120,28 +122,45 @@ namespace PrivateCoin.Desktop
                     PrivateKeys = item.Wallet.ExportPrivateKeys().ToList(),
                     LockedStake = item.LockedStake,
                     ValidatorRewardAddress = item.ValidatorRewardAddress,
-                    RecoveryPhrase = item.RecoveryPhrase
+                    RecoveryPhrase = item.RecoveryPhrase,
+                    RecoveryVersion = item.IsDeterministic ? 1 : 0
                 }).ToList()
             }, true);
-            SaveRecoveryCopies(wallets.Where(item => !string.IsNullOrWhiteSpace(item.RecoveryPhrase)));
+            SaveRecoveryCopies(wallets.Where(item => !item.IsDeterministic && !string.IsNullOrWhiteSpace(item.RecoveryPhrase)));
         }
 
-        public NamedWallet Recover(string phrase, string requestedName)
+        public NamedWallet Recover(string phrase, string requestedName, Blockchain blockchain)
         {
+            if (blockchain == null) throw new ArgumentNullException(nameof(blockchain));
             string normalized;
             if (!RecoveryPhraseGenerator.TryNormalize(phrase, out normalized))
                 throw new ArgumentException("A frase deve conter exatamente as 12 palavras válidas, na ordem original.", nameof(phrase));
-            if (!File.Exists(recoveryFilePath))
-                throw new FileNotFoundException("O arquivo portátil recovery.dat não foi encontrado. A frase e esse arquivo são necessários para restaurar as chaves.");
-
-            StoredRecoveryCollection collection = ReadJson<StoredRecoveryCollection>(recoveryFilePath, false);
+            StoredRecoveryCollection collection = File.Exists(recoveryFilePath)
+                ? ReadJson<StoredRecoveryCollection>(recoveryFilePath, false) : null;
             StoredRecovery record = collection == null || collection.Wallets == null
                 ? null : collection.Wallets.FirstOrDefault(item => item.Id == CalculateSha256(Encoding.UTF8.GetBytes(normalized)));
-            if (record == null) throw new InvalidOperationException("Nenhuma cópia de recuperação corresponde a essa frase.");
-            StoredRecoveryWallet restored = DecryptRecovery(record, normalized);
-            string name = string.IsNullOrWhiteSpace(requestedName) ? restored.Name : requestedName.Trim();
-            return new NamedWallet(name, Wallet.FromPrivateKeys(restored.PrivateKeys), restored.LockedStake,
-                restored.ValidatorRewardAddress, normalized);
+            if (record != null)
+            {
+                StoredRecoveryWallet restored = DecryptRecovery(record, normalized);
+                string legacyName = string.IsNullOrWhiteSpace(requestedName) ? restored.Name : requestedName.Trim();
+                return new NamedWallet(legacyName, Wallet.FromPrivateKeys(restored.PrivateKeys), restored.LockedStake,
+                    restored.ValidatorRewardAddress, normalized);
+            }
+
+            var knownAddresses = new HashSet<string>(blockchain.Blocks
+                .SelectMany(block => block.Transactions)
+                .SelectMany(transaction => transaction.Outputs)
+                .Select(output => output.OneTimeAddress), StringComparer.Ordinal);
+            byte[] seed = RecoveryPhraseGenerator.ToSeed(normalized);
+            var recovered = Wallet.FromSeed(seed, 0);
+            int unused = 0;
+            while (unused < 20)
+            {
+                string address = recovered.CreateReceiveAddress();
+                unused = knownAddresses.Contains(address) ? 0 : unused + 1;
+            }
+            string name = string.IsNullOrWhiteSpace(requestedName) ? "Carteira recuperada" : requestedName.Trim();
+            return new NamedWallet(name, recovered, 0, null, normalized, true);
         }
 
         private void SaveRecoveryCopies(IEnumerable<NamedWallet> recoverableWallets)
@@ -212,8 +231,13 @@ namespace PrivateCoin.Desktop
             try
             {
                 foreach (StoredWallet item in state.Wallets)
-                    wallets.Add(new NamedWallet(item.Name, Wallet.FromPrivateKeys(item.PrivateKeys),
-                        item.LockedStake, item.ValidatorRewardAddress, item.RecoveryPhrase));
+                {
+                    Wallet wallet = item.RecoveryVersion == 1
+                        ? Wallet.FromSeed(RecoveryPhraseGenerator.ToSeed(item.RecoveryPhrase), item.PrivateKeys.Count)
+                        : Wallet.FromPrivateKeys(item.PrivateKeys);
+                    wallets.Add(new NamedWallet(item.Name, wallet, item.LockedStake,
+                        item.ValidatorRewardAddress, item.RecoveryPhrase, item.RecoveryVersion == 1));
+                }
                 return wallets;
             }
             catch
@@ -381,6 +405,7 @@ namespace PrivateCoin.Desktop
             [DataMember(Order = 3, EmitDefaultValue = false)] public long LockedStake { get; set; }
             [DataMember(Order = 4, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
             [DataMember(Order = 5, EmitDefaultValue = false)] public string RecoveryPhrase { get; set; }
+            [DataMember(Order = 6, EmitDefaultValue = false)] public int RecoveryVersion { get; set; }
         }
 
         [DataContract] private sealed class StoredRecoveryCollection { [DataMember(Order = 1)] public List<StoredRecovery> Wallets { get; set; } = new List<StoredRecovery>(); }
