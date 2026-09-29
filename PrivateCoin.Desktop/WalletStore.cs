@@ -58,6 +58,8 @@ namespace PrivateCoin.Desktop
         private readonly string walletFilePath;
         private readonly string networkFilePath;
         private readonly string recoveryFilePath;
+        private readonly Dictionary<string, StoredNetworkWallet> knownNetworkWallets =
+            new Dictionary<string, StoredNetworkWallet>(StringComparer.Ordinal);
 
         public WalletStore()
         {
@@ -102,14 +104,36 @@ namespace PrivateCoin.Desktop
 
             // Store the public file first. This also makes migration from the old combined
             // wallets.dat safe: that file is not replaced until the chain has been written.
+            var pending = pendingTransactions.ToList();
+            foreach (NamedWallet wallet in wallets)
+            {
+                List<string> addresses = wallet.Wallet.OwnedOneTimeAddresses.ToList();
+                string recoveryId = GetRecoveryId(wallet.RecoveryPhrase);
+                string id = recoveryId ?? (addresses.Count == 0 ? null : addresses[0]);
+                if (string.IsNullOrWhiteSpace(id)) continue;
+                knownNetworkWallets[id] = new StoredNetworkWallet
+                {
+                    Id = id,
+                    Name = wallet.Name,
+                    Addresses = addresses,
+                    TokenBalance = blockchain.GetBalance(addresses, pending),
+                    RecoveryId = recoveryId,
+                    LockedStake = wallet.LockedStake,
+                    ValidatorRewardAddress = wallet.ValidatorRewardAddress
+                };
+            }
+            foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
+                wallet.TokenBalance = blockchain.GetBalance(wallet.Addresses, pending);
+
             byte[] networkData = Serialize(new StoredNetworkData
             {
                 Blocks = blockchain.Blocks.ToList(),
-                PendingTransactions = pendingTransactions.ToList()
+                PendingTransactions = pending,
+                Wallets = knownNetworkWallets.Values.OrderBy(item => item.Id, StringComparer.Ordinal).ToList()
             });
             WriteJson(networkFilePath, new StoredNetwork
             {
-                SchemaVersion = 2,
+                SchemaVersion = 3,
                 Data = Convert.ToBase64String(networkData),
                 Sha256 = CalculateSha256(networkData)
             }, false);
@@ -123,7 +147,8 @@ namespace PrivateCoin.Desktop
                     LockedStake = item.LockedStake,
                     ValidatorRewardAddress = item.ValidatorRewardAddress,
                     RecoveryPhrase = item.RecoveryPhrase,
-                    RecoveryVersion = item.IsDeterministic ? 1 : 0
+                    RecoveryVersion = item.IsDeterministic ? 1 : 0,
+                    Addresses = item.Wallet.OwnedOneTimeAddresses.ToList()
                 }).ToList()
             }, true);
             SaveRecoveryCopies(wallets.Where(item => !item.IsDeterministic && !string.IsNullOrWhiteSpace(item.RecoveryPhrase)));
@@ -135,6 +160,22 @@ namespace PrivateCoin.Desktop
             string normalized;
             if (!RecoveryPhraseGenerator.TryNormalize(phrase, out normalized))
                 throw new ArgumentException("A frase deve conter exatamente as 12 palavras válidas, na ordem original.", nameof(phrase));
+            string recoveryId = GetRecoveryId(normalized);
+            StoredNetworkWallet networkWallet = knownNetworkWallets.Values.FirstOrDefault(item =>
+                string.Equals(item.RecoveryId, recoveryId, StringComparison.Ordinal));
+            if (networkWallet != null)
+            {
+                int addressCount = networkWallet.Addresses == null ? 0 : networkWallet.Addresses.Count;
+                Wallet restoredWallet = Wallet.FromSeed(RecoveryPhraseGenerator.ToSeed(normalized), addressCount);
+                if (!restoredWallet.OwnedOneTimeAddresses.SequenceEqual(networkWallet.Addresses ?? new List<string>(), StringComparer.Ordinal))
+                {
+                    restoredWallet.Dispose();
+                    throw new SerializationException("Os endereços públicos registrados para a carteira não conferem com a frase.");
+                }
+                string restoredName = string.IsNullOrWhiteSpace(requestedName) ? networkWallet.Name : requestedName.Trim();
+                return new NamedWallet(restoredName, restoredWallet, networkWallet.LockedStake,
+                    networkWallet.ValidatorRewardAddress, normalized, true);
+            }
             StoredRecoveryCollection collection = File.Exists(recoveryFilePath)
                 ? ReadJson<StoredRecoveryCollection>(recoveryFilePath, false) : null;
             StoredRecovery record = collection == null || collection.Wallets == null
@@ -235,6 +276,12 @@ namespace PrivateCoin.Desktop
                     Wallet wallet = item.RecoveryVersion == 1
                         ? Wallet.FromSeed(RecoveryPhraseGenerator.ToSeed(item.RecoveryPhrase), item.PrivateKeys.Count)
                         : Wallet.FromPrivateKeys(item.PrivateKeys);
+                    if (item.Addresses != null && item.Addresses.Count > 0 &&
+                        !wallet.OwnedOneTimeAddresses.SequenceEqual(item.Addresses, StringComparer.Ordinal))
+                    {
+                        wallet.Dispose();
+                        throw new SerializationException("Os endereços gravados em wallets.dat não conferem com as chaves da carteira.");
+                    }
                     wallets.Add(new NamedWallet(item.Name, wallet, item.LockedStake,
                         item.ValidatorRewardAddress, item.RecoveryPhrase, item.RecoveryVersion == 1));
                 }
@@ -255,6 +302,7 @@ namespace PrivateCoin.Desktop
                 throw new SerializationException("O arquivo da rede está incompleto.");
 
             List<Block> blocks;
+            bool validatePublicBalances = false;
             if (!string.IsNullOrWhiteSpace(state.Data) && !string.IsNullOrWhiteSpace(state.Sha256))
             {
                 byte[] networkData;
@@ -272,6 +320,16 @@ namespace PrivateCoin.Desktop
                         throw new SerializationException("Os dados da rede estão incompletos.");
                     blocks = storedData.Blocks;
                     pendingTransactions = storedData.PendingTransactions ?? new List<Transaction>();
+                    if (storedData.Wallets != null)
+                    {
+                        foreach (StoredNetworkWallet wallet in storedData.Wallets)
+                        {
+                            if (wallet == null || string.IsNullOrWhiteSpace(wallet.Id) || wallet.Addresses == null)
+                                throw new SerializationException("O cadastro público de carteiras da rede está incompleto.");
+                            knownNetworkWallets[wallet.Id] = wallet;
+                        }
+                    }
+                    validatePublicBalances = state.SchemaVersion >= 3;
                 }
                 else
                 {
@@ -279,7 +337,7 @@ namespace PrivateCoin.Desktop
                     blocks = Deserialize<List<Block>>(networkData);
                     NetworkNeedsUpgrade = true;
                 }
-                if (state.SchemaVersion >= 2) NetworkNeedsUpgrade = false;
+                NetworkNeedsUpgrade = state.SchemaVersion < 3;
             }
             else if (state.Blocks != null)
             {
@@ -291,6 +349,15 @@ namespace PrivateCoin.Desktop
 
             var blockchain = new Blockchain(blocks);
             blockchain.ValidatePendingTransactions(pendingTransactions);
+            if (validatePublicBalances)
+            {
+                foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
+                {
+                    long calculatedBalance = blockchain.GetBalance(wallet.Addresses, pendingTransactions);
+                    if (wallet.TokenBalance != calculatedBalance)
+                        throw new SerializationException("O saldo público de uma carteira não confere com a blockchain.");
+                }
+            }
             if (pendingTransactions.Any(transaction => transaction == null) ||
                 pendingTransactions.Select(transaction => transaction.Id).Distinct(StringComparer.Ordinal).Count() != pendingTransactions.Count)
                 throw new SerializationException("A fila de transações pendentes da rede é inválida.");
@@ -368,6 +435,15 @@ namespace PrivateCoin.Desktop
                 return string.Concat(algorithm.ComputeHash(contents).Select(value => value.ToString("x2")));
         }
 
+        private static string GetRecoveryId(string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(phrase)) return null;
+            string normalized;
+            if (!RecoveryPhraseGenerator.TryNormalize(phrase, out normalized)) return null;
+            byte[] seed = RecoveryPhraseGenerator.ToSeed(normalized);
+            return CalculateSha256(Encoding.UTF8.GetBytes("PrivateCoin wallet recovery\n").Concat(seed).ToArray());
+        }
+
         [DataContract]
         private sealed class StoredWalletCollection
         {
@@ -388,6 +464,19 @@ namespace PrivateCoin.Desktop
         {
             [DataMember(Order = 1)] public List<Block> Blocks { get; set; }
             [DataMember(Order = 2)] public List<Transaction> PendingTransactions { get; set; }
+            [DataMember(Order = 3, EmitDefaultValue = false)] public List<StoredNetworkWallet> Wallets { get; set; }
+        }
+
+        [DataContract]
+        private sealed class StoredNetworkWallet
+        {
+            [DataMember(Order = 1)] public string Id { get; set; }
+            [DataMember(Order = 2)] public string Name { get; set; }
+            [DataMember(Order = 3)] public List<string> Addresses { get; set; }
+            [DataMember(Order = 4)] public long TokenBalance { get; set; }
+            [DataMember(Order = 5, EmitDefaultValue = false)] public string RecoveryId { get; set; }
+            [DataMember(Order = 6, EmitDefaultValue = false)] public long LockedStake { get; set; }
+            [DataMember(Order = 7, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
         }
 
         [DataContract]
@@ -406,6 +495,7 @@ namespace PrivateCoin.Desktop
             [DataMember(Order = 4, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
             [DataMember(Order = 5, EmitDefaultValue = false)] public string RecoveryPhrase { get; set; }
             [DataMember(Order = 6, EmitDefaultValue = false)] public int RecoveryVersion { get; set; }
+            [DataMember(Order = 7, EmitDefaultValue = false)] public List<string> Addresses { get; set; }
         }
 
         [DataContract] private sealed class StoredRecoveryCollection { [DataMember(Order = 1)] public List<StoredRecovery> Wallets { get; set; } = new List<StoredRecovery>(); }
