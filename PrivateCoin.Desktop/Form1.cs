@@ -118,6 +118,7 @@ namespace PrivateCoin.Desktop
 
             createWalletButton.Enabled = false;
             var namedWallet = new NamedWallet(name, new Wallet());
+            string recoveryPhrase = RecoveryPhraseGenerator.Generate();
             bool walletAdded = false;
             try
             {
@@ -130,6 +131,15 @@ namespace PrivateCoin.Desktop
                 walletNameTextBox.Clear();
                 RefreshWalletList(wallets.Count - 1);
                 SaveState();
+
+                MessageBox.Show(
+                    "Estas são as 12 palavras em inglês para recuperar sua carteira:\n\n" +
+                    recoveryPhrase +
+                    "\n\nAnote-as na ordem exibida e guarde-as em um local seguro. " +
+                    "Elas não serão mostradas novamente e não devem ser compartilhadas.",
+                    "Frase de recuperação — " + name,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
 
                 if (rewarded)
                 {
