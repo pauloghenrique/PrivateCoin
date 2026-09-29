@@ -259,7 +259,7 @@ namespace PrivateCoin.Core
             if (records.Length < 2 || records.Count(item => item.IsCreator) != 1)
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
-                item.OwnedAddresses ?? new[] { item.RewardAddress })).ToArray();
+                item.OwnedAddresses ?? new List<string> { item.RewardAddress })).ToArray();
             Transaction[] transfers = block.Transactions.Skip(1).ToArray();
             if (ExcludeTransactionParticipants(stakes, transfers).Count() != stakes.Length)
                 throw new InvalidOperationException("A transfer sender or receiver cannot create or confirm its block.");
