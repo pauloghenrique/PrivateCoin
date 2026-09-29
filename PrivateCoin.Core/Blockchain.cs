@@ -57,7 +57,7 @@ namespace PrivateCoin.Core
             {
                 var pending = transactions.ToList();
                 ValidateTransactions(pending);
-                ValidatorStake[] active = validators.ToArray();
+                ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
                 if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
@@ -78,7 +78,8 @@ namespace PrivateCoin.Core
                         ValidatorId = item.ValidatorId,
                         RewardAddress = item.RewardAddress,
                         LockedAmount = item.LockedAmount,
-                        IsCreator = item.ValidatorId == creator.ValidatorId
+                        IsCreator = item.ValidatorId == creator.ValidatorId,
+                        OwnedAddresses = item.OwnedAddresses.OrderBy(address => address, StringComparer.Ordinal).ToList()
                     }).ToList()
                 };
                 Mine(block);
@@ -257,7 +258,11 @@ namespace PrivateCoin.Core
             BlockValidator[] records = block.Validators.ToArray();
             if (records.Length < 2 || records.Count(item => item.IsCreator) != 1)
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
-            var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount)).ToArray();
+            var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
+                item.OwnedAddresses ?? new[] { item.RewardAddress })).ToArray();
+            Transaction[] transfers = block.Transactions.Skip(1).ToArray();
+            if (ExcludeTransactionParticipants(stakes, transfers).Count() != stakes.Length)
+                throw new InvalidOperationException("A transfer sender or receiver cannot create or confirm its block.");
             ValidatorStake expectedCreator = ProofOfStake.SelectCreator(stakes, previousHash, block.Height);
             BlockValidator recordedCreator = records.Single(item => item.IsCreator);
             if (recordedCreator.ValidatorId != expectedCreator.ValidatorId)
@@ -271,6 +276,21 @@ namespace PrivateCoin.Core
                 if (reward.Outputs[index].Amount != expected[index].Amount || reward.Outputs[index].OneTimeAddress != expected[index].RewardAddress)
                     throw new InvalidOperationException("The validator reward distribution is incorrect.");
             Apply(reward, utxo, true);
+        }
+
+        private static IEnumerable<ValidatorStake> ExcludeTransactionParticipants(
+            IEnumerable<ValidatorStake> validators,
+            IEnumerable<Transaction> transactions)
+        {
+            var endpoints = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Transaction transaction in transactions)
+            {
+                foreach (TransactionInput input in transaction.Inputs)
+                    if (!string.IsNullOrWhiteSpace(input.PublicKey)) endpoints.Add(Crypto.Sha256(input.PublicKey));
+                foreach (TransactionOutput output in transaction.Outputs)
+                    if (!string.IsNullOrWhiteSpace(output.OneTimeAddress)) endpoints.Add(output.OneTimeAddress);
+            }
+            return validators.Where(validator => !validator.OwnedAddresses.Any(endpoints.Contains));
         }
 
         private static bool IsWalletCreationReward(Transaction transaction)

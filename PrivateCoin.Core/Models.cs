@@ -14,6 +14,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 2)] public string RewardAddress { get; set; }
         [DataMember(Order = 3)] public long LockedAmount { get; set; }
         [DataMember(Order = 4)] public bool IsCreator { get; set; }
+        [DataMember(Order = 5, EmitDefaultValue = false)] public List<string> OwnedAddresses { get; set; }
     }
 
     [DataContract]
@@ -71,7 +72,8 @@ namespace PrivateCoin.Core
         internal string CalculateHash()
         {
             string validatorProof = Validators == null ? string.Empty : string.Join("|", Validators.Select(v =>
-                v.ValidatorId + ":" + v.RewardAddress + ":" + v.LockedAmount.ToString(CultureInfo.InvariantCulture) + ":" + v.IsCreator));
+                v.ValidatorId + ":" + v.RewardAddress + ":" + v.LockedAmount.ToString(CultureInfo.InvariantCulture) + ":" + v.IsCreator +
+                (v.OwnedAddresses == null ? string.Empty : ":addresses:" + string.Join(",", v.OwnedAddresses))));
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
                 string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof));

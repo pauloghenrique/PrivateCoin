@@ -342,11 +342,11 @@ namespace PrivateCoin.Desktop
                     Transaction[] batch = SnapshotPending();
                     if (batch.Length == 0) break;
 
-                    ValidatorStake[] activeValidators = wallets.Where(item => item.IsValidator).Select(item => item.Validator).ToArray();
+                    ValidatorStake[] activeValidators = EligibleValidators(batch);
                     if (activeValidators.Length < 2)
                     {
-                        miningStatusLabel.Text = "Aguardando pelo menos 2 validadores ativos";
-                        Log("O bloco aguarda outro validador: um criador não pode confirmar o próprio bloco.", false);
+                        miningStatusLabel.Text = "Aguardando 2 validadores sem participação na transferência";
+                        Log("O bloco aguarda dois validadores elegíveis: remetentes e destinatários não podem criar nem confirmar o bloco.", false);
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
@@ -380,13 +380,21 @@ namespace PrivateCoin.Desktop
             finally
             {
                 miningInProgress = false;
-                miningStatusLabel.Text = wallets.Count(item => item.IsValidator) < 2
-                    ? "Aguardando pelo menos 2 validadores ativos"
+                Transaction[] remaining = SnapshotPending();
+                miningStatusLabel.Text = remaining.Length > 0 && EligibleValidators(remaining).Length < 2
+                    ? "Aguardando 2 validadores sem participação na transferência"
                     : "Aguardando uma transferência válida";
                 UpdateChainSummary();
-                if (!IsDisposed && wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
+                if (!IsDisposed && remaining.Length > 0 && EligibleValidators(remaining).Length >= 2)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
+        }
+
+        private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions)
+        {
+            Transaction[] batch = transactions.ToArray();
+            return wallets.Where(item => item.IsValidator && !batch.Any(item.Wallet.IsParticipant))
+                .Select(item => item.Validator).ToArray();
         }
 
         private async void CreateTransactionButtonClick(object sender, EventArgs e)
