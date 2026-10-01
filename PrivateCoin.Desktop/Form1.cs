@@ -227,11 +227,15 @@ namespace PrivateCoin.Desktop
 
             try
             {
-                peerNode = new PeerNode(port);
+                bool enableNatTraversal;
+                if (!bool.TryParse(ConfigurationManager.AppSettings["EnableNatTraversal"], out enableNatTraversal))
+                    enableNatTraversal = true;
+                peerNode = new PeerNode(port, enableNatTraversal);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
                 peerNode.PeerCountChanged += PeerNodePeerCountChanged;
+                peerNode.NatTraversalStatusChanged += PeerNodePeerCountChanged;
                 peerNode.Start(GetBootstrapPeers());
                 startNodeButton.Enabled = false;
                 connectButton.Enabled = true;
@@ -266,6 +270,7 @@ namespace PrivateCoin.Desktop
             nodeStatusLabel.Text = "Nó ativo na porta " + listenPortTextBox.Text.Trim() +
                 "   |   Pares: " + node.ConnectedPeerCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture);
+            nodeStatusLabel.Text += "   |   NAT: " + node.NatTraversalStatus;
         }
 
         private async void ConnectButtonClick(object sender, EventArgs e)

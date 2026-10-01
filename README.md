@@ -57,6 +57,8 @@ Também é possível definir os seeds sem alterar o arquivo por meio da variáve
 
 Pelo menos um seed precisa estar permanentemente online, ter IP/DNS público e encaminhar a porta TCP configurada para o computador que executa o nó. Nós atrás de CGNAT continuam precisando de IPv4 público, encaminhamento de porta, VPN ou relay; descoberta de pares não atravessa NAT por si só.
 
+Ao iniciar, o nó tenta criar automaticamente no roteador um mapeamento TCP para `ListenPort` usando UPnP IGD. O painel mostra `UPnP ativo` quando o roteador aceitou o mapeamento e renova a concessão enquanto o aplicativo estiver aberto. Isso permite conexões diretas entre nós atrás de NAT residencial compatível, sem configuração manual da porta. `UPnP indisponível` significa que o recurso está desativado no roteador, não é suportado ou que a rede usa CGNAT; nesses casos continuam necessários encaminhamento manual, IPv6 público, VPN ou pelo menos dois relays públicos. Defina `EnableNatTraversal` como `false` no `App.config` para não solicitar o mapeamento. UPnP não atravessa CGNAT e não elimina a necessidade dos seeds para a descoberta inicial.
+
 > Esta é uma base técnica, não software pronto para custodiar dinheiro real. Uma rede de produção também precisa de descoberta autenticada de pares, protocolo de consenso/forks, proteção contra Sybil/DoS, auditoria criptográfica e backups seguros.
 
 ## Emissão e validadores

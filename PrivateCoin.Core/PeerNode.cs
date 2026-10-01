@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
@@ -37,23 +38,32 @@ namespace PrivateCoin.Core
         private readonly ConcurrentDictionary<string, byte> knownEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> connectingEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> seen = new ConcurrentDictionary<string, byte>();
+        private readonly UpnpPortMapper portMapper;
         private Task acceptTask;
         private Task maintenanceTask;
+        private string natTraversalStatus = "aguardando";
 
-        public PeerNode(int port)
+        public PeerNode(int port) : this(port, true)
+        {
+        }
+
+        public PeerNode(int port, bool enableNatTraversal)
         {
             if (port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort) throw new ArgumentOutOfRangeException(nameof(port));
             listeningPort = port;
             listener = new TcpListener(IPAddress.Any, port);
+            if (enableNatTraversal) portMapper = new UpnpPortMapper(port);
         }
 
         public event EventHandler<TransactionReceivedEventArgs> TransactionReceived;
         public event EventHandler<ChainReceivedEventArgs> ChainReceived;
         public event EventHandler SynchronizationRequested;
         public event EventHandler PeerCountChanged;
+        public event EventHandler NatTraversalStatusChanged;
 
         public int ConnectedPeerCount => peers.Count;
         public string[] KnownPeers => knownEndpoints.Keys.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+        public string NatTraversalStatus => natTraversalStatus;
 
         public void Start()
         {
@@ -68,6 +78,27 @@ namespace PrivateCoin.Core
             listener.Start();
             acceptTask = Task.Run(() => AcceptLoop(cancellation.Token));
             maintenanceTask = Task.Run(() => MaintenanceLoop(cancellation.Token));
+            if (portMapper == null) SetNatTraversalStatus("desativado");
+            else Task.Run(() => StartNatTraversal(cancellation.Token));
+        }
+
+        private async Task StartNatTraversal(CancellationToken token)
+        {
+            try
+            {
+                bool mapped = await portMapper.TryStartAsync(token).ConfigureAwait(false);
+                SetNatTraversalStatus(mapped ? "UPnP ativo" : "UPnP indisponível");
+            }
+            catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is InvalidOperationException || error is System.Xml.XmlException || error is OperationCanceledException)
+            {
+                if (!token.IsCancellationRequested) SetNatTraversalStatus("UPnP indisponível");
+            }
+        }
+
+        private void SetNatTraversalStatus(string status)
+        {
+            natTraversalStatus = status;
+            NatTraversalStatusChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public Task ConnectAsync(string host, int port)
@@ -337,6 +368,7 @@ namespace PrivateCoin.Core
             cancellation.Cancel();
             listener.Stop();
             foreach (TcpClient peer in peers.Keys) RemovePeer(peer);
+            if (portMapper != null) portMapper.Dispose();
             cancellation.Dispose();
         }
     }
