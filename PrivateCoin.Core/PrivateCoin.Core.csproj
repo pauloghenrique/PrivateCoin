@@ -53,6 +53,7 @@
     <Compile Include="Crypto.cs" />
     <Compile Include="DeterministicRsa.cs" />
     <Compile Include="Models.cs" />
+    <Compile Include="PeerAddressBook.cs" />
     <Compile Include="PeerNode.cs" />
     <Compile Include="ProofOfStake.cs" />
     <Compile Include="UpnpPortMapper.cs" />

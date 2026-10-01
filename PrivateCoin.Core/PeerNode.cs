@@ -39,20 +39,26 @@ namespace PrivateCoin.Core
         private readonly ConcurrentDictionary<string, byte> connectingEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> seen = new ConcurrentDictionary<string, byte>();
         private readonly UpnpPortMapper portMapper;
+        private readonly PeerAddressBook addressBook;
         private Task acceptTask;
         private Task maintenanceTask;
         private string natTraversalStatus = "aguardando";
 
-        public PeerNode(int port) : this(port, true)
+        public PeerNode(int port) : this(port, false, null)
         {
         }
 
-        public PeerNode(int port, bool enableNatTraversal)
+        public PeerNode(int port, bool enableNatTraversal) : this(port, enableNatTraversal, null)
+        {
+        }
+
+        public PeerNode(int port, bool enableNatTraversal, string peerCachePath)
         {
             if (port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort) throw new ArgumentOutOfRangeException(nameof(port));
             listeningPort = port;
             listener = new TcpListener(IPAddress.Any, port);
             if (enableNatTraversal) portMapper = new UpnpPortMapper(port);
+            addressBook = new PeerAddressBook(peerCachePath);
         }
 
         public event EventHandler<TransactionReceivedEventArgs> TransactionReceived;
@@ -62,6 +68,7 @@ namespace PrivateCoin.Core
         public event EventHandler NatTraversalStatusChanged;
 
         public int ConnectedPeerCount => peers.Count;
+        public string[] ConnectedPeers => peerEndpoints.Values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
         public string[] KnownPeers => knownEndpoints.Keys.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
         public string NatTraversalStatus => natTraversalStatus;
 
@@ -74,6 +81,7 @@ namespace PrivateCoin.Core
         {
             if (acceptTask != null) throw new InvalidOperationException("The node is already running.");
             if (bootstrapPeers == null) throw new ArgumentNullException(nameof(bootstrapPeers));
+            foreach (string endpoint in addressBook.Load()) AddKnownEndpoint(endpoint);
             foreach (string endpoint in bootstrapPeers) AddKnownEndpoint(endpoint);
             listener.Start();
             acceptTask = Task.Run(() => AcceptLoop(cancellation.Token));
@@ -147,7 +155,9 @@ namespace PrivateCoin.Core
         {
             while (!token.IsCancellationRequested)
             {
-                foreach (string endpoint in knownEndpoints.Keys.Take(MaximumConnections))
+                string[] candidates = addressBook.Select(MaximumConnections * 4)
+                    .Concat(knownEndpoints.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Take(MaximumConnections * 4).ToArray();
+                foreach (string endpoint in candidates)
                 {
                     if (peers.Count >= MaximumConnections) break;
                     try { await ConnectKnownPeer(endpoint, false).ConfigureAwait(false); }
@@ -160,6 +170,8 @@ namespace PrivateCoin.Core
                     seen.TryAdd(addressMessage.MessageId, 0);
                     await SendToAll(addressMessage, null).ConfigureAwait(false);
                 }
+
+                TrySaveAddressBook();
 
                 try { await Task.Delay(TimeSpan.FromSeconds(30), token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
@@ -178,14 +190,17 @@ namespace PrivateCoin.Core
             if (IsSelf(host, port) || connectedEndpoints.ContainsKey(endpoint) || !connectingEndpoints.TryAdd(endpoint, 0)) return;
 
             var client = new TcpClient();
+            addressBook.Attempted(endpoint);
             try
             {
                 await client.ConnectAsync(host, port).ConfigureAwait(false);
                 if (!connectedEndpoints.TryAdd(endpoint, 0)) { client.Dispose(); return; }
+                addressBook.Succeeded(endpoint);
                 Register(client, endpoint);
             }
             catch
             {
+                addressBook.Failed(endpoint);
                 client.Dispose();
                 if (throwOnFailure) throw;
             }
@@ -256,11 +271,16 @@ namespace PrivateCoin.Core
             {
                 string advertised = FormatEndpoint(remote.Address.ToString(), message.ListeningPort);
                 AddKnownEndpoint(advertised);
+                // Preserve the configured hostname for outbound connections.
+                // Replacing it with the observed numeric address made the
+                // maintenance loop believe the configured peer was disconnected
+                // and open duplicate connections to it repeatedly.
                 string previous;
-                if (peerEndpoints.TryGetValue(client, out previous) && !string.Equals(previous, advertised, StringComparison.OrdinalIgnoreCase))
-                    connectedEndpoints.TryRemove(previous, out _);
-                peerEndpoints[client] = advertised;
-                connectedEndpoints.TryAdd(advertised, 0);
+                if (!peerEndpoints.TryGetValue(client, out previous))
+                {
+                    peerEndpoints[client] = advertised;
+                    connectedEndpoints.TryAdd(advertised, 0);
+                }
             }
             if (message.Peers != null)
                 foreach (string endpoint in message.Peers.Take(256)) AddKnownEndpoint(endpoint);
@@ -268,10 +288,27 @@ namespace PrivateCoin.Core
 
         private void AddKnownEndpoint(string endpoint)
         {
+            string normalized;
+            if (!TryNormalizeEndpoint(endpoint, out normalized)) return;
+            if (knownEndpoints.Count >= 2048 && !knownEndpoints.ContainsKey(normalized)) return;
+            knownEndpoints.TryAdd(normalized, 0);
+        }
+
+        private bool TryNormalizeEndpoint(string endpoint, out string normalized)
+        {
+            normalized = null;
             string host;
             int port;
-            if (!TryParseEndpoint(endpoint, out host, out port) || IsSelf(host, port)) return;
-            knownEndpoints.TryAdd(FormatEndpoint(host, port), 0);
+            if (!TryParseEndpoint(endpoint, out host, out port) || IsSelf(host, port)) return false;
+            normalized = FormatEndpoint(host, port);
+            addressBook.Seen(normalized);
+            return true;
+        }
+
+        private void TrySaveAddressBook()
+        {
+            try { addressBook.Save(); }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException) { }
         }
 
         private async Task SendToAll(PeerMessage message, TcpClient excluded)
@@ -368,6 +405,7 @@ namespace PrivateCoin.Core
             cancellation.Cancel();
             listener.Stop();
             foreach (TcpClient peer in peers.Keys) RemovePeer(peer);
+            TrySaveAddressBook();
             if (portMapper != null) portMapper.Dispose();
             cancellation.Dispose();
         }

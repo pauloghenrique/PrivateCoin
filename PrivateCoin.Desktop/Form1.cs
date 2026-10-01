@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -229,8 +230,9 @@ namespace PrivateCoin.Desktop
             {
                 bool enableNatTraversal;
                 if (!bool.TryParse(ConfigurationManager.AppSettings["EnableNatTraversal"], out enableNatTraversal))
-                    enableNatTraversal = true;
-                peerNode = new PeerNode(port, enableNatTraversal);
+                    enableNatTraversal = false;
+                string peerCachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "peers.dat");
+                peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
@@ -239,6 +241,7 @@ namespace PrivateCoin.Desktop
                 peerNode.Start(GetBootstrapPeers());
                 startNodeButton.Enabled = false;
                 connectButton.Enabled = true;
+                showPeersButton.Enabled = true;
                 UpdatePeerStatus();
                 Log("Nó P2P iniciado. Descoberta automática de pares ativada.", true);
             }
@@ -298,6 +301,47 @@ namespace PrivateCoin.Desktop
             finally
             {
                 connectButton.Enabled = peerNode != null;
+            }
+        }
+
+        private void ShowPeersButtonClick(object sender, EventArgs e)
+        {
+            PeerNode node = peerNode;
+            if (node == null) return;
+
+            string[] connected = node.ConnectedPeers;
+            var connectedSet = new HashSet<string>(connected, StringComparer.OrdinalIgnoreCase);
+            string[] endpoints = node.KnownPeers.Concat(connected).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+
+            using (var dialog = new Form())
+            using (var list = new ListView())
+            {
+                dialog.Text = "Pares da rede PrivateCoin";
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.ClientSize = new System.Drawing.Size(620, 380);
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                list.Dock = DockStyle.Fill;
+                list.View = View.Details;
+                list.FullRowSelect = true;
+                list.GridLines = true;
+                list.Columns.Add("Estado", 100);
+                list.Columns.Add("Endereço", 490);
+                foreach (string endpoint in endpoints)
+                {
+                    var item = new ListViewItem(connectedSet.Contains(endpoint) ? "Conectado" : "Conhecido");
+                    item.SubItems.Add(endpoint);
+                    list.Items.Add(item);
+                }
+                if (list.Items.Count == 0)
+                {
+                    var item = new ListViewItem("Aguardando");
+                    item.SubItems.Add("Nenhum endereço foi descoberto ainda.");
+                    list.Items.Add(item);
+                }
+                dialog.Controls.Add(list);
+                dialog.ShowDialog(this);
             }
         }
 
