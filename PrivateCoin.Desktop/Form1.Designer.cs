@@ -9,6 +9,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.TextBox peerHostTextBox;
         private System.Windows.Forms.TextBox peerPortTextBox;
         private System.Windows.Forms.Button connectButton;
+        private System.Windows.Forms.Button showPeersButton;
         private System.Windows.Forms.TextBox receiveAddressTextBox;
         private System.Windows.Forms.ComboBox walletComboBox;
         private System.Windows.Forms.TextBox walletNameTextBox;
@@ -40,6 +41,7 @@ namespace PrivateCoin.Desktop
             this.peerHostTextBox = new System.Windows.Forms.TextBox();
             this.peerPortTextBox = new System.Windows.Forms.TextBox();
             this.connectButton = new System.Windows.Forms.Button();
+            this.showPeersButton = new System.Windows.Forms.Button();
             this.receiveAddressTextBox = new System.Windows.Forms.TextBox();
             this.walletComboBox = new System.Windows.Forms.ComboBox();
             this.walletNameTextBox = new System.Windows.Forms.TextBox();
@@ -67,6 +69,7 @@ namespace PrivateCoin.Desktop
             this.peerHostTextBox.SetBounds(108, 92, 160, 23); this.peerHostTextBox.Text = "127.0.0.1";
             this.peerPortTextBox.SetBounds(278, 92, 72, 23); this.peerPortTextBox.Text = "4778";
             this.connectButton.SetBounds(360, 90, 110, 28); this.connectButton.Text = "Conectar"; this.connectButton.Enabled = false; this.connectButton.Click += new System.EventHandler(this.ConnectButtonClick);
+            this.showPeersButton.SetBounds(480, 90, 110, 28); this.showPeersButton.Text = "Ver pares"; this.showPeersButton.Enabled = false; this.showPeersButton.Click += new System.EventHandler(this.ShowPeersButtonClick);
             // wallet
             AddLabel("CARTEIRAS", 24, 145, 220, true);
             AddLabel("Carteira", 24, 182, 80, false);
@@ -102,7 +105,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.WhiteSmoke;
             this.ClientSize = new System.Drawing.Size(770, 834);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
