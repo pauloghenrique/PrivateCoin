@@ -62,6 +62,8 @@ A rede ainda precisa ter alguns nós publicamente alcançáveis, mas eles são p
 
 Por padrão, `EnableNatTraversal` é `false`: o aplicativo não solicita nenhuma mudança ao roteador e opera por conexões de saída, como um nó não alcançável do Bitcoin. Ativar essa opção habilita, como otimização opcional, um mapeamento TCP automático usando UPnP IGD; o painel mostra `UPnP ativo` quando o roteador aceitou a solicitação. UPnP permite conexões de entrada em NAT residencial compatível, mas não atravessa CGNAT.
 
+Ao iniciar, o nó tenta criar automaticamente no roteador um mapeamento TCP para `ListenPort` usando UPnP IGD. O painel mostra `UPnP ativo` quando o roteador aceitou o mapeamento e renova a concessão enquanto o aplicativo estiver aberto. Isso permite conexões diretas entre nós atrás de NAT residencial compatível, sem configuração manual da porta. `UPnP indisponível` significa que o recurso está desativado no roteador, não é suportado ou que a rede usa CGNAT; nesses casos continuam necessários encaminhamento manual, IPv6 público, VPN ou pelo menos dois relays públicos. Defina `EnableNatTraversal` como `false` no `App.config` para não solicitar o mapeamento. UPnP não atravessa CGNAT e não elimina a necessidade dos seeds para a descoberta inicial.
+
 > Esta é uma base técnica, não software pronto para custodiar dinheiro real. Uma rede de produção também precisa de descoberta autenticada de pares, protocolo de consenso/forks, proteção contra Sybil/DoS, auditoria criptográfica e backups seguros.
 
 ## Emissão e validadores
