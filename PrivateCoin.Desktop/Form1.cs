@@ -238,12 +238,15 @@ namespace PrivateCoin.Desktop
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
                 peerNode.PeerCountChanged += PeerNodePeerCountChanged;
                 peerNode.NatTraversalStatusChanged += PeerNodePeerCountChanged;
-                peerNode.Start(GetBootstrapPeers());
+                string[] bootstrapPeers = GetBootstrapPeers().ToArray();
+                peerNode.Start(bootstrapPeers);
                 startNodeButton.Enabled = false;
                 connectButton.Enabled = true;
                 showPeersButton.Enabled = true;
                 UpdatePeerStatus();
-                Log("Nó P2P iniciado. Descoberta automática de pares ativada.", true);
+                Log("Nó P2P iniciado em IPv4/IPv6. Descoberta automática de pares ativada.", true);
+                if (peerNode.KnownPeers.Length == 0)
+                    Log("Nenhum par salvo ou seed configurado. Abrir a porta não descobre nós: configure PeerSeeds para o primeiro contato.", false);
             }
             catch (Exception error)
             {
@@ -296,7 +299,8 @@ namespace PrivateCoin.Desktop
             }
             catch (Exception error)
             {
-                Log("Falha ao conectar ao par: " + error.Message, false);
+                Log("Falha ao conectar ao par: " + error.Message +
+                    " Verifique o Firewall do Windows, o IP público/CGNAT e se o teste não está usando o IP externo dentro da mesma rede.", false);
             }
             finally
             {

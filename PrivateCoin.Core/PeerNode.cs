@@ -56,7 +56,7 @@ namespace PrivateCoin.Core
         {
             if (port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort) throw new ArgumentOutOfRangeException(nameof(port));
             listeningPort = port;
-            listener = new TcpListener(IPAddress.Any, port);
+            listener = CreateListener(port);
             if (enableNatTraversal) portMapper = new UpnpPortMapper(port);
             addressBook = new PeerAddressBook(peerCachePath);
         }
@@ -189,11 +189,11 @@ namespace PrivateCoin.Core
             }
             if (IsSelf(host, port) || connectedEndpoints.ContainsKey(endpoint) || !connectingEndpoints.TryAdd(endpoint, 0)) return;
 
-            var client = new TcpClient();
+            TcpClient client = null;
             addressBook.Attempted(endpoint);
             try
             {
-                await client.ConnectAsync(host, port).ConfigureAwait(false);
+                client = await OpenConnectionAsync(host, port).ConfigureAwait(false);
                 if (!connectedEndpoints.TryAdd(endpoint, 0)) { client.Dispose(); return; }
                 addressBook.Succeeded(endpoint);
                 Register(client, endpoint);
@@ -201,7 +201,7 @@ namespace PrivateCoin.Core
             catch
             {
                 addressBook.Failed(endpoint);
-                client.Dispose();
+                if (client != null) client.Dispose();
                 if (throwOnFailure) throw;
             }
             finally { connectingEndpoints.TryRemove(endpoint, out _); }
@@ -269,7 +269,8 @@ namespace PrivateCoin.Core
             var remote = client.Client.RemoteEndPoint as IPEndPoint;
             if (remote != null && message.ListeningPort > 0 && message.ListeningPort <= 65535)
             {
-                string advertised = FormatEndpoint(remote.Address.ToString(), message.ListeningPort);
+                IPAddress remoteAddress = remote.Address.IsIPv4MappedToIPv6 ? remote.Address.MapToIPv4() : remote.Address;
+                string advertised = FormatEndpoint(remoteAddress.ToString(), message.ListeningPort);
                 AddKnownEndpoint(advertised);
                 // Preserve the configured hostname for outbound connections.
                 // Replacing it with the observed numeric address made the
@@ -362,6 +363,60 @@ namespace PrivateCoin.Core
         {
             string value = host.Trim().Trim('[', ']');
             return (value.Contains(":") ? "[" + value + "]" : value.ToLowerInvariant()) + ":" + port.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static TcpListener CreateListener(int port)
+        {
+            try
+            {
+                var dualStack = new TcpListener(IPAddress.IPv6Any, port);
+                dualStack.Server.DualMode = true;
+                return dualStack;
+            }
+            catch (Exception error) when (error is SocketException || error is NotSupportedException)
+            {
+                return new TcpListener(IPAddress.Any, port);
+            }
+        }
+
+        private static async Task<TcpClient> OpenConnectionAsync(string host, int port)
+        {
+            IPAddress literal;
+            IPAddress[] addresses = IPAddress.TryParse(host, out literal)
+                ? new[] { literal }
+                : await Dns.GetHostAddressesAsync(host).ConfigureAwait(false);
+            addresses = addresses.Where(address => address.AddressFamily == AddressFamily.InterNetwork ||
+                    address.AddressFamily == AddressFamily.InterNetworkV6)
+                .OrderBy(address => address.AddressFamily == AddressFamily.InterNetwork ? 0 : 1).ToArray();
+            if (addresses.Length == 0) throw new SocketException((int)SocketError.HostNotFound);
+
+            Exception lastError = null;
+            foreach (IPAddress address in addresses)
+            {
+                var client = new TcpClient(address.AddressFamily);
+                try
+                {
+                    Task connect = client.ConnectAsync(address, port);
+                    if (await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(8))).ConfigureAwait(false) != connect)
+                    {
+                        ObserveFault(connect);
+                        throw new TimeoutException("The peer did not answer within 8 seconds.");
+                    }
+                    await connect.ConfigureAwait(false);
+                    return client;
+                }
+                catch (Exception error) when (error is SocketException || error is TimeoutException || error is ObjectDisposedException)
+                {
+                    lastError = error;
+                    client.Dispose();
+                }
+            }
+            throw lastError ?? new SocketException((int)SocketError.HostUnreachable);
+        }
+
+        private static void ObserveFault(Task task)
+        {
+            task.ContinueWith(completed => completed.Exception.Handle(error => true), TaskContinuationOptions.OnlyOnFaulted);
         }
 
         private static bool TryParseEndpoint(string endpoint, out string host, out int port)
