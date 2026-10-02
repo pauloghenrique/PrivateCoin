@@ -104,11 +104,11 @@ namespace PrivateCoin.Core
             try
             {
                 bool mapped = await portMapper.TryStartAsync(token).ConfigureAwait(false);
-                SetNatTraversalStatus(mapped ? "UPnP ativo" : "UPnP indisponível");
+                SetNatTraversalStatus(mapped ? portMapper.Protocol + " ativo" : "UPnP/NAT-PMP indisponível");
             }
             catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is InvalidOperationException || error is System.Xml.XmlException || error is OperationCanceledException)
             {
-                if (!token.IsCancellationRequested) SetNatTraversalStatus("UPnP indisponível");
+                if (!token.IsCancellationRequested) SetNatTraversalStatus("UPnP/NAT-PMP indisponível");
             }
         }
 
