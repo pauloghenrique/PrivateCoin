@@ -14,6 +14,9 @@ namespace PrivateCoin.Core
         public const long DistributionSupply = 180000L * OneCoin;
         public const int RewardedWalletLimit = (int)(DistributionSupply / WalletCreationReward);
         public const long MaximumSupply = DistributionSupply;
+        // One atomic unit: 0.00000001 PRIVATE.
+        public const long TransferFeeStep = 1L;
+        public const long MaximumTransferFee = OneCoin;
         private const string ProofPrefix = "000";
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
@@ -40,7 +43,7 @@ namespace PrivateCoin.Core
             if (transactions == null) throw new ArgumentNullException(nameof(transactions));
             lock (sync)
             {
-                var pending = transactions.ToList();
+                var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 var block = new Block { Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
                 Mine(block);
@@ -55,7 +58,7 @@ namespace PrivateCoin.Core
             if (validators == null) throw new ArgumentNullException(nameof(validators));
             lock (sync)
             {
-                var pending = transactions.ToList();
+                var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
                 if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
@@ -63,9 +66,16 @@ namespace PrivateCoin.Core
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
                 ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
                 IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
+                long fees = pending.Aggregate(0L, (total, transaction) => checked(total + transaction.Fee));
                 var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
                 foreach (ValidatorReward share in rewards)
-                    reward.Outputs.Add(new TransactionOutput { Amount = share.Amount, OneTimeAddress = share.RewardAddress });
+                    reward.Outputs.Add(new TransactionOutput
+                    {
+                        Amount = checked(share.Amount + (share.IsCreator ? fees : 0)),
+                        OneTimeAddress = share.RewardAddress
+                    });
+                if (rewards.Count == 0 && fees > 0)
+                    reward.Outputs.Add(new TransactionOutput { Amount = fees, OneTimeAddress = creator.RewardAddress });
                 reward.Id = reward.CalculateId();
                 var block = new Block
                 {
@@ -160,6 +170,31 @@ namespace PrivateCoin.Core
             lock (sync) ValidateTransactions(transactions.ToList());
         }
 
+        /// <summary>Orders the validation queue by fee, then arrival time and id.</summary>
+        public static IReadOnlyList<Transaction> OrderByFeePriority(IEnumerable<Transaction> transactions)
+        {
+            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
+            return transactions.OrderByDescending(item => item == null ? long.MinValue : item.Fee)
+                .ThenBy(item => item == null ? long.MaxValue : item.TimestampUtcTicks)
+                .ThenBy(item => item == null ? null : item.Id, StringComparer.Ordinal).ToArray();
+        }
+
+        /// <summary>
+        /// Calculates the system fee from queue congestion. Each pending transaction
+        /// adds one fee step and the selected priority multiplier, up to the safety cap of one coin.
+        /// </summary>
+        public static long CalculateAutomaticFee(int queuedTransactionCount, int priorityMultiplier)
+        {
+            if (queuedTransactionCount < 0) throw new ArgumentOutOfRangeException(nameof(queuedTransactionCount));
+            if (priorityMultiplier <= 0) throw new ArgumentOutOfRangeException(nameof(priorityMultiplier));
+            long maximumSteps = MaximumTransferFee / TransferFeeStep;
+            long congestionSteps = Math.Min(maximumSteps, (long)queuedTransactionCount + 1L);
+            long steps = congestionSteps > maximumSteps / priorityMultiplier
+                ? maximumSteps
+                : congestionSteps * priorityMultiplier;
+            return steps * TransferFeeStep;
+        }
+
         public IReadOnlyList<UnspentOutput> GetUnspentOutputs(IEnumerable<string> addresses)
         {
             return GetUnspentOutputs(addresses, Enumerable.Empty<Transaction>());
@@ -241,7 +276,7 @@ namespace PrivateCoin.Core
         private void ValidateTransactions(IList<Transaction> pending)
         {
             var utxo = BuildUtxo();
-            foreach (var transaction in pending) Apply(transaction, utxo, false);
+            foreach (var transaction in OrderByFeePriority(pending)) Apply(transaction, utxo, false);
         }
 
         private void ValidateWholeChain()
@@ -295,11 +330,16 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("The recorded validator was not selected to create this block.");
             IReadOnlyList<ValidatorReward> expected = ProofOfStake.DistributeReward(block.Height, expectedCreator,
                 stakes.Where(item => item.ValidatorId != expectedCreator.ValidatorId));
+            long fees = transfers.Aggregate(0L, (total, transaction) => checked(total + transaction.Fee));
             Transaction reward = block.Transactions[0];
-            if (reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != expected.Count)
+            int expectedOutputCount = expected.Count == 0 && fees > 0 ? 1 : expected.Count;
+            if (reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != expectedOutputCount)
                 throw new InvalidOperationException("Invalid validator reward transaction.");
+            if (expected.Count == 0 && fees > 0 &&
+                (reward.Outputs[0].Amount != fees || reward.Outputs[0].OneTimeAddress != expectedCreator.RewardAddress))
+                throw new InvalidOperationException("The block creator did not receive the transaction fees.");
             for (int index = 0; index < expected.Count; index++)
-                if (reward.Outputs[index].Amount != expected[index].Amount || reward.Outputs[index].OneTimeAddress != expected[index].RewardAddress)
+                if (reward.Outputs[index].Amount != checked(expected[index].Amount + (expected[index].IsCreator ? fees : 0)) || reward.Outputs[index].OneTimeAddress != expected[index].RewardAddress)
                     throw new InvalidOperationException("The validator reward distribution is incorrect.");
             Apply(reward, utxo, true);
         }
@@ -365,7 +405,12 @@ namespace PrivateCoin.Core
                 if (output.Amount <= 0 || string.IsNullOrWhiteSpace(output.OneTimeAddress)) throw new InvalidOperationException("Invalid output.");
                 outputTotal = checked(outputTotal + output.Amount);
             }
-            if (!allowMint && inputTotal != outputTotal) throw new InvalidOperationException("Inputs and outputs must balance; fees are not supported.");
+            if (transaction.Fee < 0) throw new InvalidOperationException("A transaction fee cannot be negative.");
+            if (!allowMint && transaction.Fee < TransferFeeStep)
+                throw new InvalidOperationException("The minimum transaction fee is one atomic unit.");
+            if (!allowMint && inputTotal != checked(outputTotal + transaction.Fee))
+                throw new InvalidOperationException("Inputs must equal outputs plus the transaction fee.");
+            if (allowMint && transaction.Fee != 0) throw new InvalidOperationException("A reward transaction cannot declare a fee.");
             foreach (string id in used) utxo.Remove(id);
             AddOutputs(transaction, utxo);
         }

@@ -19,6 +19,8 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Button newAddressButton;
         private System.Windows.Forms.TextBox destinationTextBox;
         private System.Windows.Forms.TextBox amountTextBox;
+        private System.Windows.Forms.ComboBox feeComboBox;
+        private System.Windows.Forms.Label feePolicyLabel;
         private System.Windows.Forms.Button createTransactionButton;
         private System.Windows.Forms.TextBox stakeAmountTextBox;
         private System.Windows.Forms.Button activateValidatorButton;
@@ -51,6 +53,8 @@ namespace PrivateCoin.Desktop
             this.newAddressButton = new System.Windows.Forms.Button();
             this.destinationTextBox = new System.Windows.Forms.TextBox();
             this.amountTextBox = new System.Windows.Forms.TextBox();
+            this.feeComboBox = new System.Windows.Forms.ComboBox();
+            this.feePolicyLabel = new System.Windows.Forms.Label();
             this.createTransactionButton = new System.Windows.Forms.Button();
             this.stakeAmountTextBox = new System.Windows.Forms.TextBox();
             this.activateValidatorButton = new System.Windows.Forms.Button();
@@ -86,7 +90,10 @@ namespace PrivateCoin.Desktop
             this.destinationTextBox.SetBounds(108, 289, 500, 23);
             AddLabel("Valor", 24, 330, 80, false);
             this.amountTextBox.SetBounds(108, 326, 120, 23); this.amountTextBox.Text = "1,00";
-            this.createTransactionButton.SetBounds(238, 324, 190, 28); this.createTransactionButton.Text = "Transferir e propagar"; this.createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
+            AddLabel("Taxa", 238, 330, 42, false);
+            this.feeComboBox.SetBounds(280, 326, 210, 24); this.feeComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.createTransactionButton.SetBounds(500, 324, 190, 28); this.createTransactionButton.Text = "Transferir e propagar"; this.createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
+            this.feePolicyLabel.SetBounds(108, 354, 638, 18); this.feePolicyLabel.ForeColor = System.Drawing.Color.DimGray; this.feePolicyLabel.Text = "Escolha uma das taxas calculadas conforme o tamanho da fila.";
             // validator
             AddLabel("VALIDADOR", 24, 374, 110, true);
             AddLabel("Garantia", 24, 411, 80, false);
@@ -105,7 +112,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.WhiteSmoke;
             this.ClientSize = new System.Drawing.Size(770, 834);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.feeComboBox, this.feePolicyLabel, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;

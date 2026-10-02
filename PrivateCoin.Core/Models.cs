@@ -41,6 +41,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 2)] public long TimestampUtcTicks { get; set; }
         [DataMember(Order = 3)] public List<TransactionInput> Inputs { get; set; } = new List<TransactionInput>();
         [DataMember(Order = 4)] public List<TransactionOutput> Outputs { get; set; } = new List<TransactionOutput>();
+        [DataMember(Order = 5, EmitDefaultValue = false)] public long Fee { get; set; }
 
         internal string SigningPayload()
         {
@@ -49,6 +50,8 @@ namespace PrivateCoin.Core
                 value.Append('|').Append(input.TransactionId).Append(':').Append(input.OutputIndex.ToString(CultureInfo.InvariantCulture));
             foreach (var output in Outputs)
                 value.Append('|').Append(output.Amount.ToString(CultureInfo.InvariantCulture)).Append(':').Append(output.OneTimeAddress);
+            // Preserve the identifiers of fee-free transactions created by older clients.
+            if (Fee != 0) value.Append("|fee:").Append(Fee.ToString(CultureInfo.InvariantCulture));
             return value.ToString();
         }
 
@@ -86,4 +89,5 @@ namespace PrivateCoin.Core
         public int OutputIndex { get; internal set; }
         public TransactionOutput Output { get; internal set; }
     }
+
 }

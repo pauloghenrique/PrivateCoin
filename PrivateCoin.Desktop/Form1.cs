@@ -22,6 +22,14 @@ namespace PrivateCoin.Desktop
         private bool persistenceAvailable = true;
         private bool miningInProgress;
 
+        private sealed class FeeChoice
+        {
+            public FeeChoice(string name, long amount) { Name = name; Amount = amount; }
+            public string Name { get; }
+            public long Amount { get; }
+            public override string ToString() => Name + " — " + FormatFee(Amount);
+        }
+
         private NamedWallet SelectedWallet => walletComboBox.SelectedItem as NamedWallet;
 
         public Form1()
@@ -388,7 +396,7 @@ namespace PrivateCoin.Desktop
             lock (pendingSync)
             {
                 var valid = new List<Transaction>();
-                foreach (Transaction transaction in pendingTransactions)
+                foreach (Transaction transaction in Blockchain.OrderByFeePriority(pendingTransactions))
                 {
                     try
                     {
@@ -519,12 +527,18 @@ namespace PrivateCoin.Desktop
             try
             {
                 long amount = checked((long)(coins * Blockchain.OneCoin));
+                if (coins * Blockchain.OneCoin != amount)
+                    throw new InvalidOperationException("O valor aceita no máximo 8 casas decimais.");
+                Transaction[] pending = SnapshotPending();
+                FeeChoice feeChoice = feeComboBox.SelectedItem as FeeChoice;
+                if (feeChoice == null) throw new InvalidOperationException("Selecione uma das opções de taxa.");
+                long fee = feeChoice.Amount;
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
-                if (amount > balance - selected.LockedStake)
+                if (checked(amount + fee) > balance - selected.LockedStake)
                     throw new InvalidOperationException("Saldo disponível insuficiente. Os tokens bloqueados como garantia não podem ser transferidos.");
-                Transaction transaction = selected.Wallet.CreateTransaction(blockchain, SnapshotPending(), destinationTextBox.Text.Trim(), amount);
+                Transaction transaction = selected.Wallet.CreateTransaction(blockchain, pending, destinationTextBox.Text.Trim(), amount, fee);
                 ValidateAndQueue(transaction, "Carteira local");
                 if (peerNode != null)
                 {
@@ -617,16 +631,32 @@ namespace PrivateCoin.Desktop
 
         private Transaction[] SnapshotPending()
         {
-            lock (pendingSync) return pendingTransactions.ToArray();
+            lock (pendingSync) return Blockchain.OrderByFeePriority(pendingTransactions).ToArray();
         }
 
         private void UpdateChainSummary()
         {
-            int pendingCount = SnapshotPending().Length;
+            Transaction[] pending = SnapshotPending();
+            int pendingCount = pending.Length;
             chainStatusLabel.Text = "Blocos: " + blockchain.Blocks.Count.ToString(CultureInfo.InvariantCulture) +
                 "   |   Pendentes: " + pendingCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Cadeia: " + (blockchain.IsValid() ? "válida" : "inválida");
+            int selectedFeeIndex = feeComboBox.SelectedIndex < 0 ? 1 : feeComboBox.SelectedIndex;
+            feeComboBox.BeginUpdate();
+            feeComboBox.Items.Clear();
+            feeComboBox.Items.Add(new FeeChoice("Econômica", Blockchain.CalculateAutomaticFee(pendingCount, 1)));
+            feeComboBox.Items.Add(new FeeChoice("Normal", Blockchain.CalculateAutomaticFee(pendingCount, 2)));
+            feeComboBox.Items.Add(new FeeChoice("Prioritária", Blockchain.CalculateAutomaticFee(pendingCount, 4)));
+            feeComboBox.EndUpdate();
+            feeComboBox.SelectedIndex = Math.Min(selectedFeeIndex, feeComboBox.Items.Count - 1);
+            feePolicyLabel.Text = "Opções calculadas para " + pendingCount.ToString(CultureInfo.InvariantCulture) +
+                " transação(ões) na fila; taxas maiores recebem prioridade.";
             UpdateWalletSummary();
+        }
+
+        private static string FormatFee(long amount)
+        {
+            return ((decimal)amount / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
         }
 
         private void Log(string message, bool accepted)
