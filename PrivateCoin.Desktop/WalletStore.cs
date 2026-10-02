@@ -116,14 +116,14 @@ namespace PrivateCoin.Desktop
                     Id = id,
                     Name = wallet.Name,
                     Addresses = addresses,
-                    TokenBalance = blockchain.GetBalance(addresses, pending),
+                    TokenBalance = blockchain.GetBalance(addresses),
                     RecoveryId = recoveryId,
                     LockedStake = wallet.LockedStake,
                     ValidatorRewardAddress = wallet.ValidatorRewardAddress
                 };
             }
             foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
-                wallet.TokenBalance = blockchain.GetBalance(wallet.Addresses, pending);
+                wallet.TokenBalance = blockchain.GetBalance(wallet.Addresses);
 
             byte[] networkData = Serialize(new StoredNetworkData
             {
@@ -133,7 +133,7 @@ namespace PrivateCoin.Desktop
             });
             WriteJson(networkFilePath, new StoredNetwork
             {
-                SchemaVersion = 3,
+                SchemaVersion = 4,
                 Data = Convert.ToBase64String(networkData),
                 Sha256 = CalculateSha256(networkData)
             }, false);
@@ -337,7 +337,7 @@ namespace PrivateCoin.Desktop
                     blocks = Deserialize<List<Block>>(networkData);
                     NetworkNeedsUpgrade = true;
                 }
-                NetworkNeedsUpgrade = state.SchemaVersion < 3;
+                NetworkNeedsUpgrade = state.SchemaVersion < 4;
             }
             else if (state.Blocks != null)
             {
@@ -353,7 +353,9 @@ namespace PrivateCoin.Desktop
             {
                 foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
                 {
-                    long calculatedBalance = blockchain.GetBalance(wallet.Addresses, pendingTransactions);
+                    long calculatedBalance = state.SchemaVersion >= 4
+                        ? blockchain.GetBalance(wallet.Addresses)
+                        : blockchain.GetBalance(wallet.Addresses, pendingTransactions);
                     if (wallet.TokenBalance != calculatedBalance)
                         throw new SerializationException("O saldo público de uma carteira não confere com a blockchain.");
                 }

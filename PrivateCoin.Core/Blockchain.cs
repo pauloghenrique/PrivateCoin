@@ -181,15 +181,41 @@ namespace PrivateCoin.Core
             }
         }
 
+        /// <summary>
+        /// Returns confirmed outputs that are not already reserved as inputs by an
+        /// ordered set of valid pending transactions. Outputs created by pending
+        /// transactions are intentionally excluded until their block is confirmed.
+        /// </summary>
+        public IReadOnlyList<UnspentOutput> GetSpendableOutputs(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            var pending = pendingTransactions.ToList();
+            var wanted = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+            lock (sync)
+            {
+                ValidateTransactions(pending);
+                var reserved = new HashSet<string>(pending.SelectMany(transaction => transaction.Inputs)
+                    .Select(input => Key(input.TransactionId, input.OutputIndex)), StringComparer.Ordinal);
+                return BuildUtxo().Values.Where(item => wanted.Contains(item.Output.OneTimeAddress) &&
+                    !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
+            }
+        }
+
+        public long GetSpendableBalance(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            return GetSpendableOutputs(addresses, pendingTransactions)
+                .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
+        }
+
         public long GetBalance(IEnumerable<string> addresses)
         {
             return GetUnspentOutputs(addresses).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
         /// <summary>
-        /// Returns the spendable balance after applying the ordered pending
-        /// transactions. This lets a validated transfer take effect immediately;
-        /// mining only confirms the accumulated transactions in a block.
+        /// Returns the projected balance after applying the ordered pending
+        /// transactions. This is a preview only; the confirmed balance returned by
+        /// the overload without pending transactions changes only when a block is added.
         /// </summary>
         public long GetBalance(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
         {

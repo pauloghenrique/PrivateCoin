@@ -99,8 +99,8 @@ namespace PrivateCoin.Core
         }
 
         /// <summary>
-        /// Creates a transaction using the spendable state left by the ordered
-        /// pending transactions, including any unconfirmed change owned by this wallet.
+        /// Creates a transaction from confirmed outputs that have not already been
+        /// reserved by an ordered set of pending transactions.
         /// </summary>
         public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount)
         {
@@ -111,7 +111,7 @@ namespace PrivateCoin.Core
 
             var selected = new List<UnspentOutput>();
             long total = 0;
-            foreach (var item in chain.GetUnspentOutputs(keys.Keys, pendingTransactions))
+            foreach (var item in chain.GetSpendableOutputs(keys.Keys, pendingTransactions))
             {
                 selected.Add(item);
                 total = checked(total + item.Output.Amount);

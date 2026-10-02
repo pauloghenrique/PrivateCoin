@@ -521,7 +521,7 @@ namespace PrivateCoin.Desktop
                 long amount = checked((long)(coins * Blockchain.OneCoin));
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
-                long balance = blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
                 if (amount > balance - selected.LockedStake)
                     throw new InvalidOperationException("Saldo disponível insuficiente. Os tokens bloqueados como garantia não podem ser transferidos.");
                 Transaction transaction = selected.Wallet.CreateTransaction(blockchain, SnapshotPending(), destinationTextBox.Text.Trim(), amount);
@@ -557,7 +557,7 @@ namespace PrivateCoin.Desktop
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 if (selected.IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
-                long balance = blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
                 if (amount > balance) throw new InvalidOperationException("Saldo insuficiente para bloquear essa garantia.");
 
                 string rewardAddress = selected.Wallet.CreateReceiveAddress();
@@ -597,7 +597,7 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             NamedWallet selected = SelectedWallet;
-            long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+            long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             long availableBalance = Math.Max(0, totalBalance - lockedStake);
             balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
