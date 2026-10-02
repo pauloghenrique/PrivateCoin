@@ -268,7 +268,7 @@ namespace PrivateCoin.Core
                 try { renewalTask.Wait(TimeSpan.FromSeconds(1)); }
                 catch (AggregateException) { }
             }
-            if (controlUri != null)
+            if (Protocol == "UPnP" && controlUri != null)
             {
                 try
                 {
@@ -278,7 +278,7 @@ namespace PrivateCoin.Core
                 }
                 catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is OperationCanceledException) { }
             }
-            else if (natPmpGateway != null)
+            else if (Protocol == "NAT-PMP" && natPmpGateway != null)
             {
                 try
                 {
