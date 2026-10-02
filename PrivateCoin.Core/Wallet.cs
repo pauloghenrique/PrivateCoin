@@ -95,7 +95,8 @@ namespace PrivateCoin.Core
 
         public Transaction CreateTransaction(Blockchain chain, string destinationOneTimeAddress, long amount)
         {
-            return CreateTransaction(chain, Enumerable.Empty<Transaction>(), destinationOneTimeAddress, amount);
+            return CreateTransaction(chain, Enumerable.Empty<Transaction>(), destinationOneTimeAddress, amount,
+                Blockchain.CalculateAutomaticFee(0, 1));
         }
 
         /// <summary>
@@ -104,27 +105,37 @@ namespace PrivateCoin.Core
         /// </summary>
         public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount)
         {
+            int pendingCount = pendingTransactions == null ? 0 : pendingTransactions.Count();
+            return CreateTransaction(chain, pendingTransactions, destinationOneTimeAddress, amount,
+                Blockchain.CalculateAutomaticFee(pendingCount, 1));
+        }
+
+        /// <summary>Creates a transaction and reserves the fee for its block creator.</summary>
+        public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount, long fee)
+        {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (string.IsNullOrWhiteSpace(destinationOneTimeAddress)) throw new ArgumentException("Destination is required.", nameof(destinationOneTimeAddress));
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            if (fee < Blockchain.TransferFeeStep) throw new ArgumentOutOfRangeException(nameof(fee), "The minimum transaction fee is one atomic unit.");
 
             var selected = new List<UnspentOutput>();
             long total = 0;
+            long required = checked(amount + fee);
             foreach (var item in chain.GetSpendableOutputs(keys.Keys, pendingTransactions))
             {
                 selected.Add(item);
                 total = checked(total + item.Output.Amount);
-                if (total >= amount) break;
+                if (total >= required) break;
             }
-            if (total < amount) throw new InvalidOperationException("Insufficient funds.");
+            if (total < required) throw new InvalidOperationException("Insufficient funds.");
 
-            var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
+            var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee };
             foreach (var item in selected)
                 transaction.Inputs.Add(new TransactionInput { TransactionId = item.TransactionId, OutputIndex = item.OutputIndex });
             transaction.Outputs.Add(new TransactionOutput { Amount = amount, OneTimeAddress = destinationOneTimeAddress });
-            if (total > amount)
-                transaction.Outputs.Add(new TransactionOutput { Amount = total - amount, OneTimeAddress = CreateReceiveAddress() });
+            if (total > required)
+                transaction.Outputs.Add(new TransactionOutput { Amount = total - required, OneTimeAddress = CreateReceiveAddress() });
 
             byte[] payload = Encoding.UTF8.GetBytes(transaction.SigningPayload());
             for (int index = 0; index < selected.Count; index++)
