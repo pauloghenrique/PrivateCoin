@@ -38,6 +38,8 @@ namespace PrivateCoin.Core
         private readonly ConcurrentDictionary<string, byte> knownEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> bootstrapEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> connectingEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, byte> prioritizedEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentQueue<string> recentlyLearnedEndpoints = new ConcurrentQueue<string>();
         private readonly ConcurrentDictionary<string, byte> seen = new ConcurrentDictionary<string, byte>();
         private readonly UpnpPortMapper portMapper;
         private readonly PeerAddressBook addressBook;
@@ -104,11 +106,11 @@ namespace PrivateCoin.Core
             try
             {
                 bool mapped = await portMapper.TryStartAsync(token).ConfigureAwait(false);
-                SetNatTraversalStatus(mapped ? "UPnP ativo" : "UPnP indisponível");
+                SetNatTraversalStatus(mapped ? portMapper.Protocol + " ativo" : "UPnP/NAT-PMP indisponível");
             }
             catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is InvalidOperationException || error is System.Xml.XmlException || error is OperationCanceledException)
             {
-                if (!token.IsCancellationRequested) SetNatTraversalStatus("UPnP indisponível");
+                if (!token.IsCancellationRequested) SetNatTraversalStatus("UPnP/NAT-PMP indisponível");
             }
         }
 
@@ -167,18 +169,28 @@ namespace PrivateCoin.Core
                 // Always try configured bootstrap nodes first. A peers.dat full of
                 // stale addresses must not push a newly configured, reachable seed
                 // past the candidate limit and prevent the node from joining.
+                int availableConnections = Math.Max(0, MaximumConnections - peers.Count - connectingEndpoints.Count);
+                var recentlyLearned = new List<string>();
+                string learnedEndpoint;
+                while (availableConnections > 0 && recentlyLearned.Count < MaximumConnections * 4 &&
+                    recentlyLearnedEndpoints.TryDequeue(out learnedEndpoint))
+                    recentlyLearned.Add(learnedEndpoint);
+
                 string[] candidates = bootstrapEndpoints.Keys
+                    // Addresses received from a connected peer must be attempted
+                    // before the persistent cache. Otherwise stale peers.dat entries
+                    // can indefinitely hide the live addresses just discovered.
+                    .Concat(recentlyLearned)
                     .Concat(addressBook.Select(MaximumConnections * 4))
                     .Concat(knownEndpoints.Keys)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Take(MaximumConnections * 4)
+                    .Where(endpoint => !connectedEndpoints.ContainsKey(endpoint) && !connectingEndpoints.ContainsKey(endpoint))
+                    .Take(availableConnections)
                     .ToArray();
-                foreach (string endpoint in candidates)
-                {
-                    if (peers.Count >= MaximumConnections) break;
-                    try { await ConnectKnownPeer(endpoint, false).ConfigureAwait(false); }
-                    catch (Exception error) when (error is SocketException || error is IOException) { }
-                }
+                var selected = new HashSet<string>(candidates, StringComparer.OrdinalIgnoreCase);
+                foreach (string deferredEndpoint in recentlyLearned.Where(endpoint => !selected.Contains(endpoint)))
+                    recentlyLearnedEndpoints.Enqueue(deferredEndpoint);
+                await Task.WhenAll(candidates.Select(endpoint => ConnectKnownPeer(endpoint, false))).ConfigureAwait(false);
 
                 if (peers.Count > 0)
                 {
@@ -290,7 +302,10 @@ namespace PrivateCoin.Core
             {
                 IPAddress remoteAddress = remote.Address.IsIPv4MappedToIPv6 ? remote.Address.MapToIPv4() : remote.Address;
                 string advertised = FormatEndpoint(remoteAddress.ToString(), message.ListeningPort);
-                AddKnownEndpoint(advertised);
+                // The sender is already connected. Store its advertised address for
+                // future sessions, but do not let it displace newly learned peers in
+                // the immediate outbound connection queue.
+                AddKnownEndpoint(advertised, false);
                 // Preserve the configured hostname for outbound connections.
                 // Replacing it with the observed numeric address made the
                 // maintenance loop believe the configured peer was disconnected
@@ -303,15 +318,22 @@ namespace PrivateCoin.Core
                 }
             }
             if (message.Peers != null)
-                foreach (string endpoint in message.Peers.Take(256)) AddKnownEndpoint(endpoint);
+                foreach (string endpoint in message.Peers.Take(256)) AddKnownEndpoint(endpoint, true);
         }
 
         private void AddKnownEndpoint(string endpoint)
+        {
+            AddKnownEndpoint(endpoint, false);
+        }
+
+        private void AddKnownEndpoint(string endpoint, bool prioritizeConnection)
         {
             string normalized;
             if (!TryNormalizeEndpoint(endpoint, out normalized)) return;
             if (knownEndpoints.Count >= 2048 && !knownEndpoints.ContainsKey(normalized)) return;
             knownEndpoints.TryAdd(normalized, 0);
+            if (prioritizeConnection && !connectedEndpoints.ContainsKey(normalized) && prioritizedEndpoints.TryAdd(normalized, 0))
+                recentlyLearnedEndpoints.Enqueue(normalized);
         }
 
         private bool TryNormalizeEndpoint(string endpoint, out string normalized)

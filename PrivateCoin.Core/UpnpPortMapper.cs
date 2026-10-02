@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -11,7 +12,7 @@ using System.Xml.Linq;
 
 namespace PrivateCoin.Core
 {
-    /// <summary>Creates a temporary TCP port mapping on UPnP IGD compatible routers.</summary>
+    /// <summary>Creates a temporary TCP port mapping using UPnP IGD or NAT-PMP.</summary>
     internal sealed class UpnpPortMapper : IDisposable
     {
         private const int LeaseSeconds = 3600;
@@ -21,6 +22,9 @@ namespace PrivateCoin.Core
         private string serviceType;
         private string localAddress;
         private Task renewalTask;
+        private IPAddress natPmpGateway;
+
+        public string Protocol { get; private set; }
 
         public UpnpPortMapper(int port)
         {
@@ -28,6 +32,31 @@ namespace PrivateCoin.Core
         }
 
         public async Task<bool> TryStartAsync(CancellationToken token)
+        {
+            try
+            {
+                if (await TryStartUpnpAsync(token).ConfigureAwait(false))
+                {
+                    Protocol = "UPnP";
+                    renewalTask = Task.Run(() => RenewalLoop(cancellation.Token));
+                    return true;
+                }
+            }
+            catch (Exception error) when (error is HttpRequestException || error is IOException ||
+                error is SocketException || error is InvalidOperationException || error is System.Xml.XmlException)
+            {
+                // A router may advertise an incomplete UPnP implementation. NAT-PMP
+                // is an independent fallback and should still be attempted.
+            }
+
+            natPmpGateway = FindDefaultGateway();
+            if (natPmpGateway == null || !await SetNatPmpMappingAsync(LeaseSeconds, token).ConfigureAwait(false)) return false;
+            Protocol = "NAT-PMP";
+            renewalTask = Task.Run(() => RenewalLoop(cancellation.Token));
+            return true;
+        }
+
+        private async Task<bool> TryStartUpnpAsync(CancellationToken token)
         {
             string descriptionLocation = await DiscoverGatewayAsync(token).ConfigureAwait(false);
             if (descriptionLocation == null) return false;
@@ -51,7 +80,6 @@ namespace PrivateCoin.Core
                 await AddMappingAsync(client, token).ConfigureAwait(false);
             }
 
-            renewalTask = Task.Run(() => RenewalLoop(cancellation.Token));
             return true;
         }
 
@@ -64,14 +92,77 @@ namespace PrivateCoin.Core
 
                 try
                 {
-                    using (var client = CreateHttpClient())
-                        await AddMappingAsync(client, token).ConfigureAwait(false);
+                    if (natPmpGateway != null)
+                        await SetNatPmpMappingAsync(LeaseSeconds, token).ConfigureAwait(false);
+                    else
+                        using (var client = CreateHttpClient())
+                            await AddMappingAsync(client, token).ConfigureAwait(false);
                 }
                 catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is OperationCanceledException)
                 {
                     if (token.IsCancellationRequested) return;
                 }
             }
+        }
+
+        private async Task<bool> SetNatPmpMappingAsync(int lifetime, CancellationToken token)
+        {
+            // RFC 6886: version 0, opcode 2 (TCP), reserved, internal port,
+            // requested external port and lifetime, all integers in network order.
+            var request = new byte[12];
+            request[1] = 2;
+            WriteUInt16(request, 4, (ushort)port);
+            WriteUInt16(request, 6, (ushort)port);
+            WriteUInt32(request, 8, (uint)lifetime);
+
+            using (var udp = new UdpClient(AddressFamily.InterNetwork))
+            using (token.Register(udp.Close))
+            {
+                await udp.SendAsync(request, request.Length, new IPEndPoint(natPmpGateway, 5351)).ConfigureAwait(false);
+                Task<UdpReceiveResult> receive = udp.ReceiveAsync();
+                Task completed = await Task.WhenAny(receive, Task.Delay(TimeSpan.FromSeconds(3), token)).ConfigureAwait(false);
+                if (completed != receive) return false;
+                byte[] response = receive.Result.Buffer;
+                return response.Length >= 16 && response[0] == 0 && response[1] == 130 &&
+                    ReadUInt16(response, 2) == 0 && ReadUInt16(response, 8) == port;
+            }
+        }
+
+        private static IPAddress FindDefaultGateway()
+        {
+            try
+            {
+                return NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(network => network.OperationalStatus == OperationalStatus.Up &&
+                        network.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                    .SelectMany(network => network.GetIPProperties().GatewayAddresses)
+                    .Select(gateway => gateway.Address)
+                    .FirstOrDefault(address => address != null && address.AddressFamily == AddressFamily.InterNetwork &&
+                        !address.Equals(IPAddress.Any));
+            }
+            catch (NetworkInformationException)
+            {
+                return null;
+            }
+        }
+
+        private static void WriteUInt16(byte[] buffer, int offset, ushort value)
+        {
+            buffer[offset] = (byte)(value >> 8);
+            buffer[offset + 1] = (byte)value;
+        }
+
+        private static void WriteUInt32(byte[] buffer, int offset, uint value)
+        {
+            buffer[offset] = (byte)(value >> 24);
+            buffer[offset + 1] = (byte)(value >> 16);
+            buffer[offset + 2] = (byte)(value >> 8);
+            buffer[offset + 3] = (byte)value;
+        }
+
+        private static int ReadUInt16(byte[] buffer, int offset)
+        {
+            return (buffer[offset] << 8) | buffer[offset + 1];
         }
 
         private Task AddMappingAsync(HttpClient client, CancellationToken token)
@@ -177,7 +268,7 @@ namespace PrivateCoin.Core
                 try { renewalTask.Wait(TimeSpan.FromSeconds(1)); }
                 catch (AggregateException) { }
             }
-            if (controlUri != null)
+            if (Protocol == "UPnP" && controlUri != null)
             {
                 try
                 {
@@ -186,6 +277,15 @@ namespace PrivateCoin.Core
                         DeleteMappingAsync(client, timeout.Token).GetAwaiter().GetResult();
                 }
                 catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is OperationCanceledException) { }
+            }
+            else if (Protocol == "NAT-PMP" && natPmpGateway != null)
+            {
+                try
+                {
+                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                        SetNatPmpMappingAsync(0, timeout.Token).GetAwaiter().GetResult();
+                }
+                catch (Exception error) when (error is IOException || error is SocketException || error is ObjectDisposedException || error is OperationCanceledException) { }
             }
             cancellation.Dispose();
         }
