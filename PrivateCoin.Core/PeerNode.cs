@@ -36,6 +36,7 @@ namespace PrivateCoin.Core
         private readonly ConcurrentDictionary<TcpClient, string> peerEndpoints = new ConcurrentDictionary<TcpClient, string>();
         private readonly ConcurrentDictionary<string, byte> connectedEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> knownEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, byte> bootstrapEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> connectingEndpoints = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> seen = new ConcurrentDictionary<string, byte>();
         private readonly UpnpPortMapper portMapper;
@@ -82,7 +83,15 @@ namespace PrivateCoin.Core
             if (acceptTask != null) throw new InvalidOperationException("The node is already running.");
             if (bootstrapPeers == null) throw new ArgumentNullException(nameof(bootstrapPeers));
             foreach (string endpoint in addressBook.Load()) AddKnownEndpoint(endpoint);
-            foreach (string endpoint in bootstrapPeers) AddKnownEndpoint(endpoint);
+            foreach (string endpoint in bootstrapPeers)
+            {
+                string normalized;
+                if (TryNormalizeEndpoint(endpoint, out normalized))
+                {
+                    bootstrapEndpoints.TryAdd(normalized, 0);
+                    knownEndpoints.TryAdd(normalized, 0);
+                }
+            }
             listener.Start();
             acceptTask = Task.Run(() => AcceptLoop(cancellation.Token));
             maintenanceTask = Task.Run(() => MaintenanceLoop(cancellation.Token));
@@ -155,8 +164,15 @@ namespace PrivateCoin.Core
         {
             while (!token.IsCancellationRequested)
             {
-                string[] candidates = addressBook.Select(MaximumConnections * 4)
-                    .Concat(knownEndpoints.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Take(MaximumConnections * 4).ToArray();
+                // Always try configured bootstrap nodes first. A peers.dat full of
+                // stale addresses must not push a newly configured, reachable seed
+                // past the candidate limit and prevent the node from joining.
+                string[] candidates = bootstrapEndpoints.Keys
+                    .Concat(addressBook.Select(MaximumConnections * 4))
+                    .Concat(knownEndpoints.Keys)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(MaximumConnections * 4)
+                    .ToArray();
                 foreach (string endpoint in candidates)
                 {
                     if (peers.Count >= MaximumConnections) break;
@@ -173,7 +189,10 @@ namespace PrivateCoin.Core
 
                 TrySaveAddressBook();
 
-                try { await Task.Delay(TimeSpan.FromSeconds(30), token).ConfigureAwait(false); }
+                // Retry bootstrap promptly while isolated, then reduce background
+                // traffic after at least one working connection has been found.
+                TimeSpan delay = peers.IsEmpty ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(30);
+                try { await Task.Delay(delay, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
             }
         }
