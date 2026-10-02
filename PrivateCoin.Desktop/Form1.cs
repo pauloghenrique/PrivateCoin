@@ -230,7 +230,7 @@ namespace PrivateCoin.Desktop
             {
                 bool enableNatTraversal;
                 if (!bool.TryParse(ConfigurationManager.AppSettings["EnableNatTraversal"], out enableNatTraversal))
-                    enableNatTraversal = false;
+                    enableNatTraversal = true;
                 string peerCachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "peers.dat");
                 peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
