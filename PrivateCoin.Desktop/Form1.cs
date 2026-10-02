@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -227,16 +228,25 @@ namespace PrivateCoin.Desktop
 
             try
             {
-                peerNode = new PeerNode(port);
+                bool enableNatTraversal;
+                if (!bool.TryParse(ConfigurationManager.AppSettings["EnableNatTraversal"], out enableNatTraversal))
+                    enableNatTraversal = false;
+                string peerCachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "peers.dat");
+                peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
                 peerNode.PeerCountChanged += PeerNodePeerCountChanged;
-                peerNode.Start(GetBootstrapPeers());
+                peerNode.NatTraversalStatusChanged += PeerNodePeerCountChanged;
+                string[] bootstrapPeers = GetBootstrapPeers().ToArray();
+                peerNode.Start(bootstrapPeers);
                 startNodeButton.Enabled = false;
                 connectButton.Enabled = true;
+                showPeersButton.Enabled = true;
                 UpdatePeerStatus();
-                Log("Nó P2P iniciado. Descoberta automática de pares ativada.", true);
+                Log("Nó P2P iniciado em IPv4/IPv6. Descoberta automática de pares ativada.", true);
+                if (peerNode.KnownPeers.Length == 0)
+                    Log("Nenhum par salvo ou seed configurado. Abrir a porta não descobre nós: configure PeerSeeds para o primeiro contato.", false);
             }
             catch (Exception error)
             {
@@ -266,6 +276,7 @@ namespace PrivateCoin.Desktop
             nodeStatusLabel.Text = "Nó ativo na porta " + listenPortTextBox.Text.Trim() +
                 "   |   Pares: " + node.ConnectedPeerCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture);
+            nodeStatusLabel.Text += "   |   NAT: " + node.NatTraversalStatus;
         }
 
         private async void ConnectButtonClick(object sender, EventArgs e)
@@ -288,11 +299,53 @@ namespace PrivateCoin.Desktop
             }
             catch (Exception error)
             {
-                Log("Falha ao conectar ao par: " + error.Message, false);
+                Log("Falha ao conectar ao par: " + error.Message +
+                    " Verifique o Firewall do Windows, o IP público/CGNAT e se o teste não está usando o IP externo dentro da mesma rede.", false);
             }
             finally
             {
                 connectButton.Enabled = peerNode != null;
+            }
+        }
+
+        private void ShowPeersButtonClick(object sender, EventArgs e)
+        {
+            PeerNode node = peerNode;
+            if (node == null) return;
+
+            string[] connected = node.ConnectedPeers;
+            var connectedSet = new HashSet<string>(connected, StringComparer.OrdinalIgnoreCase);
+            string[] endpoints = node.KnownPeers.Concat(connected).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+
+            using (var dialog = new Form())
+            using (var list = new ListView())
+            {
+                dialog.Text = "Pares da rede PrivateCoin";
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.ClientSize = new System.Drawing.Size(620, 380);
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                list.Dock = DockStyle.Fill;
+                list.View = View.Details;
+                list.FullRowSelect = true;
+                list.GridLines = true;
+                list.Columns.Add("Estado", 100);
+                list.Columns.Add("Endereço", 490);
+                foreach (string endpoint in endpoints)
+                {
+                    var item = new ListViewItem(connectedSet.Contains(endpoint) ? "Conectado" : "Conhecido");
+                    item.SubItems.Add(endpoint);
+                    list.Items.Add(item);
+                }
+                if (list.Items.Count == 0)
+                {
+                    var item = new ListViewItem("Aguardando");
+                    item.SubItems.Add("Nenhum endereço foi descoberto ainda.");
+                    list.Items.Add(item);
+                }
+                dialog.Controls.Add(list);
+                dialog.ShowDialog(this);
             }
         }
 
