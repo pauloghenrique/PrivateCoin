@@ -62,7 +62,7 @@ namespace PrivateCoin.Desktop
             // node
             AddLabel("NÓ P2P", 24, 20, 110, true);
             AddLabel("Porta local", 24, 57, 80, false);
-            this.listenPortTextBox.SetBounds(108, 53, 72, 23); this.listenPortTextBox.Text = "4777";
+            this.listenPortTextBox.SetBounds(108, 53, 72, 23); this.listenPortTextBox.Text = "4778";
             this.startNodeButton.SetBounds(190, 51, 110, 28); this.startNodeButton.Text = "Iniciar nó"; this.startNodeButton.Click += new System.EventHandler(this.StartNodeButtonClick);
             this.nodeStatusLabel.SetBounds(315, 56, 430, 20); this.nodeStatusLabel.Text = "Nó parado";
             AddLabel("Conectar a", 24, 96, 80, false);
