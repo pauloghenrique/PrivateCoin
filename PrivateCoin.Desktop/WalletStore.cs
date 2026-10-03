@@ -45,6 +45,13 @@ namespace PrivateCoin.Desktop
             return stake;
         }
 
+        public void DeactivateValidator()
+        {
+            if (!IsValidator) throw new InvalidOperationException("Esta carteira não está ativa como validadora.");
+            LockedStake = 0;
+            ValidatorRewardAddress = null;
+        }
+
         public override string ToString() => Name;
         public void Dispose() => Wallet.Dispose();
     }

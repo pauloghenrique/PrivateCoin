@@ -598,6 +598,26 @@ namespace PrivateCoin.Desktop
             Log("Novo endereço descartável criado para recebimento.", true);
         }
 
+        private void UnlockStakeButtonClick(object sender, EventArgs e)
+        {
+            try
+            {
+                NamedWallet selected = SelectedWallet;
+                if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
+
+                decimal unlockedCoins = (decimal)selected.LockedStake / Blockchain.OneCoin;
+                selected.DeactivateValidator();
+                SaveState();
+                UpdateWalletSummary();
+                Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
+                    " PRIVATE desbloqueados. A carteira não participa mais da validação de blocos.", true);
+            }
+            catch (Exception error)
+            {
+                Log("Não foi possível desbloquear a garantia: " + error.Message, false);
+            }
+        }
+
         private void RefreshWalletList(int selectedIndex)
         {
             walletComboBox.BeginUpdate();
@@ -620,6 +640,7 @@ namespace PrivateCoin.Desktop
                 : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
+            unlockStakeButton.Enabled = selected != null && selected.IsValidator;
         }
 
         private void SaveState()
