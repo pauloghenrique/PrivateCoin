@@ -14,7 +14,7 @@ namespace PrivateCoin.Core
         public const long DistributionSupply = 180000L * OneCoin;
         public const int RewardedWalletLimit = (int)(DistributionSupply / WalletCreationReward);
         public const long MaximumSupply = DistributionSupply;
-        // One atomic unit: 0.00000001 PRIVATE.
+        // One atomic unit: 0.00000001 NOX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
         private const string ProofPrefix = "000";

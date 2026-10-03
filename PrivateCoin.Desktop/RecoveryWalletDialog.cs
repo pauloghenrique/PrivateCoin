@@ -41,7 +41,7 @@ namespace PrivateCoin.Desktop
                 phrase = dialog.phraseTextBox.Text;
                 if (accepted && string.IsNullOrWhiteSpace(name))
                 {
-                    MessageBox.Show(owner, "Informe um nome para a carteira recuperada.", "PrivateCoin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(owner, "Informe um nome para a carteira recuperada.", "NOX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return false;
                 }
                 return accepted;

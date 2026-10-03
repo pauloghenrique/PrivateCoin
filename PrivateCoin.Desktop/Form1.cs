@@ -78,7 +78,7 @@ namespace PrivateCoin.Desktop
             {
                 persistenceAvailable = false;
                 MessageBox.Show("Não foi possível abrir os dados salvos. Os arquivos não foram alterados.\n\n" + error.Message,
-                    "PrivateCoin", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "NOX", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 var recoveryWallet = new NamedWallet("Carteira temporária", new Wallet());
                 wallets.Add(recoveryWallet);
                 blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
@@ -155,12 +155,12 @@ namespace PrivateCoin.Desktop
                 {
                     decimal reward = (decimal)Blockchain.WalletCreationReward / Blockchain.OneCoin;
                     Log("Carteira “" + name + "” criada com recompensa de " +
-                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE no bloco #" +
+                        reward.ToString("N8", CultureInfo.CurrentCulture) + " NOX no bloco #" +
                         rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 }
                 else
-                    Log("Carteira “" + name + "” criada e salva. Os 180.000 PRIVATE reservados para novas carteiras já foram distribuídos.", true);
+                    Log("Carteira “" + name + "” criada e salva. Os 180.000 NOX reservados para novas carteiras já foram distribuídos.", true);
 
                 UpdateChainSummary();
             }
@@ -267,7 +267,9 @@ namespace PrivateCoin.Desktop
         private IEnumerable<string> GetBootstrapPeers()
         {
             string configured = ConfigurationManager.AppSettings["PeerSeeds"] ?? string.Empty;
-            string environment = Environment.GetEnvironmentVariable("PRIVATECOIN_PEERS") ?? string.Empty;
+            string environment = Environment.GetEnvironmentVariable("NOX_PEERS")
+                ?? Environment.GetEnvironmentVariable("PRIVATECOIN_PEERS")
+                ?? string.Empty;
             return (configured + "," + environment).Split(new[] { ',', ';', ' ', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
@@ -329,7 +331,7 @@ namespace PrivateCoin.Desktop
             using (var dialog = new Form())
             using (var list = new ListView())
             {
-                dialog.Text = "Pares da rede PrivateCoin";
+                dialog.Text = "Pares da rede NOX";
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.ClientSize = new System.Drawing.Size(620, 380);
                 dialog.MinimizeBox = false;
@@ -479,7 +481,7 @@ namespace PrivateCoin.Desktop
                     decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
                     Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
                         "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
-                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE: " + ShortId(block.Hash) + ".", true);
+                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " NOX: " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -515,7 +517,7 @@ namespace PrivateCoin.Desktop
             decimal coins;
             if (!decimal.TryParse(amountTextBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out coins) || coins <= 0)
             {
-                Log("Informe um valor PRIVATE maior que zero.", false);
+                Log("Informe um valor NOX maior que zero.", false);
                 return;
             }
             if (string.IsNullOrWhiteSpace(destinationTextBox.Text))
@@ -558,7 +560,7 @@ namespace PrivateCoin.Desktop
             decimal coins;
             if (!decimal.TryParse(stakeAmountTextBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out coins) || coins <= 0)
             {
-                Log("Informe uma garantia PRIVATE maior que zero.", false);
+                Log("Informe uma garantia NOX maior que zero.", false);
                 return;
             }
 
@@ -579,7 +581,7 @@ namespace PrivateCoin.Desktop
                 SaveState();
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " PRIVATE bloqueados como garantia para validação e criação de blocos.", true);
+                    " NOX bloqueados como garantia para validação e criação de blocos.", true);
                 if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
@@ -610,7 +612,7 @@ namespace PrivateCoin.Desktop
                 SaveState();
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " PRIVATE desbloqueados. A carteira não participa mais da validação de blocos.", true);
+                    " NOX desbloqueados. A carteira não participa mais da validação de blocos.", true);
             }
             catch (Exception error)
             {
@@ -634,10 +636,10 @@ namespace PrivateCoin.Desktop
             long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             long availableBalance = Math.Max(0, totalBalance - lockedStake);
-            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " NOX";
             validatorStatusLabel.Text = lockedStake == 0
                 ? "Validador inativo"
-                : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+                : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " NOX";
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
@@ -677,7 +679,7 @@ namespace PrivateCoin.Desktop
 
         private static string FormatFee(long amount)
         {
-            return ((decimal)amount / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PRIVATE";
+            return ((decimal)amount / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " NOX";
         }
 
         private void Log(string message, bool accepted)
