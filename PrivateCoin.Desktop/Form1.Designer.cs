@@ -120,7 +120,7 @@ namespace PrivateCoin.Desktop
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "NOX — Carteiras, transferências e nó";
+            this.Text = "PONEX — Carteiras, transferências e nó";
             this.ResumeLayout(false);
             this.PerformLayout();
         }
