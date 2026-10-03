@@ -32,12 +32,12 @@
         @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> }
         else {
             <div class="table-responsive"><table class="table ledger-table">
-                <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Saídas</th><th>Taxa</th><th>Emissão</th></tr></thead>
+                <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Valor</th><th>Taxa</th><th>Emissão</th></tr></thead>
                 <tbody>@foreach (var entry in Model.Ledger) { <tr>
                     <td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td>
                     <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td>
                     <td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td>
-                    <td>@HomeViewModel.FormatTokens(entry.OutputAmount)</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
+                    <td>@HomeViewModel.FormatTokens(HomeViewModel.LedgerAmount(entry))</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
                 </tr> }</tbody>
             </table></div>
         }
