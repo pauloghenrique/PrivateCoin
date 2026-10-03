@@ -28,19 +28,6 @@ using (var bob = new Wallet())
 }
 ```
 
-## API de consulta
-
-`BlockchainQueryApi` oferece uma visão somente leitura para carteiras e exploradores. `GetSummary()` informa a quantidade de blocos emitidos (sem contar o gênese), os tokens efetivamente emitidos em unidades atômicas, a recompensa proof-of-stake da próxima altura e quantos dos 30.000 blocos da distribuição inicial ainda faltam. Taxas apenas redistribuem tokens e, portanto, não entram em `IssuedTokenAmount`.
-
-`GetBlocks()` e `GetBlock()` consultam blocos emitidos, enquanto `GetLedger()` expõe o livro-caixa público em ordem de bloco e transação, com entradas, saídas, taxa, emissão e os endereços descartáveis de destino. As consultas paginadas recebem `offset` e `limit`:
-
-```csharp
-var api = new BlockchainQueryApi(chain);
-BlockchainSummary summary = api.GetSummary();
-IReadOnlyList<Block> recentBlocks = api.GetBlocks(0, 20);
-IReadOnlyList<LedgerEntry> ledger = api.GetLedger(0, 100);
-```
-
 O endereço retornado por `CreateReceiveAddress` deve ser entregue diretamente ao pagador e usado uma só vez. A cadeia registra somente esse identificador descartável. O arquivo de chaves de uma aplicação deve ser cifrado e protegido; a classe `Wallet` mantém as chaves apenas em memória nesta versão.
 
 Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, chame `Start()` e conecte aos pares conhecidos com `ConnectAsync`. Uma aplicação deve validar transações recebidas e adotar somente cadeias aceitas por `Blockchain.TryReplaceChain`.
