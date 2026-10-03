@@ -24,6 +24,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Button createTransactionButton;
         private System.Windows.Forms.TextBox stakeAmountTextBox;
         private System.Windows.Forms.Button activateValidatorButton;
+        private System.Windows.Forms.Button unlockStakeButton;
         private System.Windows.Forms.Label validatorStatusLabel;
         private System.Windows.Forms.Label miningStatusLabel;
         private System.Windows.Forms.Label chainStatusLabel;
@@ -58,6 +59,7 @@ namespace PrivateCoin.Desktop
             this.createTransactionButton = new System.Windows.Forms.Button();
             this.stakeAmountTextBox = new System.Windows.Forms.TextBox();
             this.activateValidatorButton = new System.Windows.Forms.Button();
+            this.unlockStakeButton = new System.Windows.Forms.Button();
             this.validatorStatusLabel = new System.Windows.Forms.Label();
             this.miningStatusLabel = new System.Windows.Forms.Label();
             this.chainStatusLabel = new System.Windows.Forms.Label();
@@ -98,8 +100,9 @@ namespace PrivateCoin.Desktop
             AddLabel("VALIDADOR", 24, 374, 110, true);
             AddLabel("Garantia", 24, 411, 80, false);
             this.stakeAmountTextBox.SetBounds(108, 407, 120, 23); this.stakeAmountTextBox.Text = "1,00";
-            this.activateValidatorButton.SetBounds(238, 405, 190, 28); this.activateValidatorButton.Text = "Bloquear e ativar"; this.activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
-            this.validatorStatusLabel.SetBounds(438, 409, 308, 40); this.validatorStatusLabel.TextAlign = System.Drawing.ContentAlignment.TopRight;
+            this.activateValidatorButton.SetBounds(238, 405, 170, 28); this.activateValidatorButton.Text = "Bloquear e ativar"; this.activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
+            this.unlockStakeButton.SetBounds(418, 405, 120, 28); this.unlockStakeButton.Text = "Desbloquear"; this.unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
+            this.validatorStatusLabel.SetBounds(548, 409, 198, 40); this.validatorStatusLabel.TextAlign = System.Drawing.ContentAlignment.TopRight;
             // mining
             AddLabel("MINERAÇÃO", 24, 460, 110, true);
             this.miningStatusLabel.SetBounds(24, 499, 500, 20); this.miningStatusLabel.Text = "Aguardando uma transferência válida";
@@ -112,7 +115,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.WhiteSmoke;
             this.ClientSize = new System.Drawing.Size(770, 834);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.feeComboBox, this.feePolicyLabel, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.feeComboBox, this.feePolicyLabel, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.unlockStakeButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
