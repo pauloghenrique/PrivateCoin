@@ -1,33 +1,55 @@
-﻿@{
-    ViewBag.Title = "Home Page";
+﻿@model PrivateCoin.Site.Models.HomeViewModel
+@using PrivateCoin.Site.Models
+@{
+    ViewBag.Title = "Explorador";
 }
 
-<main>
-    <section class="row" aria-labelledby="aspnetTitle">
-        <h1 id="title">ASP.NET</h1>
-        <p class="lead">ASP.NET is a free web framework for building great Web sites and Web applications using HTML, CSS and JavaScript.</p>
-        <p><a href="https://asp.net" class="btn btn-primary btn-md">Learn more &raquo;</a></p>
+<main class="explorer">
+    <header class="explorer-header">
+        <div>
+            <p class="eyebrow">Blockchain pública</p>
+            <h1>PrivateCoin Explorer</h1>
+            <p class="lead">Visão transparente da emissão, movimentações e validações recebidas dos pares públicos.</p>
+        </div>
+        <div class="network-status @(Model.ConnectedPeers.Length > 0 ? "online" : "syncing")">
+            <span class="status-dot"></span>
+            <strong>@(Model.ConnectedPeers.Length > 0 ? "Conectado à rede" : "Buscando pares")</strong>
+            <small>@Model.ConnectedPeers.Length conectado(s) · @Model.KnownPeerCount conhecido(s)</small>
+        </div>
+    </header>
+
+    <section class="stats-grid" aria-label="Resumo da blockchain">
+        <article class="stat-card"><span>Blocos emitidos</span><strong>@Model.Summary.IssuedBlockCount.ToString("N0")</strong><small>sem contar o bloco gênese</small></article>
+        <article class="stat-card"><span>Tokens iniciais emitidos</span><strong>@HomeViewModel.FormatTokens(Model.Summary.InitialDistributionTokenAmount)</strong><small>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0") de @(PrivateCoin.Core.Blockchain.RewardedWalletLimit.ToString("N0")) distribuições</small></article>
+        <article class="stat-card"><span>Total emitido</span><strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong><small>distribuição + consenso</small></article>
+        <article class="stat-card"><span>Oferta total</span><strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong><small>máximo programado</small></article>
+        <article class="stat-card accent"><span>Recompensa atual</span><strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong><small>prevista para o próximo bloco</small></article>
+        <article class="stat-card"><span>Fila de validação</span><strong>@Model.ValidationQueue.Count.ToString("N0")</strong><small>transações pendentes recebidas</small></article>
     </section>
 
-    <div class="row">
-        <section class="col-md-4" aria-labelledby="gettingStartedTitle">
-            <h2 id="gettingStartedTitle">Getting started</h2>
-            <p>
-                ASP.NET MVC gives you a powerful, patterns-based way to build dynamic websites that
-                enables a clean separation of concerns and gives you full control over markup
-                for enjoyable, agile development.
-            </p>
-            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301865">Learn more &raquo;</a></p>
-        </section>
-        <section class="col-md-4" aria-labelledby="librariesTitle">
-            <h2 id="librariesTitle">Get more libraries</h2>
-            <p>NuGet is a free Visual Studio extension that makes it easy to add, remove, and update libraries and tools in Visual Studio projects.</p>
-            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301866">Learn more &raquo;</a></p>
-        </section>
-        <section class="col-md-4" aria-labelledby="hostingTitle">
-            <h2 id="hostingTitle">Web Hosting</h2>
-            <p>You can easily find a web hosting company that offers the right mix of features and price for your applications.</p>
-            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301867">Learn more &raquo;</a></p>
-        </section>
-    </div>
+    <section class="panel" aria-labelledby="ledger-title">
+        <div class="section-heading"><div><p class="eyebrow">Transparência</p><h2 id="ledger-title">Livro-caixa</h2></div><span>100 movimentações mais recentes</span></div>
+        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> }
+        else {
+            <div class="table-responsive"><table class="table ledger-table">
+                <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Saídas</th><th>Taxa</th><th>Emissão</th></tr></thead>
+                <tbody>@foreach (var entry in Model.Ledger) { <tr>
+                    <td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td>
+                    <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td>
+                    <td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td>
+                    <td>@HomeViewModel.FormatTokens(entry.OutputAmount)</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
+                </tr> }</tbody>
+            </table></div>
+        }
+    </section>
+
+    <section class="panel queue-panel" aria-labelledby="queue-title">
+        <div class="section-heading"><div><p class="eyebrow">Mempool</p><h2 id="queue-title">Fila de validação</h2></div><span>ordenada pela maior taxa</span></div>
+        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> }
+        else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th><th>Taxa</th></tr></thead><tbody>
+            @for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td><code title="@transaction.Id">@HomeViewModel.ShortId(transaction.Id)&hellip;</code></td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td>@HomeViewModel.FormatTokens(transaction.Fee)</td></tr> }
+        </tbody></table></div> }
+    </section>
+
+    <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC · <a href="@Url.Action("Index")">Atualizar agora</a></p>
 </main>
