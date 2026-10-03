@@ -1,7 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
 using System.Web.Mvc;
 
 namespace PrivateCoin.Site.Controllers
@@ -10,7 +6,7 @@ namespace PrivateCoin.Site.Controllers
     {
         public ActionResult Index()
         {
-            return View();
+            return View(MvcApplication.PublicNetwork.GetDashboard());
         }
 
         public ActionResult About()
