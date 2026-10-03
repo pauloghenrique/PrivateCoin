@@ -16,8 +16,6 @@ namespace PrivateCoin.Core
             InitialDistributionBlocksIssued = initialDistributionBlocksIssued;
             InitialDistributionBlocksRemaining = Math.Max(0,
                 Blockchain.RewardedWalletLimit - initialDistributionBlocksIssued);
-            InitialDistributionTokenAmount = checked(
-                (long)initialDistributionBlocksIssued * Blockchain.WalletCreationReward);
         }
 
         /// <summary>Number of emitted blocks, excluding the genesis block.</summary>
@@ -34,12 +32,6 @@ namespace PrivateCoin.Core
 
         /// <summary>Number of six-coin initial-distribution blocks still available.</summary>
         public int InitialDistributionBlocksRemaining { get; }
-
-        /// <summary>Tokens emitted by the initial wallet distribution, in atomic units.</summary>
-        public long InitialDistributionTokenAmount { get; }
-
-        /// <summary>Maximum tokens defined by the initial and proof-of-stake schedules.</summary>
-        public long MaximumTokenAmount => checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply);
     }
 
     public enum LedgerEntryType

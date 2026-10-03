@@ -1,80 +1,33 @@
-﻿@model PrivateCoin.Site.Models.HomeViewModel
-@using PrivateCoin.Site.Models
-@{
-    ViewBag.Title = "Explorador";
+﻿@{
+    ViewBag.Title = "Home Page";
 }
 
-<main class="explorer">
-    <header class="explorer-header">
-        <p class="eyebrow">Blockchain pública</p>
-        <h1>PrivateCoin</h1>
-        <p class="lead">Emissão e livro-caixa consultados diretamente pelo PrivateCoin.Core.</p>
-    </header>
-
-    <section class="row g-3 summary" aria-label="Resumo da emissão">
-        <div class="col-md-3">
-            <article class="stat-card">
-                <span>Tokens iniciais emitidos</span>
-                <strong>@HomeViewModel.FormatTokens(Model.Summary.InitialDistributionTokenAmount)</strong>
-                <small>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0") emitidas, @Model.Summary.InitialDistributionBlocksRemaining.ToString("N0") restantes</small>
-            </article>
-        </div>
-        <div class="col-md-3">
-            <article class="stat-card">
-                <span>Tokens emitidos</span>
-                <strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong>
-                <small>@Model.Summary.IssuedBlockCount.ToString("N0") blocos emitidos</small>
-            </article>
-        </div>
-        <div class="col-md-3">
-            <article class="stat-card">
-                <span>Oferta total programada</span>
-                <strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong>
-                <small>Distribuição inicial + proof-of-stake</small>
-            </article>
-        </div>
-        <div class="col-md-3">
-            <article class="stat-card accent">
-                <span>Próxima recompensa</span>
-                <strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong>
-                <small>Recompensa do próximo bloco</small>
-            </article>
-        </div>
+<main>
+    <section class="row" aria-labelledby="aspnetTitle">
+        <h1 id="title">ASP.NET</h1>
+        <p class="lead">ASP.NET is a free web framework for building great Web sites and Web applications using HTML, CSS and JavaScript.</p>
+        <p><a href="https://asp.net" class="btn btn-primary btn-md">Learn more &raquo;</a></p>
     </section>
 
-    <section class="ledger" aria-labelledby="ledger-title">
-        <div class="section-heading">
-            <div>
-                <p class="eyebrow">Transparência</p>
-                <h2 id="ledger-title">Livro-caixa</h2>
-            </div>
-            <span>@Model.Ledger.Count registros exibidos</span>
-        </div>
-
-        @if (Model.Ledger.Count == 0)
-        {
-            <div class="empty-state">Nenhuma movimentação foi registrada até agora.</div>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table ledger-table">
-                    <thead><tr><th>Bloco</th><th>Tipo</th><th>Transação</th><th>Saídas</th><th>Taxa</th><th>Emissão</th></tr></thead>
-                    <tbody>
-                    @foreach (var entry in Model.Ledger)
-                    {
-                        <tr>
-                            <td>#@entry.BlockHeight</td>
-                            <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td>
-                            <td><code title="@entry.TransactionId">@entry.TransactionId.Substring(0, Math.Min(12, entry.TransactionId.Length))&hellip;</code></td>
-                            <td>@HomeViewModel.FormatTokens(entry.OutputAmount)</td>
-                            <td>@HomeViewModel.FormatTokens(entry.Fee)</td>
-                            <td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </section>
+    <div class="row">
+        <section class="col-md-4" aria-labelledby="gettingStartedTitle">
+            <h2 id="gettingStartedTitle">Getting started</h2>
+            <p>
+                ASP.NET MVC gives you a powerful, patterns-based way to build dynamic websites that
+                enables a clean separation of concerns and gives you full control over markup
+                for enjoyable, agile development.
+            </p>
+            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301865">Learn more &raquo;</a></p>
+        </section>
+        <section class="col-md-4" aria-labelledby="librariesTitle">
+            <h2 id="librariesTitle">Get more libraries</h2>
+            <p>NuGet is a free Visual Studio extension that makes it easy to add, remove, and update libraries and tools in Visual Studio projects.</p>
+            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301866">Learn more &raquo;</a></p>
+        </section>
+        <section class="col-md-4" aria-labelledby="hostingTitle">
+            <h2 id="hostingTitle">Web Hosting</h2>
+            <p>You can easily find a web hosting company that offers the right mix of features and price for your applications.</p>
+            <p><a class="btn btn-outline-dark" href="https://go.microsoft.com/fwlink/?LinkId=301867">Learn more &raquo;</a></p>
+        </section>
+    </div>
 </main>
