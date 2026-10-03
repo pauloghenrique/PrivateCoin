@@ -437,7 +437,13 @@ namespace PrivateCoin.Core
                 var client = new TcpClient(address.AddressFamily);
                 try
                 {
-                    Task connect = client.ConnectAsync(address, port);
+                    // TcpClient.ConnectAsync on .NET Framework is implemented with
+                    // BeginConnect/EndConnect. Some Framework/Mono combinations can
+                    // pass a null IAsyncResult to EndConnect and fail inside
+                    // System.Net.Logging before the connection result is reported.
+                    // SocketAsyncEventArgs uses the event-based socket API instead
+                    // and therefore avoids that framework-specific failure path.
+                    Task connect = ConnectSocketAsync(client.Client, address, port);
                     if (await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(8))).ConfigureAwait(false) != connect)
                     {
                         ObserveFault(connect);
@@ -453,6 +459,30 @@ namespace PrivateCoin.Core
                 }
             }
             throw lastError ?? new SocketException((int)SocketError.HostUnreachable);
+        }
+
+        private static async Task ConnectSocketAsync(Socket socket, IPAddress address, int port)
+        {
+            var completion = new TaskCompletionSource<SocketError>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (var arguments = new SocketAsyncEventArgs { RemoteEndPoint = new IPEndPoint(address, port) })
+            {
+                EventHandler<SocketAsyncEventArgs> completed = null;
+                completed = (sender, eventArguments) =>
+                {
+                    eventArguments.Completed -= completed;
+                    completion.TrySetResult(eventArguments.SocketError);
+                };
+                arguments.Completed += completed;
+
+                if (!socket.ConnectAsync(arguments))
+                {
+                    arguments.Completed -= completed;
+                    completion.TrySetResult(arguments.SocketError);
+                }
+
+                SocketError result = await completion.Task.ConfigureAwait(false);
+                if (result != SocketError.Success) throw new SocketException((int)result);
+            }
         }
 
         private static void ObserveFault(Task task)
