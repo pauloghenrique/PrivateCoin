@@ -27,6 +27,19 @@ namespace PrivateCoin.Site.Models
             return value.Substring(0, Math.Min(12, value.Length));
         }
 
+        public static long LedgerAmount(LedgerEntry entry)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+
+            // Wallet transfers always place the payment first and an optional
+            // refund to the sender second. The sum of all outputs therefore
+            // includes the refund and is not the amount that was transferred.
+            if (entry.Type == LedgerEntryType.Transfer && entry.Outputs.Count > 0)
+                return entry.Outputs[0].Amount;
+
+            return entry.OutputAmount;
+        }
+
         public static string EntryTypeName(LedgerEntryType type)
         {
             switch (type)
