@@ -1,0 +1,119 @@
+﻿@{
+    ViewBag.Title = "Token POVIX";
+}
+
+<main class="token-page">
+    <section class="token-hero" aria-labelledby="token-title">
+        <div class="token-hero-copy">
+            <p class="eyebrow">Economia do protocolo</p>
+            <h1 id="token-title">POVIX recompensa quem mantém a rede em movimento.</h1>
+            <p class="token-intro">Entenda, sem complicação, como os tokens entram em circulação, como as recompensas são divididas e qual é o limite definido pelo protocolo.</p>
+            <div class="hero-actions">
+                <a class="button button-primary" href="#distribuicao">Ver distribuição</a>
+                <a class="button button-secondary" href="@Url.Action("Index", "Home")">Acompanhar no explorador <span aria-hidden="true">↗</span></a>
+            </div>
+        </div>
+        <aside class="supply-card" aria-label="Oferta máxima de POVIX">
+            <div class="coin-mark" aria-hidden="true">P</div>
+            <span>Oferta máxima</span>
+            <strong>18.000.000</strong>
+            <small>POVIX</small>
+            <div class="supply-rule"><i></i></div>
+            <p>Emissão limitada e previsível, registrada publicamente na blockchain.</p>
+        </aside>
+    </section>
+
+    <section class="token-summary" aria-label="Resumo da economia do token">
+        <article><span class="summary-number">01</span><div><strong>8 milhões</strong><span>de blocos recompensados</span></div></article>
+        <article><span class="summary-number">02</span><div><strong>4 fases</strong><span>com emissão decrescente</span></div></article>
+        <article><span class="summary-number">03</span><div><strong>30% / 70%</strong><span>criador e confirmadores</span></div></article>
+    </section>
+
+    <section class="explain-section" aria-labelledby="como-funciona-title">
+        <div class="section-kicker"><span>Como funciona</span></div>
+        <div class="explain-grid">
+            <div>
+                <h2 id="como-funciona-title">Uma recompensa,<br />dois papéis essenciais.</h2>
+                <p class="section-lead">O POVIX usa Proof of Stake. Participantes bloqueiam tokens como garantia para ajudar a criar e confirmar blocos.</p>
+            </div>
+            <div class="steps-list">
+                <article>
+                    <span class="step-icon" aria-hidden="true">◇</span>
+                    <div><small>PASSO 1</small><h3>Tokens em garantia</h3><p>O participante reserva uma quantidade de POVIX. Quanto maior a garantia, maior o peso no sorteio determinístico do criador do próximo bloco.</p></div>
+                </article>
+                <article>
+                    <span class="step-icon" aria-hidden="true">⌁</span>
+                    <div><small>PASSO 2</small><h3>Criação e confirmação</h3><p>Um validador é escolhido para criar o bloco. Os demais validadores elegíveis verificam e confirmam o resultado.</p></div>
+                </article>
+                <article>
+                    <span class="step-icon" aria-hidden="true">＋</span>
+                    <div><small>PASSO 3</small><h3>Recompensa distribuída</h3><p>O criador recebe 30% da recompensa do bloco. Os 70% restantes são divididos entre os confirmadores, proporcionalmente às garantias.</p></div>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="reward-split" aria-labelledby="recompensa-title">
+        <div>
+            <p class="eyebrow light">Divisão por bloco</p>
+            <h2 id="recompensa-title">Todos que validam corretamente participam.</h2>
+            <p>A regra é aplicada de forma determinística por todos os nós. O criador não pode confirmar o próprio bloco.</p>
+        </div>
+        <div class="split-visual" aria-label="30 por cento para o criador e 70 por cento para confirmadores">
+            <div class="split-creator"><strong>30%</strong><span>Criador do bloco</span></div>
+            <div class="split-confirmers"><strong>70%</strong><span>Confirmadores</span><small>proporcional à garantia bloqueada</small></div>
+        </div>
+    </section>
+
+    <section class="distribution-section" id="distribuicao" aria-labelledby="distribuicao-title">
+        <div class="distribution-heading">
+            <div><p class="eyebrow">Emissão programada</p><h2 id="distribuicao-title">Distribuição ao longo do tempo</h2></div>
+            <p>As recompensas diminuem em quatro fases. Depois do bloco 8.000.000, não há nova emissão destinada ao consenso.</p>
+        </div>
+        <div class="phase-table-wrap">
+            <table class="phase-table">
+                <thead><tr><th>Fase</th><th>Alturas dos blocos</th><th>Recompensa / bloco</th><th>Total da fase</th><th>Participação</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="phase-dot phase-one"></span><strong>Fase 1</strong></td><td>1 — 2.000.000</td><td><strong>3,61 POVIX</strong></td><td>7.220.000 POVIX</td><td><div class="mini-bar"><i style="width:40.52%"></i></div><small>40,5%</small></td></tr>
+                    <tr><td><span class="phase-dot phase-two"></span><strong>Fase 2</strong></td><td>2.000.001 — 4.000.000</td><td><strong>2,80 POVIX</strong></td><td>5.600.000 POVIX</td><td><div class="mini-bar"><i style="width:31.43%"></i></div><small>31,4%</small></td></tr>
+                    <tr><td><span class="phase-dot phase-three"></span><strong>Fase 3</strong></td><td>4.000.001 — 6.000.000</td><td><strong>1,50 POVIX</strong></td><td>3.000.000 POVIX</td><td><div class="mini-bar"><i style="width:16.84%"></i></div><small>16,8%</small></td></tr>
+                    <tr><td><span class="phase-dot phase-four"></span><strong>Fase 4</strong></td><td>6.000.001 — 8.000.000</td><td><strong>1,00 POVIX</strong></td><td>2.000.000 POVIX</td><td><div class="mini-bar"><i style="width:11.22%"></i></div><small>11,2%</small></td></tr>
+                </tbody>
+                <tfoot><tr><td colspan="3">Emissão de consenso</td><td colspan="2"><strong>17.820.000 POVIX</strong></td></tr></tfoot>
+            </table>
+        </div>
+    </section>
+
+    <section class="allocation-section" aria-labelledby="oferta-title">
+        <div class="allocation-copy">
+            <p class="eyebrow">Oferta total</p>
+            <h2 id="oferta-title">De onde vêm os 18 milhões?</h2>
+            <p>A oferta combina uma distribuição inicial limitada com as recompensas de consenso. Não há emissão além desses dois mecanismos programados.</p>
+            <div class="allocation-legend">
+                <div><span class="legend-swatch consensus"></span><strong>99%</strong><small>Consenso<br />17.820.000 POVIX</small></div>
+                <div><span class="legend-swatch initial"></span><strong>1%</strong><small>Distribuição inicial<br />180.000 POVIX</small></div>
+            </div>
+        </div>
+        <div class="allocation-chart" role="img" aria-label="99 por cento para consenso e 1 por cento para distribuição inicial">
+            <div class="donut"><span><strong>18M</strong><small>POVIX</small></span></div>
+        </div>
+        <aside class="initial-note">
+            <span class="note-icon" aria-hidden="true">✦</span>
+            <h3>Distribuição inicial</h3>
+            <p>Cada uma das primeiras <strong>30.000 carteiras</strong> pode receber <strong>6 POVIX</strong>, até o limite conjunto de 180.000 POVIX.</p>
+        </aside>
+    </section>
+
+    <section class="principles" aria-label="Princípios do token">
+        <article><span>◎</span><h3>Previsível</h3><p>Fases, valores e limite total são definidos nas regras do protocolo.</p></article>
+        <article><span>◫</span><h3>Auditável</h3><p>Emissões e movimentações podem ser acompanhadas no explorador público.</p></article>
+        <article><span>⌁</span><h3>Participativo</h3><p>As recompensas incentivam criadores e confirmadores a proteger a rede.</p></article>
+    </section>
+
+    <section class="token-cta">
+        <div><p class="eyebrow light">Transparência em tempo real</p><h2>Veja a economia do POVIX acontecendo.</h2></div>
+        <a class="button button-light" href="@Url.Action("Index", "Home")">Abrir explorador <span aria-hidden="true">→</span></a>
+    </section>
+
+    <p class="token-disclaimer">Este conteúdo descreve as regras técnicas atuais do protocolo e não constitui recomendação financeira.</p>
+</main>
