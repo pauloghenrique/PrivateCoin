@@ -1,10 +1,10 @@
-# PONEX
+# POVIX
 
 `PrivateCoin.Core` contém uma implementação inicial de blockchain UTXO e uma rede P2P TCP.
 
 ## Características
 
-- bloco gênese sem emissão e recompensa promocional de **6 PONEX** por nova carteira, limitada a 180.000 PONEX;
+- bloco gênese sem emissão e recompensa promocional de **6 POVIX** por nova carteira, limitada a 180.000 POVIX;
 - recompensa proof-of-stake em quatro fases, paga ao criador e aos confirmadores de cada bloco;
 - blocos ligados por SHA-256 e prova de trabalho;
 - política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
@@ -45,7 +45,7 @@ Instalações que ainda possuam o antigo `wallets.dat` combinado são migradas a
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de PONEX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 PONEX em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 PONEX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 PONEX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 PONEX. A taxa selecionada é descontada além do valor enviado e creditada integralmente ao criador do bloco. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam o bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
+O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de POVIX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 POVIX em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 POVIX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 POVIX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 POVIX. A taxa selecionada é descontada além do valor enviado e creditada integralmente ao criador do bloco. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam o bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
 
 ### Descoberta automática de nós
 
@@ -57,7 +57,7 @@ Assim como o Bitcoin, cada instalação precisa conhecer pelo menos um nó inici
 
 Abrir a porta não faz outros nós descobrirem essa instalação automaticamente. A distribuição oficial precisa trazer domínios DNS seed reais em `PeerSeeds` (o repositório deixa o valor vazio porque não possui um domínio público). Quando não existe `peers.dat` nem seed configurado, o Desktop registra esse diagnóstico no painel.
 
-Também é possível definir os seeds sem alterar o arquivo por meio da variável de ambiente `PONEX_PEERS` (os nomes legados `NOX_PEERS` e `PRIVATECOIN_PEERS` também são aceitos). Como no modelo do Bitcoin, os seeds são usados para o bootstrap, não como servidores centrais: depois do primeiro contato, o Desktop troca endereços com os pares, tenta em paralelo os endereços recém-descobertos, mantém até oito conexões e grava os candidatos no arquivo `peers.dat`. Endereços recebidos de um par têm prioridade sobre entradas antigas do cache, enquanto os seeds configurados continuam disponíveis para recuperação da rede. Assim, um `peers.dat` cheio de pares indisponíveis não impede a conexão aos pares anunciados durante a sessão. Como são conexões de saída, os clientes não precisam abrir portas nem alterar o roteador. `AutoStartNode` e `ListenPort` controlam o início automático e a porta local.
+Também é possível definir os seeds sem alterar o arquivo por meio da variável de ambiente `POVIX_PEERS` (os nomes legados `PONEX_PEERS`, `NOX_PEERS` e `PRIVATECOIN_PEERS` também são aceitos). Como no modelo do Bitcoin, os seeds são usados para o bootstrap, não como servidores centrais: depois do primeiro contato, o Desktop troca endereços com os pares, tenta em paralelo os endereços recém-descobertos, mantém até oito conexões e grava os candidatos no arquivo `peers.dat`. Endereços recebidos de um par têm prioridade sobre entradas antigas do cache, enquanto os seeds configurados continuam disponíveis para recuperação da rede. Assim, um `peers.dat` cheio de pares indisponíveis não impede a conexão aos pares anunciados durante a sessão. Como são conexões de saída, os clientes não precisam abrir portas nem alterar o roteador. `AutoStartNode` e `ListenPort` controlam o início automático e a porta local.
 
 O botão **Ver pares** lista separadamente os endereços conectados e os apenas conhecidos. O catálogo persistente registra última tentativa, último sucesso e quantidade de falhas, priorizando endereços que funcionaram recentemente e mantendo no máximo 2.048 candidatos.
 
@@ -73,20 +73,20 @@ Nenhuma técnica local consegue aceitar conexões diretas através de todo tipo 
 
 ## Emissão e validadores
 
-A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 PONEX**:
+A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 POVIX**:
 
 | Fase | Alturas | Recompensa por bloco | Total da fase |
 | --- | ---: | ---: | ---: |
-| 1 | 1–2.000.000 | 3,61 PONEX | 7.220.000 PONEX |
-| 2 | 2.000.001–4.000.000 | 2,80 PONEX | 5.600.000 PONEX |
-| 3 | 4.000.001–6.000.000 | 1,50 PONEX | 3.000.000 PONEX |
-| 4 | 6.000.001–8.000.000 | 1,00 PONEX | 2.000.000 PONEX |
+| 1 | 1–2.000.000 | 3,61 POVIX | 7.220.000 POVIX |
+| 2 | 2.000.001–4.000.000 | 2,80 POVIX | 5.600.000 POVIX |
+| 3 | 4.000.001–6.000.000 | 1,50 POVIX | 3.000.000 POVIX |
+| 4 | 6.000.001–8.000.000 | 1,00 POVIX | 2.000.000 POVIX |
 
 `ProofOfStake` representa as regras determinísticas do consenso. Os participantes informam as moedas bloqueadas em garantia por meio de `ValidatorStake`; `SelectCreator` escolhe o criador de forma ponderada pelo valor bloqueado, usando a hash anterior e a altura como semente. Em cada nova altura o sorteio é refeito, portanto um participante pode criar um bloco em uma rodada e confirmar outro bloco em uma rodada posterior.
 
 `DistributeReward` reserva **30%** da recompensa ao criador escolhido e distribui os **70%** restantes entre os validadores que confirmaram corretamente, proporcionalmente às garantias bloqueadas. O arredondamento da menor unidade é determinístico e a soma das parcelas é sempre exatamente a recompensa prevista para a altura. O criador não pode confirmar o próprio bloco. Além disso, as carteiras que enviam ou recebem qualquer transferência do bloco são excluídas tanto da criação quanto da confirmação desse bloco; seus endereços públicos são incluídos na prova para que essa regra seja revalidada ao carregar ou sincronizar a cadeia.
 
-A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitária e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 PONEX**.
+A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitária e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 POVIX**.
 
 Ao existir uma transferência pendente e pelo menos dois validadores locais ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
 
