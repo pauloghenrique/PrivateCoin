@@ -78,7 +78,7 @@ namespace PrivateCoin.Desktop
             {
                 persistenceAvailable = false;
                 MessageBox.Show("Não foi possível abrir os dados salvos. Os arquivos não foram alterados.\n\n" + error.Message,
-                    "PONEX", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "POVIX", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 var recoveryWallet = new NamedWallet("Carteira temporária", new Wallet());
                 wallets.Add(recoveryWallet);
                 blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
@@ -155,12 +155,12 @@ namespace PrivateCoin.Desktop
                 {
                     decimal reward = (decimal)Blockchain.WalletCreationReward / Blockchain.OneCoin;
                     Log("Carteira “" + name + "” criada com recompensa de " +
-                        reward.ToString("N8", CultureInfo.CurrentCulture) + " PONEX no bloco #" +
+                        reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX no bloco #" +
                         rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 }
                 else
-                    Log("Carteira “" + name + "” criada e salva. Os 180.000 PONEX reservados para novas carteiras já foram distribuídos.", true);
+                    Log("Carteira “" + name + "” criada e salva. Os 180.000 POVIX reservados para novas carteiras já foram distribuídos.", true);
 
                 UpdateChainSummary();
             }
@@ -267,7 +267,8 @@ namespace PrivateCoin.Desktop
         private IEnumerable<string> GetBootstrapPeers()
         {
             string configured = ConfigurationManager.AppSettings["PeerSeeds"] ?? string.Empty;
-            string environment = Environment.GetEnvironmentVariable("PONEX_PEERS")
+            string environment = Environment.GetEnvironmentVariable("POVIX_PEERS")
+                ?? Environment.GetEnvironmentVariable("PONEX_PEERS")
                 ?? Environment.GetEnvironmentVariable("NOX_PEERS")
                 ?? Environment.GetEnvironmentVariable("PRIVATECOIN_PEERS")
                 ?? string.Empty;
@@ -332,7 +333,7 @@ namespace PrivateCoin.Desktop
             using (var dialog = new Form())
             using (var list = new ListView())
             {
-                dialog.Text = "Pares da rede PONEX";
+                dialog.Text = "Pares da rede POVIX";
                 dialog.StartPosition = FormStartPosition.CenterParent;
                 dialog.ClientSize = new System.Drawing.Size(620, 380);
                 dialog.MinimizeBox = false;
@@ -482,7 +483,7 @@ namespace PrivateCoin.Desktop
                     decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
                     Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
                         "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
-                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " PONEX: " + ShortId(block.Hash) + ".", true);
+                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -518,7 +519,7 @@ namespace PrivateCoin.Desktop
             decimal coins;
             if (!decimal.TryParse(amountTextBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out coins) || coins <= 0)
             {
-                Log("Informe um valor PONEX maior que zero.", false);
+                Log("Informe um valor POVIX maior que zero.", false);
                 return;
             }
             if (string.IsNullOrWhiteSpace(destinationTextBox.Text))
@@ -561,7 +562,7 @@ namespace PrivateCoin.Desktop
             decimal coins;
             if (!decimal.TryParse(stakeAmountTextBox.Text, NumberStyles.Number, CultureInfo.CurrentCulture, out coins) || coins <= 0)
             {
-                Log("Informe uma garantia PONEX maior que zero.", false);
+                Log("Informe uma garantia POVIX maior que zero.", false);
                 return;
             }
 
@@ -582,7 +583,7 @@ namespace PrivateCoin.Desktop
                 SaveState();
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " PONEX bloqueados como garantia para validação e criação de blocos.", true);
+                    " POVIX bloqueados como garantia para validação e criação de blocos.", true);
                 if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
@@ -613,7 +614,7 @@ namespace PrivateCoin.Desktop
                 SaveState();
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " PONEX desbloqueados. A carteira não participa mais da validação de blocos.", true);
+                    " POVIX desbloqueados. A carteira não participa mais da validação de blocos.", true);
             }
             catch (Exception error)
             {
@@ -637,10 +638,10 @@ namespace PrivateCoin.Desktop
             long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             long availableBalance = Math.Max(0, totalBalance - lockedStake);
-            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PONEX";
+            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             validatorStatusLabel.Text = lockedStake == 0
                 ? "Validador inativo"
-                : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PONEX";
+                : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
@@ -680,7 +681,7 @@ namespace PrivateCoin.Desktop
 
         private static string FormatFee(long amount)
         {
-            return ((decimal)amount / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " PONEX";
+            return ((decimal)amount / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
         }
 
         private void Log(string message, bool accepted)

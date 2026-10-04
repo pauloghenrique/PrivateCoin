@@ -18,7 +18,7 @@ namespace PrivateCoin.Site.Models
 
         public static string FormatTokens(long atomicAmount)
         {
-            return (atomicAmount / (decimal)Blockchain.OneCoin).ToString("N8", Portuguese) + " PONEX";
+            return (atomicAmount / (decimal)Blockchain.OneCoin).ToString("N8", Portuguese) + " POVIX";
         }
 
         public static string ShortId(string value)

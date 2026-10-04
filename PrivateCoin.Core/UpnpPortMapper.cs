@@ -174,7 +174,7 @@ namespace PrivateCoin.Core
                 "<NewInternalPort>" + port + "</NewInternalPort>" +
                 "<NewInternalClient>" + SecurityElementEscape(localAddress) + "</NewInternalClient>" +
                 "<NewEnabled>1</NewEnabled>" +
-                "<NewPortMappingDescription>PONEX P2P</NewPortMappingDescription>" +
+                "<NewPortMappingDescription>POVIX P2P</NewPortMappingDescription>" +
                 "<NewLeaseDuration>" + LeaseSeconds + "</NewLeaseDuration>";
             return SendSoapAsync(client, "AddPortMapping", arguments, token);
         }
