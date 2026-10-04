@@ -9,6 +9,11 @@ namespace PrivateCoin.Site.Controllers
             return View(MvcApplication.PublicNetwork.GetDashboard());
         }
 
+        public ActionResult Token()
+        {
+            return View();
+        }
+
         public ActionResult About()
         {
             ViewBag.Message = "Your application description page.";
