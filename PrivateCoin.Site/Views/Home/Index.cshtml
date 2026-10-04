@@ -1,55 +1,85 @@
 ﻿@model PrivateCoin.Site.Models.HomeViewModel
 @using PrivateCoin.Site.Models
 @{
-    ViewBag.Title = "Explorador";
+    ViewBag.Title = "Início";
 }
 
-<main class="explorer">
-    <header class="explorer-header">
-        <div>
-            <p class="eyebrow">Blockchain pública</p>
-            <h1>POVIX Explorer</h1>
-            <p class="lead">Visão transparente da emissão, movimentações e validações recebidas dos pares públicos.</p>
+<main class="home-page">
+    <section class="home-hero" aria-labelledby="home-title">
+        <div class="hero-copy">
+            <div class="hero-badge"><span></span> Rede descentralizada e privada</div>
+            <h1 id="home-title">Seu valor.<br /><em>Suas regras.</em></h1>
+            <p>Uma moeda digital criada para devolver a você o controle do seu patrimônio — sem intermediários, sem fronteiras e com transparência verificável.</p>
+            <div class="hero-actions">
+                <a class="neon-button" href="#explorador">Explorar a blockchain <span aria-hidden="true">↗</span></a>
+                <a class="ghost-button" href="@Url.Action("Token")">Conhecer o token <span aria-hidden="true">→</span></a>
+            </div>
+            <div class="hero-proof" aria-label="Características da rede">
+                <span>● Código aberto</span><span>● Prova de participação</span><span>● Oferta limitada</span>
+            </div>
         </div>
-        <div class="network-status @(Model.ConnectedPeers.Length > 0 ? "online" : "syncing")">
-            <span class="status-dot"></span>
-            <strong>@(Model.ConnectedPeers.Length > 0 ? "Conectado à rede" : "Buscando pares")</strong>
-            <small>@Model.ConnectedPeers.Length conectado(s) · @Model.KnownPeerCount conhecido(s)</small>
+
+        <div class="network-orbit" aria-label="Representação visual da rede PrivateCoin">
+            <div class="orbit-ring orbit-ring-outer"><i></i><i></i><i></i></div>
+            <div class="orbit-ring orbit-ring-inner"><i></i><i></i></div>
+            <div class="coin-core"><span>P</span><small>PRIVATE<br />COIN</small></div>
+            <div class="live-chip"><span class="status-dot"></span><div><small>STATUS DA REDE</small><strong>@(Model.ConnectedPeers.Length > 0 ? "ONLINE" : "SINCRONIZANDO")</strong></div></div>
+            <div class="block-chip"><small>ÚLTIMO BLOCO</small><strong>#@Model.Summary.IssuedBlockCount.ToString("N0")</strong></div>
         </div>
-    </header>
-
-    <section class="stats-grid" aria-label="Resumo da blockchain">
-        <article class="stat-card"><span>Blocos emitidos</span><strong>@Model.Summary.IssuedBlockCount.ToString("N0")</strong><small>sem contar o bloco gênese</small></article>
-        <article class="stat-card"><span>Tokens iniciais emitidos</span><strong>@HomeViewModel.FormatTokens(Model.Summary.InitialDistributionTokenAmount)</strong><small>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0") de @(PrivateCoin.Core.Blockchain.RewardedWalletLimit.ToString("N0")) distribuições</small></article>
-        <article class="stat-card"><span>Total emitido</span><strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong><small>distribuição + consenso</small></article>
-        <article class="stat-card"><span>Oferta total</span><strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong><small>máximo programado</small></article>
-        <article class="stat-card accent"><span>Recompensa atual</span><strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong><small>prevista para o próximo bloco</small></article>
-        <article class="stat-card"><span>Fila de validação</span><strong>@Model.ValidationQueue.Count.ToString("N0")</strong><small>transações pendentes recebidas</small></article>
     </section>
 
-    <section class="panel" aria-labelledby="ledger-title">
-        <div class="section-heading"><div><p class="eyebrow">Transparência</p><h2 id="ledger-title">Livro-caixa</h2></div><span>100 movimentações mais recentes</span></div>
-        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> }
-        else {
-            <div class="table-responsive"><table class="table ledger-table">
-                <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Valor</th><th>Taxa</th><th>Emissão</th></tr></thead>
-                <tbody>@foreach (var entry in Model.Ledger) { <tr>
-                    <td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td>
-                    <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td>
-                    <td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td>
-                    <td>@HomeViewModel.FormatTokens(HomeViewModel.LedgerAmount(entry))</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
-                </tr> }</tbody>
-            </table></div>
-        }
+    <section class="network-strip" aria-label="Resumo da blockchain">
+        <article><span>Oferta total</span><strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong></article>
+        <article><span>Total emitido</span><strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong></article>
+        <article><span>Recompensa atual</span><strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong></article>
+        <article><span>Pares conectados</span><strong>@Model.ConnectedPeers.Length.ToString("N0") <small>/ @Model.KnownPeerCount.ToString("N0") conhecidos</small></strong></article>
     </section>
 
-    <section class="panel queue-panel" aria-labelledby="queue-title">
-        <div class="section-heading"><div><p class="eyebrow">Mempool</p><h2 id="queue-title">Fila de validação</h2></div><span>ordenada pela maior taxa</span></div>
-        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> }
-        else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th><th>Taxa</th></tr></thead><tbody>
-            @for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td><code title="@transaction.Id">@HomeViewModel.ShortId(transaction.Id)&hellip;</code></td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td>@HomeViewModel.FormatTokens(transaction.Fee)</td></tr> }
-        </tbody></table></div> }
+    <section class="values-section" aria-labelledby="values-title">
+        <div class="section-intro">
+            <p class="eyebrow">Feita para ser sua</p>
+            <h2 id="values-title">Liberdade financeira<br />em cada bloco.</h2>
+        </div>
+        <div class="values-grid">
+            <article><span class="feature-number">01</span><div class="feature-icon">◇</div><h3>Privacidade por princípio</h3><p>Seu patrimônio pertence a você. A rede opera sem depender de uma autoridade central.</p></article>
+            <article><span class="feature-number">02</span><div class="feature-icon">⌁</div><h3>Consenso distribuído</h3><p>Cada participante fortalece a rede e ajuda a validar um livro-caixa público e auditável.</p></article>
+            <article><span class="feature-number">03</span><div class="feature-icon">◎</div><h3>Escassez programada</h3><p>Emissão previsível e oferta máxima definida em código protegem o valor ao longo do tempo.</p></article>
+        </div>
     </section>
 
-    <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC · <a href="@Url.Action("Index")">Atualizar agora</a></p>
+    <section class="explorer-section" id="explorador" aria-labelledby="ledger-title">
+        <div class="explorer-heading">
+            <div><p class="eyebrow">Ao vivo na rede</p><h2 id="ledger-title">Explore. Verifique.<br />Confie no código.</h2></div>
+            <div class="network-status @(Model.ConnectedPeers.Length > 0 ? "online" : "syncing")"><span class="status-dot"></span><div><strong>@(Model.ConnectedPeers.Length > 0 ? "Rede conectada" : "Buscando pares")</strong><small>@Model.ConnectedPeers.Length conectado(s) · @Model.KnownPeerCount conhecido(s)</small></div></div>
+        </div>
+
+        <div class="explorer-stats">
+            <article><span>Blocos emitidos</span><strong>@Model.Summary.IssuedBlockCount.ToString("N0")</strong><small>sem o bloco gênese</small></article>
+            <article><span>Distribuições iniciais</span><strong>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0")</strong><small>de @PrivateCoin.Core.Blockchain.RewardedWalletLimit.ToString("N0") previstas</small></article>
+            <article><span>Fila de validação</span><strong>@Model.ValidationQueue.Count.ToString("N0")</strong><small>transações pendentes</small></article>
+        </div>
+
+        <div class="ledger-panel">
+            <div class="panel-heading"><div><span class="pulse-dot"></span><strong>Movimentações recentes</strong></div><span>Atualização @Model.UpdatedAtUtc.ToString("HH:mm:ss") UTC</span></div>
+            @if (Model.Ledger.Count == 0) {
+                <div class="empty-state"><span>⌁</span><strong>Sincronizando o livro-caixa</strong><p>As movimentações aparecerão aqui assim que forem recebidas da rede pública.</p></div>
+            } else {
+                <div class="table-responsive"><table class="table ledger-table">
+                    <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Valor</th><th>Taxa</th></tr></thead>
+                    <tbody>@foreach (var entry in Model.Ledger) { <tr>
+                        <td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td>
+                        <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td><td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td>
+                        <td>@HomeViewModel.FormatTokens(HomeViewModel.LedgerAmount(entry))</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td>
+                    </tr> }</tbody>
+                </table></div>
+            }
+        </div>
+        <a class="refresh-link" href="@Url.Action("Index")">↻ Atualizar dados da rede</a>
+    </section>
+
+    <section class="home-cta">
+        <p class="eyebrow">O futuro é descentralizado</p>
+        <h2>Uma moeda privada.<br /><span>Uma rede de todos.</span></h2>
+        <a class="neon-button" href="@Url.Action("Token")">Descobrir a economia POVIX <span aria-hidden="true">↗</span></a>
+    </section>
 </main>
