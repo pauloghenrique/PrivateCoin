@@ -1,0 +1,177 @@
+@{
+    ViewBag.Title = "White Paper";
+}
+
+<main class="whitepaper-page">
+    <header class="wp-hero">
+        <div class="wp-hero-orbit" aria-hidden="true"></div>
+        <div class="container wp-hero-grid">
+            <div class="wp-hero-copy">
+                <p class="wp-overline"><span></span> Documento técnico · versão 1.0</p>
+                <h1>Uma rede privada.<br /><em>Um protocolo aberto.</em></h1>
+                <p class="wp-lead">Fundamentos técnicos, modelo econômico e princípios de segurança da PONIX — dinheiro digital ponto a ponto pensado para devolver o controle a quem participa.</p>
+                <div class="wp-hero-actions">
+                    <a class="home-button primary" href="#resumo">Começar a leitura <span aria-hidden="true">↓</span></a>
+                    <a class="home-button ghost" href="@Url.Action("Token", "Home")">Economia do token <span aria-hidden="true">↗</span></a>
+                </div>
+                <p class="wp-meta">PUBLICADO EM 2026 <i></i> LEITURA DE 12 MIN</p>
+            </div>
+            <div class="wp-cover" aria-label="Capa do White Paper PONIX">
+                <div class="wp-cover-mark"><span>P</span></div>
+                <div class="wp-cover-title"><small>PONIX PROTOCOL</small><strong>WHITE<br />PAPER</strong></div>
+                <div class="wp-cover-foot"><span>01</span><span>PRIVACY BY DESIGN</span></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container wp-document">
+        <aside class="wp-sidebar" aria-label="Índice do White Paper">
+            <span class="wp-sidebar-label">Neste documento</span>
+            <nav>
+                <a href="#resumo"><span>01</span> Resumo</a>
+                <a href="#principios"><span>02</span> Princípios</a>
+                <a href="#arquitetura"><span>03</span> Arquitetura</a>
+                <a href="#privacidade"><span>04</span> Privacidade</a>
+                <a href="#consenso"><span>05</span> Consenso</a>
+                <a href="#economia"><span>06</span> Economia</a>
+                <a href="#rede"><span>07</span> Rede P2P</a>
+                <a href="#seguranca"><span>08</span> Segurança</a>
+                <a href="#estado"><span>09</span> Estado do projeto</a>
+            </nav>
+        </aside>
+
+        <article class="wp-content">
+            <section id="resumo" class="wp-section wp-intro-section">
+                <p class="wp-section-number">01 — RESUMO</p>
+                <h2>Privacidade para movimentar.<br />Transparência para confiar.</h2>
+                <p class="wp-dropcap">A PONIX é uma proposta de dinheiro digital descentralizado baseada em uma blockchain UTXO, assinaturas criptográficas e uma rede ponto a ponto. O protocolo busca combinar autonomia individual, emissão previsível e validação distribuída sem depender de uma instituição central.</p>
+                <p>Cada participante conserva suas próprias chaves. As regras de emissão, transferência e consenso são verificadas localmente por todos os nós, enquanto endereços descartáveis reduzem a associação direta entre diferentes recebimentos de uma mesma carteira.</p>
+                <div class="wp-callout"><span>Ideia central</span><p>A privacidade protege as pessoas. A transparência do protocolo protege a rede.</p></div>
+                <div class="wp-facts" aria-label="Principais números do protocolo">
+                    <div><strong>18M</strong><span>Oferta máxima<br />de POVIX</span></div>
+                    <div><strong>8M</strong><span>Blocos com<br />recompensa</span></div>
+                    <div><strong>4</strong><span>Fases de<br />emissão</span></div>
+                    <div><strong>10<sup>−8</sup></strong><span>Menor unidade<br />de POVIX</span></div>
+                </div>
+            </section>
+
+            <section id="principios" class="wp-section">
+                <p class="wp-section-number">02 — PRINCÍPIOS DE PROJETO</p>
+                <h2>Construída a partir de escolhas claras.</h2>
+                <div class="wp-principle-grid">
+                    <article><span>01</span><div class="wp-line-icon">◎</div><h3>Autocustódia</h3><p>As chaves privadas permanecem com o usuário. A rede valida assinaturas, não identidades nem permissões concedidas por intermediários.</p></article>
+                    <article><span>02</span><div class="wp-line-icon">◇</div><h3>Verificação independente</h3><p>Cada nó aplica as mesmas regras de consenso aos blocos e transações que recebe antes de aceitá-los.</p></article>
+                    <article><span>03</span><div class="wp-line-icon">⌁</div><h3>Previsibilidade</h3><p>A oferta, as fases de recompensa e a divisão entre validadores são parâmetros públicos do protocolo.</p></article>
+                    <article><span>04</span><div class="wp-line-icon">◫</div><h3>Descentralização</h3><p>Descoberta de pares, propagação por gossip e sincronização da cadeia reduzem a dependência de infraestrutura central.</p></article>
+                </div>
+            </section>
+
+            <section id="arquitetura" class="wp-section">
+                <p class="wp-section-number">03 — ARQUITETURA DO PROTOCOLO</p>
+                <h2>Do envio ao consenso.</h2>
+                <p>A cadeia usa o modelo de saídas não gastas (UTXO). Uma transação consome saídas anteriores, prova a autorização por assinatura e cria novas saídas para o destinatário e, quando necessário, para o troco.</p>
+                <div class="wp-flow" aria-label="Fluxo de uma transação PONIX">
+                    <div><span>01</span><i>⌁</i><strong>Criar</strong><small>A carteira seleciona UTXOs e calcula a taxa.</small></div>
+                    <b aria-hidden="true">→</b>
+                    <div><span>02</span><i>✦</i><strong>Assinar</strong><small>A chave privada autoriza as entradas.</small></div>
+                    <b aria-hidden="true">→</b>
+                    <div><span>03</span><i>◇</i><strong>Propagar</strong><small>Os pares retransmitem a transação válida.</small></div>
+                    <b aria-hidden="true">→</b>
+                    <div><span>04</span><i>✓</i><strong>Confirmar</strong><small>Validadores incluem e aprovam o bloco.</small></div>
+                </div>
+                <h3 class="wp-subtitle">Integridade da cadeia</h3>
+                <p>Blocos carregam a hash do bloco anterior e a hash de seu próprio conteúdo. Essa ligação torna alterações históricas detectáveis. Ao sincronizar, um nó aceita apenas uma cadeia que passe por toda a validação local, usando a cadeia válida mais longa e um desempate determinístico.</p>
+                <div class="wp-code-card">
+                    <div><span></span><span></span><span></span><small>IDENTIDADE DA REDE</small></div>
+                    <code>NetworkId = povix-mainnet-v1-{genesisHash}</code>
+                    <code>ConsensusVersion = 2</code>
+                    <p>Uma identidade canônica separa redes incompatíveis antes da propagação de dados.</p>
+                </div>
+            </section>
+
+            <section id="privacidade" class="wp-section wp-dark-section">
+                <p class="wp-section-number">04 — PRIVACIDADE POR DESIGN</p>
+                <h2>Um endereço para cada recebimento.</h2>
+                <p>A carteira gera uma chave e um endereço descartável novos a cada solicitação de pagamento. Assim, a blockchain não precisa publicar um endereço permanente que reúna diretamente todo o histórico financeiro de uma pessoa.</p>
+                <div class="wp-address-visual" aria-label="Uma carteira criando endereços descartáveis">
+                    <div class="wp-wallet-node"><span>P</span><small>CARTEIRA</small></div>
+                    <div class="wp-address-list"><span><i></i> px_74a…91f <small>USADO UMA VEZ</small></span><span><i></i> px_b03…c28 <small>USADO UMA VEZ</small></span><span><i></i> px_8de…4aa <small>NOVO</small></span></div>
+                </div>
+                <div class="wp-notice"><strong>Importante</strong><p>Endereços descartáveis melhoram a separação entre recebimentos, mas não tornam a análise de blockchain impossível. Privacidade completa exige cuidados de rede, uso e implementação além do formato do endereço.</p></div>
+            </section>
+
+            <section id="consenso" class="wp-section">
+                <p class="wp-section-number">05 — CONSENSO E VALIDADORES</p>
+                <h2>Garantia econômica.<br />Seleção determinística.</h2>
+                <p>Participantes bloqueiam POVIX em uma transação de garantia (<em>StakeLock</em>). A seleção do criador do próximo bloco é ponderada pelo valor bloqueado e usa a hash anterior e a altura do bloco como semente verificável.</p>
+                <div class="wp-split-card">
+                    <div class="wp-split-copy"><span>RECOMPENSA POR BLOCO</span><h3>Uma recompensa,<br />dois papéis.</h3><p>O criador propõe o bloco. Confirmadores elegíveis verificam e assinam o mesmo conteúdo.</p></div>
+                    <div class="wp-split-bars"><div class="creator"><strong>30%</strong><span>Criador</span></div><div class="confirmers"><strong>70%</strong><span>Confirmadores</span><small>proporcional à garantia</small></div></div>
+                </div>
+                <ul class="wp-check-list">
+                    <li><span>✓</span><p><strong>Separação de papéis.</strong> O criador não confirma o próprio bloco.</p></li>
+                    <li><span>✓</span><p><strong>Ausência de conflito.</strong> Carteiras envolvidas nas transferências do bloco não podem criá-lo ou confirmá-lo.</p></li>
+                    <li><span>✓</span><p><strong>Prova verificável.</strong> Garantias, papéis, chaves e assinaturas integram a prova validada por cada nó.</p></li>
+                </ul>
+            </section>
+
+            <section id="economia" class="wp-section">
+                <p class="wp-section-number">06 — ECONOMIA DO POVIX</p>
+                <h2>Oferta limitada a 18 milhões.</h2>
+                <p>O protocolo combina 180.000 POVIX de distribuição inicial — 6 POVIX para cada uma das primeiras 30.000 carteiras — com 17.820.000 POVIX destinados às recompensas de consenso.</p>
+                <div class="wp-emission-chart">
+                    <div class="wp-chart-axis"><span>3,61</span><span>2,80</span><span>1,50</span><span>1,00</span></div>
+                    <div class="wp-chart-bars">
+                        <div style="--height:100%"><i></i><strong>FASE 1</strong><span>1 — 2M</span></div>
+                        <div style="--height:78%"><i></i><strong>FASE 2</strong><span>2M — 4M</span></div>
+                        <div style="--height:42%"><i></i><strong>FASE 3</strong><span>4M — 6M</span></div>
+                        <div style="--height:28%"><i></i><strong>FASE 4</strong><span>6M — 8M</span></div>
+                    </div>
+                </div>
+                <div class="wp-token-breakdown"><div><span>99%</span><p><strong>17.820.000 POVIX</strong><br />Recompensas de consenso</p></div><div><span>1%</span><p><strong>180.000 POVIX</strong><br />Distribuição inicial</p></div></div>
+                <p class="wp-caption">Após o bloco 8.000.000, termina a emissão destinada ao consenso. Taxas de transferência continuam remunerando integralmente o criador do bloco.</p>
+            </section>
+
+            <section id="rede" class="wp-section">
+                <p class="wp-section-number">07 — REDE PONTO A PONTO</p>
+                <h2>Sem servidor principal.</h2>
+                <p>Os nós se conectam diretamente, trocam transações, cadeias e endereços de outros pares. Seeds servem apenas para o primeiro contato: depois do bootstrap, a descoberta e a propagação acontecem entre os próprios participantes.</p>
+                <div class="wp-network-grid">
+                    <article><span>01</span><h3>Descoberta</h3><p>Seeds configuráveis e catálogo local ajudam um nó a encontrar seus primeiros pares.</p></article>
+                    <article><span>02</span><h3>Gossip</h3><p>Dados válidos são deduplicados e retransmitidos para a rede conectada.</p></article>
+                    <article><span>03</span><h3>Sincronização</h3><p>Novos nós verificam a cadeia recebida antes de adotá-la.</p></article>
+                </div>
+            </section>
+
+            <section id="seguranca" class="wp-section">
+                <p class="wp-section-number">08 — MODELO DE SEGURANÇA</p>
+                <h2>Não confie. Verifique.</h2>
+                <p>Um par pode mentir sobre o software que executa. Por isso, a segurança não depende da versão anunciada: depende de cada implementação rejeitar localmente qualquer dado que viole as regras.</p>
+                <table class="wp-security-table">
+                    <thead><tr><th>Ameaça</th><th>Defesa do protocolo</th></tr></thead>
+                    <tbody>
+                        <tr><td>Gasto duplo</td><td>Validação do conjunto UTXO e reserva de entradas pendentes.</td></tr>
+                        <tr><td>Transação forjada</td><td>Assinaturas RSA/SHA-256 verificadas contra a chave pública.</td></tr>
+                        <tr><td>Emissão indevida</td><td>Limites e recompensas recalculados por todos os nós.</td></tr>
+                        <tr><td>Par incompatível</td><td>NetworkId, versão de consenso e gênese canônico.</td></tr>
+                        <tr><td>Cadeia adulterada</td><td>Hashes encadeadas e revalidação integral antes da adoção.</td></tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="estado" class="wp-section wp-status-section">
+                <p class="wp-section-number">09 — ESTADO DO PROJETO</p>
+                <h2>Uma base técnica em evolução.</h2>
+                <p>A implementação atual demonstra carteira, blockchain, transações, consenso e comunicação P2P. Ela ainda não deve ser usada para custodiar valor real. Uma rede de produção requer auditoria criptográfica independente, testes adversariais, proteção ampliada contra Sybil e DoS, governança de atualizações e operação pública robusta.</p>
+                <div class="wp-status-grid"><div><span>AGORA</span><strong>Protótipo funcional</strong><p>Regras essenciais implementadas e verificáveis no código.</p></div><div><span>PRÓXIMO</span><strong>Auditoria e testes</strong><p>Validação independente antes de qualquer uso econômico real.</p></div></div>
+            </section>
+
+            <footer class="wp-closing">
+                <span class="brand-symbol" aria-hidden="true"><i></i></span>
+                <p>O protocolo é aberto.<br /><strong>A liberdade também deve ser.</strong></p>
+                <div><a href="@Url.Action("Explorer", "Home")">Explorar a rede <span>↗</span></a><a href="@Url.Action("Token", "Home")">Conhecer o POVIX <span>↗</span></a></div>
+            </footer>
+            <p class="wp-legal">Este documento descreve a arquitetura técnica atual do projeto. Não constitui promessa de retorno, oferta de investimento ou recomendação financeira.</p>
+        </article>
+    </div>
+</main>

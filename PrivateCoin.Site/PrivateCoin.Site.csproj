@@ -181,6 +181,7 @@
     <Content Include="Views\Home\Index.cshtml" />
     <Content Include="Views\Home\Explorer.cshtml" />
     <Content Include="Views\Home\Token.cshtml" />
+    <Content Include="Views\Home\WhitePaper.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
