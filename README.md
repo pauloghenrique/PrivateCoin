@@ -35,6 +35,23 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Aplicação Desktop
 
+### Atualizações do Desktop
+
+O botão **Buscar atualização** consulta o endereço HTTPS configurado em `UpdateManifestUrl`. A consulta também acontece silenciosamente ao iniciar o aplicativo. Quando existe uma versão superior à versão do executável, o Desktop pede confirmação, baixa o pacote ZIP, confere seu SHA-256, instala os arquivos somente depois de encerrar o processo e abre a versão nova. `Blockchain.json`, `wallets.dat`, `peers.dat` e `recovery.dat` nunca podem ser fornecidos pelo pacote e são preservados durante a cópia.
+
+O manifesto publicado deve ter este formato (a versão usa o formato do `AssemblyVersion`):
+
+```json
+{
+  "version": "1.1.0.0",
+  "downloadUrl": "https://downloads.exemplo.com/povix/PrivateCoin.Desktop-1.1.0.zip",
+  "sha256": "SHA256_DO_ARQUIVO_ZIP_EM_64_CARACTERES_HEXADECIMAIS",
+  "releaseNotes": "Resumo opcional das mudanças."
+}
+```
+
+O ZIP deve colocar `PrivateCoin.Desktop.exe` e os demais arquivos publicados diretamente na raiz. Tanto o manifesto quanto o pacote precisam usar HTTPS; publique primeiro o pacote, calcule o SHA-256 e só então atualize o manifesto. Builds sem um canal oficial podem deixar `UpdateManifestUrl` vazio, caso em que nenhuma conexão automática é feita.
+
 `PrivateCoin.Desktop` oferece um painel WinForms para criar e alternar entre várias carteiras, consultar o saldo de cada uma, gerar endereços de recebimento e fazer transferências. Ao criar uma carteira, o painel exibe uma única vez uma frase de recuperação formada por 12 palavras em inglês; anote as palavras na ordem apresentada e mantenha-as em segurança. Durante o desenvolvimento, os dados persistidos ficam separados em arquivos da aplicação. Em uma versão publicada, eles ficam ao lado do executável:
 
 - `Blockchain.json` contém a blockchain completa, a fila de transações pendentes e o cadastro público das carteiras conhecidas pela instalação. Para cada carteira, o cadastro grava nome, todos os endereços, quantidade confirmada de tokens, garantia de validador e um identificador criptográfico de recuperação — nunca a frase nem as chaves privadas. Tudo fica em um envelope Base64 acompanhado pelo hash SHA-256 dos dados. Cada transferência validada é gravada imediatamente nesse arquivo enquanto aguarda a criação do bloco, mas só altera os saldos depois que o bloco é criado e validado. Ao abrir o arquivo, o aplicativo confere o hash, restaura as pendências e recalcula cada saldo a partir dos UTXOs confirmados, rejeitando dados inconsistentes;
