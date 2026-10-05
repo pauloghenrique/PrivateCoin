@@ -104,12 +104,14 @@ namespace PrivateCoin.Desktop
             // executable (or in the project directory while developing). Prefer that
             // folder when it contains a wallet: an empty/new LocalAppData file must never
             // hide a real wallet that already exists in the documented legacy location.
-            foreach (string applicationDirectory in applicationDirectories.Where(item => !string.IsNullOrWhiteSpace(item)))
-            {
-                string hiddenDirectory = Path.Combine(applicationDirectory, DataDirectoryName);
-                if (File.Exists(Path.Combine(hiddenDirectory, "wallets.dat")))
-                    return hiddenDirectory;
-            }
+            string legacyDirectory = applicationDirectories
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => Path.Combine(item, DataDirectoryName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(item => File.Exists(Path.Combine(item, "wallets.dat")))
+                .OrderByDescending(item => File.GetLastWriteTimeUtc(Path.Combine(item, "wallets.dat")))
+                .FirstOrDefault();
+            if (legacyDirectory != null) return legacyDirectory;
 
             string localDirectory = GetLocalDataDirectory();
             if (File.Exists(Path.Combine(localDirectory, "wallets.dat")) ||
