@@ -61,6 +61,7 @@ namespace PrivateCoin.Desktop
     /// </summary>
     internal sealed class WalletStore
     {
+        private const string DataDirectoryName = ".privatecoin";
         private static readonly byte[] Entropy = { 80, 114, 105, 118, 97, 116, 101, 67, 111, 105, 110 };
         private readonly string walletFilePath;
         private readonly string networkFilePath;
@@ -70,11 +71,19 @@ namespace PrivateCoin.Desktop
 
         public WalletStore()
         {
-            string directory = FindProjectDirectory();
+            string applicationDirectory = FindProjectDirectory();
+            string directory = CreateHiddenDataDirectory(applicationDirectory);
+            MoveLegacyDataFile(applicationDirectory, directory, "wallets.dat");
+            MoveLegacyDataFile(applicationDirectory, directory, "Blockchain.json");
+            MoveLegacyDataFile(applicationDirectory, directory, "recovery.dat");
+
             walletFilePath = Path.Combine(directory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
             recoveryFilePath = Path.Combine(directory, "recovery.dat");
-            string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
+            string previousNetworkFilePath = Path.Combine(applicationDirectory, "blockchain.json");
+            if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
+                File.Move(previousNetworkFilePath, networkFilePath);
+            previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
             if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
                 File.Move(previousNetworkFilePath, networkFilePath);
         }
@@ -101,6 +110,23 @@ namespace PrivateCoin.Desktop
             // In a published copy there is no project file, so the executable directory
             // is the closest equivalent to the project directory.
             return AppDomain.CurrentDomain.BaseDirectory;
+        }
+
+        private static string CreateHiddenDataDirectory(string applicationDirectory)
+        {
+            string directory = Path.Combine(applicationDirectory, DataDirectoryName);
+            Directory.CreateDirectory(directory);
+            var directoryInfo = new DirectoryInfo(directory);
+            if ((directoryInfo.Attributes & FileAttributes.Hidden) == 0)
+                directoryInfo.Attributes |= FileAttributes.Hidden;
+            return directory;
+        }
+
+        private static void MoveLegacyDataFile(string sourceDirectory, string destinationDirectory, string fileName)
+        {
+            string source = Path.Combine(sourceDirectory, fileName);
+            string destination = Path.Combine(destinationDirectory, fileName);
+            if (File.Exists(source) && !File.Exists(destination)) File.Move(source, destination);
         }
 
         public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
