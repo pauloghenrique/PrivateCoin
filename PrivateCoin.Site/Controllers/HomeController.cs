@@ -6,6 +6,11 @@ namespace PrivateCoin.Site.Controllers
     {
         public ActionResult Index()
         {
+            return View();
+        }
+
+        public ActionResult Explorer()
+        {
             return View(MvcApplication.PublicNetwork.GetDashboard());
         }
 
