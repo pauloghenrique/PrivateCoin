@@ -540,7 +540,7 @@ namespace PrivateCoin.Desktop
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
-                if (checked(amount + fee) > balance - selected.LockedStake)
+                if (checked(amount + fee) > balance)
                     throw new InvalidOperationException("Saldo disponível insuficiente. Os tokens bloqueados como garantia não podem ser transferidos.");
                 Transaction transaction = selected.Wallet.CreateTransaction(blockchain, pending, destinationTextBox.Text.Trim(), amount, fee);
                 ValidateAndQueue(transaction, "Carteira local");
