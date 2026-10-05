@@ -13,6 +13,7 @@
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
 - sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
+- identidade de rede vinculada a uma versão de consenso e a um bloco gênese canônico; pares incompatíveis são desconectados antes de seus dados serem propagados.
 
 ## Uso básico
 
@@ -70,6 +71,14 @@ Por padrão, `EnableNatTraversal` é `true`: como clientes BitTorrent, o aplicat
 Nenhuma técnica local consegue aceitar conexões diretas através de todo tipo de NAT. UPnP/NAT-PMP dependem do suporte do roteador e não atravessam CGNAT. Nesses casos, assim como um cliente BitTorrent passivo, o nó ainda descobre endereços, inicia conexões para nós alcançáveis e troca novos pares por gossip, sem qualquer configuração manual.
 
 > Esta é uma base técnica, não software pronto para custodiar dinheiro real. Uma rede de produção também precisa de descoberta autenticada de pares, protocolo de consenso/forks, proteção contra Sybil/DoS, auditoria criptográfica e backups seguros.
+
+### Alterações do código e regras de consenso
+
+A rede não consegue provar qual executável um par está usando: um programa modificado pode anunciar a mesma versão. A proteção correta é cada nó validar localmente todos os dados recebidos. Alterar apenas o código de um nó não muda as regras aceitas pelos demais; blocos que violem hashes, assinaturas, UTXOs, emissão ou prova de consenso são rejeitados por eles.
+
+Para impedir que uma cadeia criada com outras regras seja confundida com a rede POVIX, o Core fixa o bloco gênese e inclui `NetworkId` e `ConsensusVersion` em todas as mensagens P2P. Mensagens com outra identidade ou versão são descartadas e a conexão é encerrada. Uma mudança intencional nas regras exige incrementar `ConsensusVersion`, definir uma política de ativação por altura e distribuir a atualização; sem adesão suficiente, ela cria um fork em vez de substituir silenciosamente a rede existente.
+
+Esses identificadores são separação de protocolo, não atestado do binário. Não se deve aceitar uma transação ou bloco por causa da versão anunciada, nem usar hash do DLL como regra de consenso: esse mecanismo seria falsificável por um cliente hostil e impediria implementações independentes. Antes de produção, as garantias de validadores e seus votos também precisam existir como transações e assinaturas verificáveis globalmente, como descrito abaixo.
 
 ## Emissão e validadores
 

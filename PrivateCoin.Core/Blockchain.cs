@@ -17,15 +17,18 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
+        public const int ConsensusVersion = 1;
+        public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
+        public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
+        private const long GenesisTimestampUtcTicks = 639028224000000000L;
+        private const long GenesisNonce = 4995L;
         private const string ProofPrefix = "000";
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
 
         public Blockchain()
         {
-            var genesis = new Block { Height = 0, PreviousHash = new string('0', 64), TimestampUtcTicks = DateTime.UtcNow.Ticks };
-            Mine(genesis);
-            blocks.Add(genesis);
+            blocks.Add(CreateGenesisBlock());
         }
 
         /// <summary>Restores and validates an existing chain.</summary>
@@ -263,6 +266,7 @@ namespace PrivateCoin.Core
             lock (sync)
             {
                 if (blocks.Count == 0) return false;
+                if (!IsCanonicalGenesis(blocks[0])) return false;
                 for (int i = 0; i < blocks.Count; i++)
                 {
                     var block = blocks[i];
@@ -422,6 +426,29 @@ namespace PrivateCoin.Core
         }
 
         private static string Key(string transactionId, int outputIndex) => transactionId + ":" + outputIndex;
+
+        private static Block CreateGenesisBlock()
+        {
+            return new Block
+            {
+                Height = 0,
+                PreviousHash = new string('0', 64),
+                TimestampUtcTicks = GenesisTimestampUtcTicks,
+                Nonce = GenesisNonce,
+                Hash = GenesisHash
+            };
+        }
+
+        private static bool IsCanonicalGenesis(Block block)
+        {
+            return block != null && block.Height == 0 &&
+                block.PreviousHash == new string('0', 64) &&
+                block.TimestampUtcTicks == GenesisTimestampUtcTicks &&
+                block.Nonce == GenesisNonce && block.Hash == GenesisHash &&
+                block.Transactions != null && block.Transactions.Count == 0 &&
+                (block.Validators == null || block.Validators.Count == 0) &&
+                block.CalculateHash() == GenesisHash;
+        }
 
         private static void Mine(Block block)
         {

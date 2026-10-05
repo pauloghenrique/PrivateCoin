@@ -23,6 +23,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 4)] public Block[] Blocks { get; set; }
         [DataMember(Order = 5)] public int ListeningPort { get; set; }
         [DataMember(Order = 6)] public string[] Peers { get; set; }
+        [DataMember(Order = 7)] public string NetworkId { get; set; }
+        [DataMember(Order = 8)] public int ConsensusVersion { get; set; }
     }
 
     /// <summary>A TCP gossip node with Bitcoin-style bootstrap seeds and peer address exchange.</summary>
@@ -132,18 +134,18 @@ namespace PrivateCoin.Core
         public Task BroadcastAsync(Transaction transaction)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
-            return Broadcast(new PeerMessage { MessageId = Crypto.NewId(), Type = "transaction", Transaction = transaction });
+            return Broadcast(CreateMessage("transaction", transaction: transaction));
         }
 
         public Task BroadcastChainAsync(IEnumerable<Block> blocks)
         {
             if (blocks == null) throw new ArgumentNullException(nameof(blocks));
-            return Broadcast(new PeerMessage { MessageId = Crypto.NewId(), Type = "chain", Blocks = blocks.ToArray() });
+            return Broadcast(CreateMessage("chain", blocks: blocks.ToArray()));
         }
 
         public Task RequestSynchronizationAsync()
         {
-            return Broadcast(new PeerMessage { MessageId = Crypto.NewId(), Type = "sync-request" });
+            return Broadcast(CreateMessage("sync-request"));
         }
 
         private Task Broadcast(PeerMessage message)
@@ -247,19 +249,29 @@ namespace PrivateCoin.Core
             Task.Run(async () =>
             {
                 await SendToPeer(client, CreateAddressMessage("hello")).ConfigureAwait(false);
-                await SendToPeer(client, new PeerMessage { MessageId = Crypto.NewId(), Type = "sync-request" }).ConfigureAwait(false);
+                await SendToPeer(client, CreateMessage("sync-request")).ConfigureAwait(false);
             });
             PeerCountChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private PeerMessage CreateAddressMessage(string type)
         {
+            PeerMessage message = CreateMessage(type);
+            message.ListeningPort = listeningPort;
+            message.Peers = knownEndpoints.Keys.Take(256).ToArray();
+            return message;
+        }
+
+        private static PeerMessage CreateMessage(string type, Transaction transaction = null, Block[] blocks = null)
+        {
             return new PeerMessage
             {
                 MessageId = Crypto.NewId(),
                 Type = type,
-                ListeningPort = listeningPort,
-                Peers = knownEndpoints.Keys.Take(256).ToArray()
+                Transaction = transaction,
+                Blocks = blocks,
+                NetworkId = Blockchain.NetworkId,
+                ConsensusVersion = Blockchain.ConsensusVersion
             };
         }
 
@@ -277,6 +289,9 @@ namespace PrivateCoin.Core
                     PeerMessage message;
                     using (var memory = new MemoryStream(body))
                         message = (PeerMessage)new DataContractJsonSerializer(typeof(PeerMessage)).ReadObject(memory);
+                    if (message == null || message.NetworkId != Blockchain.NetworkId ||
+                        message.ConsensusVersion != Blockchain.ConsensusVersion)
+                        throw new InvalidDataException("Peer belongs to an incompatible network or consensus version.");
                     if (message == null || string.IsNullOrEmpty(message.MessageId) || !seen.TryAdd(message.MessageId, 0)) continue;
 
                     if (message.Type == "hello" || message.Type == "addr") LearnAddresses(client, message);
