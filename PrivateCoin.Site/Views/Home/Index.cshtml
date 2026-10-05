@@ -1,55 +1,47 @@
-﻿@model PrivateCoin.Site.Models.HomeViewModel
-@using PrivateCoin.Site.Models
 @{
-    ViewBag.Title = "Explorador";
+    ViewBag.Title = "Dinheiro digital, verdadeiramente privado";
 }
 
-<main class="explorer">
-    <header class="explorer-header">
-        <div>
-            <p class="eyebrow">Blockchain pública</p>
-            <h1>POVIX Explorer</h1>
-            <p class="lead">Visão transparente da emissão, movimentações e validações recebidas dos pares públicos.</p>
+<main class="home-page">
+    <section class="home-hero">
+        <div class="hero-orbit orbit-one"></div><div class="hero-orbit orbit-two"></div>
+        <div class="container hero-layout">
+            <div class="hero-copy">
+                <p class="hero-kicker"><span></span> Rede descentralizada e privada</p>
+                <h1>Seu dinheiro.<br />Suas regras.<br /><em>Sua privacidade.</em></h1>
+                <p class="hero-description">PONIX é dinheiro digital ponto a ponto, criado para devolver a você o controle das suas transações — sem intermediários, sem vigilância.</p>
+                <div class="hero-buttons"><a class="home-button primary" href="#sobre">Conheça a PONIX <span>→</span></a><a class="home-button ghost" href="@Url.Action("Explorer", "Home")"><span class="play-icon">▶</span> Explorar a rede</a></div>
+                <div class="hero-trust"><span>◆ Código aberto</span><span>◆ Sem autoridade central</span><span>◆ Privacidade por padrão</span></div>
+            </div>
+            <div class="coin-scene" aria-label="Representação visual do token PONIX">
+                <div class="coin-glow"></div>
+                <div class="ponix-coin"><div class="coin-rim"><span class="coin-p">P</span><small>PONIX · PRIVATE NETWORK ·</small></div></div>
+                <div class="float-card card-private"><span class="mini-icon">⌁</span><div><small>TRANSAÇÃO</small><strong>Privada</strong></div><i>✓</i></div>
+                <div class="float-card card-network"><span class="pulse-dot"></span><div><small>REDE</small><strong>Ativa 24/7</strong></div></div>
+                <span class="spark spark-a">✦</span><span class="spark spark-b">✦</span>
+            </div>
         </div>
-        <div class="network-status @(Model.ConnectedPeers.Length > 0 ? "online" : "syncing")">
-            <span class="status-dot"></span>
-            <strong>@(Model.ConnectedPeers.Length > 0 ? "Conectado à rede" : "Buscando pares")</strong>
-            <small>@Model.ConnectedPeers.Length conectado(s) · @Model.KnownPeerCount conhecido(s)</small>
+        <a class="scroll-cue" href="#sobre"><span>Role para descobrir</span><i>↓</i></a>
+    </section>
+
+    <section class="manifesto" id="sobre">
+        <div class="container manifesto-grid">
+            <div><p class="section-label">01 — Por que PONIX</p><h2>Privacidade não é luxo.<br /><em>É liberdade.</em></h2></div>
+            <div class="manifesto-copy"><p>O sistema financeiro tradicional registra cada passo. A PONIX escolhe outro caminho: uma rede aberta onde suas chaves, seus recursos e suas decisões pertencem somente a você.</p><a href="#tecnologia">Entenda como funciona <span>↗</span></a></div>
         </div>
-    </header>
-
-    <section class="stats-grid" aria-label="Resumo da blockchain">
-        <article class="stat-card"><span>Blocos emitidos</span><strong>@Model.Summary.IssuedBlockCount.ToString("N0")</strong><small>sem contar o bloco gênese</small></article>
-        <article class="stat-card"><span>Tokens iniciais emitidos</span><strong>@HomeViewModel.FormatTokens(Model.Summary.InitialDistributionTokenAmount)</strong><small>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0") de @(PrivateCoin.Core.Blockchain.RewardedWalletLimit.ToString("N0")) distribuições</small></article>
-        <article class="stat-card"><span>Total emitido</span><strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong><small>distribuição + consenso</small></article>
-        <article class="stat-card"><span>Oferta total</span><strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong><small>máximo programado</small></article>
-        <article class="stat-card accent"><span>Recompensa atual</span><strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong><small>prevista para o próximo bloco</small></article>
-        <article class="stat-card"><span>Fila de validação</span><strong>@Model.ValidationQueue.Count.ToString("N0")</strong><small>transações pendentes recebidas</small></article>
+        <div class="container feature-row">
+            <article><span class="feature-number">01</span><div class="feature-icon">◎</div><h3>Privacidade real</h3><p>Endereços descartáveis ajudam a preservar sua identidade e o histórico das suas movimentações.</p></article>
+            <article><span class="feature-number">02</span><div class="feature-icon">◇</div><h3>Controle absoluto</h3><p>Somente você possui as chaves. Nenhuma instituição pode congelar, limitar ou censurar seus recursos.</p></article>
+            <article><span class="feature-number">03</span><div class="feature-icon">⌘</div><h3>Rede de pessoas</h3><p>Uma blockchain ponto a ponto, sustentada por participantes — não por servidores centrais.</p></article>
+        </div>
     </section>
 
-    <section class="panel" aria-labelledby="ledger-title">
-        <div class="section-heading"><div><p class="eyebrow">Transparência</p><h2 id="ledger-title">Livro-caixa</h2></div><span>100 movimentações mais recentes</span></div>
-        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> }
-        else {
-            <div class="table-responsive"><table class="table ledger-table">
-                <thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Valor</th><th>Taxa</th><th>Emissão</th></tr></thead>
-                <tbody>@foreach (var entry in Model.Ledger) { <tr>
-                    <td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td>
-                    <td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td>
-                    <td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td>
-                    <td>@HomeViewModel.FormatTokens(HomeViewModel.LedgerAmount(entry))</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td>
-                </tr> }</tbody>
-            </table></div>
-        }
+    <section class="tech-section" id="tecnologia">
+        <div class="container tech-grid">
+            <div class="network-art" aria-hidden="true"><div class="network-ring ring-a"></div><div class="network-ring ring-b"></div><div class="network-core"><span>P</span></div><i class="node n1"></i><i class="node n2"></i><i class="node n3"></i><i class="node n4"></i><i class="node n5"></i></div>
+            <div class="tech-copy"><p class="section-label light">02 — Tecnologia</p><h2>Segurança feita<br />para ser <em>sua.</em></h2><p>A PONIX combina criptografia, consenso distribuído e uma arquitetura sem ponto único de falha.</p><ul><li><span>✓</span><div><strong>Proof of Stake</strong><small>Validação eficiente, distribuída e acessível.</small></div></li><li><span>✓</span><div><strong>Criptografia ponta a ponta</strong><small>Assinaturas digitais protegem cada transferência.</small></div></li><li><span>✓</span><div><strong>Oferta previsível</strong><small>18 milhões de tokens. Regras claras no protocolo.</small></div></li></ul><a class="text-link light" href="@Url.Action("Token", "Home")">Conhecer o token <span>↗</span></a></div>
+        </div>
     </section>
 
-    <section class="panel queue-panel" aria-labelledby="queue-title">
-        <div class="section-heading"><div><p class="eyebrow">Mempool</p><h2 id="queue-title">Fila de validação</h2></div><span>ordenada pela maior taxa</span></div>
-        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> }
-        else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th><th>Taxa</th></tr></thead><tbody>
-            @for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td><code title="@transaction.Id">@HomeViewModel.ShortId(transaction.Id)&hellip;</code></td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td>@HomeViewModel.FormatTokens(transaction.Fee)</td></tr> }
-        </tbody></table></div> }
-    </section>
-
-    <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC · <a href="@Url.Action("Index")">Atualizar agora</a></p>
+    <section class="join-section" id="comece"><div class="container join-card"><div><p class="section-label">03 — Faça parte</p><h2>A liberdade começa<br />com uma escolha.</h2><p>Explore uma rede construída para colocar você no centro.</p></div><div class="join-actions"><a class="home-button primary" href="@Url.Action("Explorer", "Home")">Abrir explorador <span>→</span></a><a class="text-link" href="@Url.Action("Token", "Home")">Conhecer a economia do token</a></div></div></section>
 </main>

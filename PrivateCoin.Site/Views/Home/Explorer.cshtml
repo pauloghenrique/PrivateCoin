@@ -1,0 +1,27 @@
+@model PrivateCoin.Site.Models.HomeViewModel
+@using PrivateCoin.Site.Models
+@{
+    ViewBag.Title = "Explorador";
+}
+
+<main class="explorer container">
+    <header class="explorer-header">
+        <div><p class="eyebrow">Blockchain pública</p><h1>PONIX Explorer</h1><p class="lead">Visão transparente da emissão, movimentações e validações recebidas dos pares públicos.</p></div>
+        <div class="network-status @(Model.ConnectedPeers.Length > 0 ? "online" : "syncing")"><span class="status-dot"></span><strong>@(Model.ConnectedPeers.Length > 0 ? "Conectado à rede" : "Buscando pares")</strong><small>@Model.ConnectedPeers.Length conectado(s) · @Model.KnownPeerCount conhecido(s)</small></div>
+    </header>
+    <section class="stats-grid" aria-label="Resumo da blockchain">
+        <article class="stat-card"><span>Blocos emitidos</span><strong>@Model.Summary.IssuedBlockCount.ToString("N0")</strong><small>sem contar o bloco gênese</small></article>
+        <article class="stat-card"><span>Tokens iniciais emitidos</span><strong>@HomeViewModel.FormatTokens(Model.Summary.InitialDistributionTokenAmount)</strong><small>@Model.Summary.InitialDistributionBlocksIssued.ToString("N0") distribuições</small></article>
+        <article class="stat-card"><span>Total emitido</span><strong>@HomeViewModel.FormatTokens(Model.Summary.IssuedTokenAmount)</strong><small>distribuição + consenso</small></article>
+        <article class="stat-card"><span>Oferta total</span><strong>@HomeViewModel.FormatTokens(Model.Summary.MaximumTokenAmount)</strong><small>máximo programado</small></article>
+        <article class="stat-card accent"><span>Recompensa atual</span><strong>@HomeViewModel.FormatTokens(Model.Summary.CurrentReward)</strong><small>prevista para o próximo bloco</small></article>
+        <article class="stat-card"><span>Fila de validação</span><strong>@Model.ValidationQueue.Count.ToString("N0")</strong><small>transações pendentes</small></article>
+    </section>
+    <section class="panel" aria-labelledby="ledger-title"><div class="section-heading"><div><p class="eyebrow">Transparência</p><h2 id="ledger-title">Livro-caixa</h2></div><span>100 movimentações mais recentes</span></div>
+        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Bloco</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Valor</th><th>Taxa</th><th>Emissão</th></tr></thead><tbody>@foreach (var entry in Model.Ledger) { <tr><td><strong>#@entry.BlockHeight</strong></td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td><span class="entry-type">@HomeViewModel.EntryTypeName(entry.Type)</span></td><td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td><td>@HomeViewModel.FormatTokens(HomeViewModel.LedgerAmount(entry))</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td></tr> }</tbody></table></div> }
+    </section>
+    <section class="panel" aria-labelledby="queue-title"><div class="section-heading"><div><p class="eyebrow">Mempool</p><h2 id="queue-title">Fila de validação</h2></div><span>ordenada pela maior taxa</span></div>
+        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th><th>Taxa</th></tr></thead><tbody>@for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td><code>@HomeViewModel.ShortId(transaction.Id)&hellip;</code></td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td>@HomeViewModel.FormatTokens(transaction.Fee)</td></tr> }</tbody></table></div> }
+    </section>
+    <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC · <a href="@Url.Action("Explorer")">Atualizar agora</a></p>
+</main>
