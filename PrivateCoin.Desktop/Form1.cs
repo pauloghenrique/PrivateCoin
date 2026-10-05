@@ -664,8 +664,8 @@ namespace PrivateCoin.Desktop
                 ? "Validador inativo"
                 : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             validatorStatusLabel.ForeColor = lockedStake == 0
-                ? System.Drawing.Color.FromArgb(100, 116, 139)
-                : System.Drawing.Color.FromArgb(5, 150, 105);
+                ? UiTheme.Muted
+                : UiTheme.Success;
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
@@ -713,10 +713,10 @@ namespace PrivateCoin.Desktop
             ListViewItem item = validationListView.Items.Insert(0, DateTime.Now.ToString("HH:mm:ss", CultureInfo.CurrentCulture));
             item.SubItems.Add(accepted ? "APROVADO" : "ATENÇÃO");
             item.SubItems.Add(message);
-            item.ForeColor = accepted ? System.Drawing.Color.FromArgb(4, 120, 87) : System.Drawing.Color.FromArgb(190, 18, 60);
+            item.ForeColor = accepted ? UiTheme.PrimaryDark : UiTheme.Danger;
             item.BackColor = validationListView.Items.Count % 2 == 0
                 ? System.Drawing.Color.White
-                : System.Drawing.Color.FromArgb(248, 250, 252);
+                : UiTheme.SurfaceSoft;
         }
 
         private bool TryReadPort(string value, out int port)

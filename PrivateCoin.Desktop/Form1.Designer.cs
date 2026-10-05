@@ -70,22 +70,24 @@ namespace PrivateCoin.Desktop
             this.chainStatusLabel = CreateMutedLabel("");
             this.validationListView = new System.Windows.Forms.ListView();
 
-            var header = new System.Windows.Forms.Panel { BackColor = UiTheme.Primary };
-            header.SetBounds(0, 0, 1040, 88);
-            var brand = CreateLabel("POVIX", 22F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
-            brand.SetBounds(28, 15, 180, 36);
-            var subtitle = CreateLabel("Sua carteira privada, simples e segura", 9.5F, System.Drawing.FontStyle.Regular, System.Drawing.Color.FromArgb(220, 218, 255));
-            subtitle.SetBounds(30, 52, 360, 22);
-            var security = CreateLabel("CARTEIRA LOCAL  •  REDE P2P", 9F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            var header = new HeroPanel();
+            header.SetBounds(0, 0, 1040, 96);
+            var brandMark = new BrandMark();
+            brandMark.SetBounds(25, 25, 42, 42);
+            var brand = CreateLabel("POVIX", 19F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            brand.SetBounds(78, 20, 180, 33);
+            var subtitle = CreateLabel("PRIVACIDADE PARA PERTENCER", 7.5F, System.Drawing.FontStyle.Bold, UiTheme.Primary);
+            subtitle.SetBounds(80, 54, 260, 20);
+            var security = CreateLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8F, System.Drawing.FontStyle.Bold, UiTheme.PrimarySoft);
             security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            security.SetBounds(690, 31, 320, 24);
-            header.Controls.AddRange(new System.Windows.Forms.Control[] { brand, subtitle, security });
+            security.SetBounds(625, 35, 385, 24);
+            header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
 
             var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
             AddFieldLabel(walletCard, "CARTEIRA ATIVA", 24, 72, 220);
             walletComboBox.SetBounds(24, 94, 292, 28);
             balanceLabel.Font = new System.Drawing.Font("Segoe UI", 16F, System.Drawing.FontStyle.Bold);
-            balanceLabel.ForeColor = UiTheme.Primary;
+            balanceLabel.ForeColor = UiTheme.PrimaryDark;
             balanceLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             balanceLabel.SetBounds(326, 87, 286, 40);
             AddFieldLabel(walletCard, "CRIAR OU RECUPERAR", 24, 137, 220);
@@ -141,7 +143,7 @@ namespace PrivateCoin.Desktop
             validationListView.FullRowSelect = true;
             validationListView.GridLines = false;
             validationListView.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            validationListView.BackColor = System.Drawing.Color.FromArgb(248, 250, 252);
+            validationListView.BackColor = UiTheme.SurfaceSoft;
             validationListView.ForeColor = UiTheme.Ink;
             validationListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
             validationListView.Columns.Add("Hora", 80);
@@ -168,7 +170,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.BackColor = UiTheme.Background;
             this.ClientSize = new System.Drawing.Size(1040, 760);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { header, walletCard, networkCard, validatorCard, activityCard });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { walletCard, networkCard, validatorCard, activityCard, header });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -184,7 +186,9 @@ namespace PrivateCoin.Desktop
             titleLabel.SetBounds(20, 14, width - 40, 28);
             var subtitleLabel = CreateLabel(subtitle, 9F, System.Drawing.FontStyle.Regular, UiTheme.Muted);
             subtitleLabel.SetBounds(21, 42, width - 42, 22);
-            card.Controls.AddRange(new System.Windows.Forms.Control[] { titleLabel, subtitleLabel });
+            var accent = new System.Windows.Forms.Panel { BackColor = UiTheme.PrimaryDark };
+            accent.SetBounds(0, 0, 5, height);
+            card.Controls.AddRange(new System.Windows.Forms.Control[] { accent, titleLabel, subtitleLabel });
             return card;
         }
 
