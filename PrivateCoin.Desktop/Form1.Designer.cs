@@ -17,6 +17,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Button recoverWalletButton;
         private System.Windows.Forms.Label balanceLabel;
         private System.Windows.Forms.Button newAddressButton;
+        private System.Windows.Forms.Button copyAddressButton;
         private System.Windows.Forms.TextBox destinationTextBox;
         private System.Windows.Forms.TextBox amountTextBox;
         private System.Windows.Forms.ComboBox feeComboBox;
@@ -29,6 +30,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Label miningStatusLabel;
         private System.Windows.Forms.Label chainStatusLabel;
         private System.Windows.Forms.ListView validationListView;
+        private System.Windows.Forms.ToolTip toolTip;
 
         protected override void Dispose(bool disposing)
         {
@@ -38,100 +40,203 @@ namespace PrivateCoin.Desktop
 
         private void InitializeComponent()
         {
-            this.listenPortTextBox = new System.Windows.Forms.TextBox();
-            this.startNodeButton = new System.Windows.Forms.Button();
-            this.nodeStatusLabel = new System.Windows.Forms.Label();
-            this.peerHostTextBox = new System.Windows.Forms.TextBox();
-            this.peerPortTextBox = new System.Windows.Forms.TextBox();
-            this.connectButton = new System.Windows.Forms.Button();
-            this.showPeersButton = new System.Windows.Forms.Button();
-            this.receiveAddressTextBox = new System.Windows.Forms.TextBox();
-            this.walletComboBox = new System.Windows.Forms.ComboBox();
-            this.walletNameTextBox = new System.Windows.Forms.TextBox();
-            this.createWalletButton = new System.Windows.Forms.Button();
-            this.recoverWalletButton = new System.Windows.Forms.Button();
-            this.balanceLabel = new System.Windows.Forms.Label();
-            this.newAddressButton = new System.Windows.Forms.Button();
-            this.destinationTextBox = new System.Windows.Forms.TextBox();
-            this.amountTextBox = new System.Windows.Forms.TextBox();
-            this.feeComboBox = new System.Windows.Forms.ComboBox();
-            this.feePolicyLabel = new System.Windows.Forms.Label();
-            this.createTransactionButton = new System.Windows.Forms.Button();
-            this.stakeAmountTextBox = new System.Windows.Forms.TextBox();
-            this.activateValidatorButton = new System.Windows.Forms.Button();
-            this.unlockStakeButton = new System.Windows.Forms.Button();
-            this.validatorStatusLabel = new System.Windows.Forms.Label();
-            this.miningStatusLabel = new System.Windows.Forms.Label();
-            this.chainStatusLabel = new System.Windows.Forms.Label();
+            this.components = new System.ComponentModel.Container();
+            this.toolTip = new System.Windows.Forms.ToolTip(this.components);
+            this.listenPortTextBox = CreateTextBox("4778");
+            this.startNodeButton = CreateButton("Iniciar nó", true);
+            this.nodeStatusLabel = CreateValueLabel("●  Nó parado");
+            this.peerHostTextBox = CreateTextBox("127.0.0.1");
+            this.peerPortTextBox = CreateTextBox("4778");
+            this.connectButton = CreateButton("Conectar", true);
+            this.showPeersButton = CreateButton("Ver pares", false);
+            this.receiveAddressTextBox = CreateTextBox("");
+            this.walletComboBox = CreateComboBox();
+            this.walletNameTextBox = CreateTextBox("");
+            this.createWalletButton = CreateButton("Criar carteira", true);
+            this.recoverWalletButton = CreateButton("Recuperar", false);
+            this.balanceLabel = CreateValueLabel("0,00000000 POVIX");
+            this.newAddressButton = CreateButton("Novo endereço", false);
+            this.copyAddressButton = CreateButton("Copiar", false);
+            this.destinationTextBox = CreateTextBox("");
+            this.amountTextBox = CreateTextBox("1,00");
+            this.feeComboBox = CreateComboBox();
+            this.feePolicyLabel = CreateMutedLabel("Taxas calculadas conforme o tamanho da fila.");
+            this.createTransactionButton = CreateButton("Enviar POVIX", true);
+            this.stakeAmountTextBox = CreateTextBox("1,00");
+            this.activateValidatorButton = CreateButton("Bloquear e ativar", true);
+            this.unlockStakeButton = CreateButton("Desbloquear", false);
+            this.validatorStatusLabel = CreateMutedLabel("Validador inativo");
+            this.miningStatusLabel = CreateValueLabel("Aguardando uma transferência válida");
+            this.chainStatusLabel = CreateMutedLabel("");
             this.validationListView = new System.Windows.Forms.ListView();
-            this.SuspendLayout();
-            // node
-            AddLabel("NÓ P2P", 24, 20, 110, true);
-            AddLabel("Porta local", 24, 57, 80, false);
-            this.listenPortTextBox.SetBounds(108, 53, 72, 23); this.listenPortTextBox.Text = "4778";
-            this.startNodeButton.SetBounds(190, 51, 110, 28); this.startNodeButton.Text = "Iniciar nó"; this.startNodeButton.Click += new System.EventHandler(this.StartNodeButtonClick);
-            this.nodeStatusLabel.SetBounds(315, 56, 430, 20); this.nodeStatusLabel.Text = "Nó parado";
-            AddLabel("Conectar a", 24, 96, 80, false);
-            this.peerHostTextBox.SetBounds(108, 92, 160, 23); this.peerHostTextBox.Text = "127.0.0.1";
-            this.peerPortTextBox.SetBounds(278, 92, 72, 23); this.peerPortTextBox.Text = "4778";
-            this.connectButton.SetBounds(360, 90, 110, 28); this.connectButton.Text = "Conectar"; this.connectButton.Enabled = false; this.connectButton.Click += new System.EventHandler(this.ConnectButtonClick);
-            this.showPeersButton.SetBounds(480, 90, 110, 28); this.showPeersButton.Text = "Ver pares"; this.showPeersButton.Enabled = false; this.showPeersButton.Click += new System.EventHandler(this.ShowPeersButtonClick);
-            // wallet
-            AddLabel("CARTEIRAS", 24, 145, 220, true);
-            AddLabel("Carteira", 24, 182, 80, false);
-            this.walletComboBox.SetBounds(108, 178, 260, 24); this.walletComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList; this.walletComboBox.SelectedIndexChanged += new System.EventHandler(this.WalletComboBoxSelectedIndexChanged);
-            this.balanceLabel.SetBounds(390, 181, 356, 22); this.balanceLabel.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold); this.balanceLabel.TextAlign = System.Drawing.ContentAlignment.TopRight;
-            AddLabel("Nova", 24, 219, 80, false);
-            this.walletNameTextBox.SetBounds(108, 215, 260, 23);
-            this.createWalletButton.SetBounds(378, 213, 150, 28); this.createWalletButton.Text = "Criar carteira"; this.createWalletButton.Click += new System.EventHandler(this.CreateWalletButtonClick);
-            this.recoverWalletButton.SetBounds(538, 213, 208, 28); this.recoverWalletButton.Text = "Recuperar com frase"; this.recoverWalletButton.Click += new System.EventHandler(this.RecoverWalletButtonClick);
-            AddLabel("Receber em", 24, 256, 80, false);
-            this.receiveAddressTextBox.SetBounds(108, 252, 500, 23); this.receiveAddressTextBox.ReadOnly = true;
-            this.newAddressButton.SetBounds(618, 250, 128, 28); this.newAddressButton.Text = "Novo endereço"; this.newAddressButton.Click += new System.EventHandler(this.NewAddressButtonClick);
-            AddLabel("Destino", 24, 293, 80, false);
-            this.destinationTextBox.SetBounds(108, 289, 500, 23);
-            AddLabel("Valor", 24, 330, 80, false);
-            this.amountTextBox.SetBounds(108, 326, 120, 23); this.amountTextBox.Text = "1,00";
-            AddLabel("Taxa", 238, 330, 42, false);
-            this.feeComboBox.SetBounds(280, 326, 210, 24); this.feeComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.createTransactionButton.SetBounds(500, 324, 190, 28); this.createTransactionButton.Text = "Transferir e propagar"; this.createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
-            this.feePolicyLabel.SetBounds(108, 354, 638, 18); this.feePolicyLabel.ForeColor = System.Drawing.Color.DimGray; this.feePolicyLabel.Text = "Escolha uma das taxas calculadas conforme o tamanho da fila.";
-            // validator
-            AddLabel("VALIDADOR", 24, 374, 110, true);
-            AddLabel("Garantia", 24, 411, 80, false);
-            this.stakeAmountTextBox.SetBounds(108, 407, 120, 23); this.stakeAmountTextBox.Text = "1,00";
-            this.activateValidatorButton.SetBounds(238, 405, 170, 28); this.activateValidatorButton.Text = "Bloquear e ativar"; this.activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
-            this.unlockStakeButton.SetBounds(418, 405, 120, 28); this.unlockStakeButton.Text = "Desbloquear"; this.unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
-            this.validatorStatusLabel.SetBounds(548, 409, 198, 40); this.validatorStatusLabel.TextAlign = System.Drawing.ContentAlignment.TopRight;
-            // mining
-            AddLabel("MINERAÇÃO", 24, 460, 110, true);
-            this.miningStatusLabel.SetBounds(24, 499, 500, 20); this.miningStatusLabel.Text = "Aguardando uma transferência válida";
-            this.chainStatusLabel.SetBounds(24, 543, 722, 24); this.chainStatusLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
-            // validation log
-            AddLabel("VALIDAÇÕES DA REDE", 24, 584, 220, true);
-            this.validationListView.SetBounds(24, 619, 722, 190); this.validationListView.View = System.Windows.Forms.View.Details; this.validationListView.FullRowSelect = true; this.validationListView.GridLines = true;
-            this.validationListView.Columns.Add("Hora", 70); this.validationListView.Columns.Add("Resultado", 90); this.validationListView.Columns.Add("Validação", 535);
-            // form
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.WhiteSmoke;
-            this.ClientSize = new System.Drawing.Size(770, 834);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { this.listenPortTextBox, this.startNodeButton, this.nodeStatusLabel, this.peerHostTextBox, this.peerPortTextBox, this.connectButton, this.showPeersButton, this.walletComboBox, this.walletNameTextBox, this.createWalletButton, this.recoverWalletButton, this.balanceLabel, this.receiveAddressTextBox, this.newAddressButton, this.destinationTextBox, this.amountTextBox, this.feeComboBox, this.feePolicyLabel, this.createTransactionButton, this.stakeAmountTextBox, this.activateValidatorButton, this.unlockStakeButton, this.validatorStatusLabel, this.miningStatusLabel, this.chainStatusLabel, this.validationListView });
+
+            var header = new System.Windows.Forms.Panel { BackColor = UiTheme.Primary };
+            header.SetBounds(0, 0, 1040, 88);
+            var brand = CreateLabel("POVIX", 22F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            brand.SetBounds(28, 15, 180, 36);
+            var subtitle = CreateLabel("Sua carteira privada, simples e segura", 9.5F, System.Drawing.FontStyle.Regular, System.Drawing.Color.FromArgb(220, 218, 255));
+            subtitle.SetBounds(30, 52, 360, 22);
+            var security = CreateLabel("CARTEIRA LOCAL  •  REDE P2P", 9F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            security.SetBounds(690, 31, 320, 24);
+            header.Controls.AddRange(new System.Windows.Forms.Control[] { brand, subtitle, security });
+
+            var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
+            AddFieldLabel(walletCard, "CARTEIRA ATIVA", 24, 72, 220);
+            walletComboBox.SetBounds(24, 94, 292, 28);
+            balanceLabel.Font = new System.Drawing.Font("Segoe UI", 16F, System.Drawing.FontStyle.Bold);
+            balanceLabel.ForeColor = UiTheme.Primary;
+            balanceLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            balanceLabel.SetBounds(326, 87, 286, 40);
+            AddFieldLabel(walletCard, "CRIAR OU RECUPERAR", 24, 137, 220);
+            walletNameTextBox.SetBounds(24, 159, 292, 27);
+            walletNameTextBox.PlaceholderTextCompat("Nome da nova carteira");
+            createWalletButton.SetBounds(326, 157, 136, 31);
+            recoverWalletButton.SetBounds(472, 157, 140, 31);
+            AddFieldLabel(walletCard, "ENDEREÇO PARA RECEBER", 24, 201, 220);
+            receiveAddressTextBox.SetBounds(24, 223, 398, 27); receiveAddressTextBox.ReadOnly = true;
+            copyAddressButton.SetBounds(432, 221, 82, 31);
+            newAddressButton.SetBounds(524, 221, 88, 31);
+            AddFieldLabel(walletCard, "ENVIAR PARA", 24, 265, 120);
+            destinationTextBox.SetBounds(24, 287, 292, 27);
+            AddFieldLabel(walletCard, "VALOR", 326, 265, 70);
+            amountTextBox.SetBounds(326, 287, 102, 27);
+            AddFieldLabel(walletCard, "TAXA", 438, 265, 70);
+            feeComboBox.SetBounds(438, 287, 174, 28);
+            feePolicyLabel.SetBounds(24, 323, 398, 22);
+            createTransactionButton.SetBounds(438, 320, 174, 32);
+            walletCard.Controls.AddRange(new System.Windows.Forms.Control[] { walletComboBox, balanceLabel, walletNameTextBox,
+                createWalletButton, recoverWalletButton, receiveAddressTextBox, copyAddressButton, newAddressButton,
+                destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton });
+
+            var networkCard = CreateCard(684, 112, 332, 220, "Rede", "Conecte-se à rede descentralizada");
+            AddFieldLabel(networkCard, "PORTA LOCAL", 20, 70, 100);
+            listenPortTextBox.SetBounds(20, 92, 88, 27);
+            startNodeButton.SetBounds(118, 90, 104, 31);
+            showPeersButton.SetBounds(232, 90, 80, 31);
+            nodeStatusLabel.ForeColor = UiTheme.Success;
+            nodeStatusLabel.SetBounds(20, 127, 292, 24);
+            AddFieldLabel(networkCard, "CONECTAR MANUALMENTE", 20, 155, 180);
+            peerHostTextBox.SetBounds(20, 177, 134, 27);
+            peerPortTextBox.SetBounds(164, 177, 58, 27);
+            connectButton.SetBounds(232, 175, 80, 31);
+            networkCard.Controls.AddRange(new System.Windows.Forms.Control[] { listenPortTextBox, startNodeButton,
+                showPeersButton, nodeStatusLabel, peerHostTextBox, peerPortTextBox, connectButton });
+
+            var validatorCard = CreateCard(684, 348, 332, 122, "Validador", "Ajude a proteger a rede");
+            stakeAmountTextBox.SetBounds(20, 75, 72, 27);
+            activateValidatorButton.SetBounds(102, 73, 130, 31);
+            unlockStakeButton.SetBounds(242, 73, 70, 31);
+            validatorStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            validatorStatusLabel.SetBounds(151, 15, 161, 42);
+            validatorCard.Controls.AddRange(new System.Windows.Forms.Control[] { stakeAmountTextBox,
+                activateValidatorButton, unlockStakeButton, validatorStatusLabel });
+
+            var activityCard = CreateCard(24, 490, 992, 246, "Atividade da rede", "Acompanhe sincronização, mineração e validações");
+            miningStatusLabel.SetBounds(24, 67, 570, 24);
+            chainStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            chainStatusLabel.SetBounds(600, 67, 368, 24);
+            validationListView.SetBounds(24, 101, 944, 125);
+            validationListView.View = System.Windows.Forms.View.Details;
+            validationListView.FullRowSelect = true;
+            validationListView.GridLines = false;
+            validationListView.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            validationListView.BackColor = System.Drawing.Color.FromArgb(248, 250, 252);
+            validationListView.ForeColor = UiTheme.Ink;
+            validationListView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
+            validationListView.Columns.Add("Hora", 80);
+            validationListView.Columns.Add("Status", 100);
+            validationListView.Columns.Add("Detalhes da validação", 740);
+            activityCard.Controls.AddRange(new System.Windows.Forms.Control[] { miningStatusLabel, chainStatusLabel, validationListView });
+
+            startNodeButton.Click += new System.EventHandler(this.StartNodeButtonClick);
+            connectButton.Click += new System.EventHandler(this.ConnectButtonClick);
+            showPeersButton.Click += new System.EventHandler(this.ShowPeersButtonClick);
+            walletComboBox.SelectedIndexChanged += new System.EventHandler(this.WalletComboBoxSelectedIndexChanged);
+            createWalletButton.Click += new System.EventHandler(this.CreateWalletButtonClick);
+            recoverWalletButton.Click += new System.EventHandler(this.RecoverWalletButtonClick);
+            newAddressButton.Click += new System.EventHandler(this.NewAddressButtonClick);
+            copyAddressButton.Click += new System.EventHandler(this.CopyAddressButtonClick);
+            createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
+            activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
+            unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
+            connectButton.Enabled = false;
+            showPeersButton.Enabled = false;
+            toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
+            toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
+
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
+            this.BackColor = UiTheme.Background;
+            this.ClientSize = new System.Drawing.Size(1040, 760);
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { header, walletCard, networkCard, validatorCard, activityCard });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "POVIX — Carteiras, transferências e nó";
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            this.Text = "POVIX — Carteira privada";
         }
 
-        private void AddLabel(string text, int x, int y, int width, bool heading)
+        private static CardPanel CreateCard(int x, int y, int width, int height, string title, string subtitle)
         {
-            var label = new System.Windows.Forms.Label();
-            label.SetBounds(x, y, width, 22);
-            label.Text = text;
-            if (heading) label.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.Controls.Add(label);
+            var card = new CardPanel();
+            card.SetBounds(x, y, width, height);
+            var titleLabel = CreateLabel(title, 14F, System.Drawing.FontStyle.Bold, UiTheme.Ink);
+            titleLabel.SetBounds(20, 14, width - 40, 28);
+            var subtitleLabel = CreateLabel(subtitle, 9F, System.Drawing.FontStyle.Regular, UiTheme.Muted);
+            subtitleLabel.SetBounds(21, 42, width - 42, 22);
+            card.Controls.AddRange(new System.Windows.Forms.Control[] { titleLabel, subtitleLabel });
+            return card;
+        }
+
+        private static System.Windows.Forms.Label CreateLabel(string text, float size, System.Drawing.FontStyle style, System.Drawing.Color color)
+        {
+            return new System.Windows.Forms.Label { Text = text, AutoSize = false,
+                Font = new System.Drawing.Font("Segoe UI", size, style), ForeColor = color };
+        }
+
+        private static System.Windows.Forms.Label CreateValueLabel(string text)
+        {
+            return CreateLabel(text, 9.5F, System.Drawing.FontStyle.Bold, UiTheme.Ink);
+        }
+
+        private static System.Windows.Forms.Label CreateMutedLabel(string text)
+        {
+            return CreateLabel(text, 8.5F, System.Drawing.FontStyle.Regular, UiTheme.Muted);
+        }
+
+        private static void AddFieldLabel(System.Windows.Forms.Control parent, string text, int x, int y, int width)
+        {
+            var label = CreateLabel(text, 7.5F, System.Drawing.FontStyle.Bold, UiTheme.Muted);
+            label.SetBounds(x, y, width, 18);
+            parent.Controls.Add(label);
+        }
+
+        private static System.Windows.Forms.TextBox CreateTextBox(string text)
+        {
+            return new System.Windows.Forms.TextBox { Text = text, BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle,
+                Font = new System.Drawing.Font("Segoe UI", 9.5F), ForeColor = UiTheme.Ink, BackColor = System.Drawing.Color.White };
+        }
+
+        private static System.Windows.Forms.ComboBox CreateComboBox()
+        {
+            return new System.Windows.Forms.ComboBox { DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList,
+                FlatStyle = System.Windows.Forms.FlatStyle.Flat, Font = new System.Drawing.Font("Segoe UI", 9.5F),
+                ForeColor = UiTheme.Ink, BackColor = System.Drawing.Color.White };
+        }
+
+        private static AccentButton CreateButton(string text, bool primary)
+        {
+            return new AccentButton { Text = text, Primary = primary };
+        }
+    }
+
+    internal static class TextBoxCompatibilityExtensions
+    {
+        // .NET Framework 4.8 has no native placeholder property. The tooltip-like
+        // cue banner is intentionally omitted on older Windows versions.
+        internal static void PlaceholderTextCompat(this System.Windows.Forms.TextBox textBox, string placeholder)
+        {
+            textBox.AccessibleDescription = placeholder;
         }
     }
 }
