@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PrivateCoin.Core
 {
@@ -33,6 +35,12 @@ namespace PrivateCoin.Core
         }
 
         public ValidatorStake(string validatorId, string rewardAddress, long lockedAmount, IEnumerable<string> ownedAddresses)
+            : this(validatorId, rewardAddress, lockedAmount, ownedAddresses, null, null)
+        {
+        }
+
+        public ValidatorStake(string validatorId, string rewardAddress, long lockedAmount, IEnumerable<string> ownedAddresses,
+            string publicKey, Func<string, string> signVote)
         {
             if (string.IsNullOrWhiteSpace(validatorId)) throw new ArgumentException("A validator id is required.", nameof(validatorId));
             if (string.IsNullOrWhiteSpace(rewardAddress)) throw new ArgumentException("A reward address is required.", nameof(rewardAddress));
@@ -49,12 +57,39 @@ namespace PrivateCoin.Core
             RewardAddress = rewardAddress;
             LockedAmount = lockedAmount;
             OwnedAddresses = addresses;
+            PublicKey = publicKey;
+            SignVote = signVote;
         }
 
         public string ValidatorId { get; }
         public string RewardAddress { get; }
         public long LockedAmount { get; }
         public IReadOnlyCollection<string> OwnedAddresses { get; }
+        public string PublicKey { get; }
+        internal Func<string, string> SignVote { get; }
+
+        internal string CreateVote(string payload)
+        {
+            if (string.IsNullOrWhiteSpace(PublicKey) || SignVote == null)
+                throw new InvalidOperationException("The validator cannot produce a consensus vote signature.");
+            return SignVote(payload);
+        }
+
+        internal static bool VerifyVote(string publicKey, string payload, string signature)
+        {
+            if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(signature)) return false;
+            try
+            {
+                using (var rsa = new RSACryptoServiceProvider())
+                {
+                    rsa.PersistKeyInCsp = false;
+                    rsa.FromXmlString(publicKey);
+                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(signature));
+                }
+            }
+            catch (FormatException) { return false; }
+            catch (CryptographicException) { return false; }
+        }
     }
 
     /// <summary>The portion of a block reward assigned by the protocol.</summary>

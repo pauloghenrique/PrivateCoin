@@ -7,6 +7,13 @@ using System.Text;
 
 namespace PrivateCoin.Core
 {
+    public enum TransactionKind
+    {
+        Transfer = 0,
+        StakeLock = 1,
+        StakeUnlock = 2
+    }
+
     [DataContract]
     public sealed class BlockValidator
     {
@@ -15,6 +22,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 3)] public long LockedAmount { get; set; }
         [DataMember(Order = 4)] public bool IsCreator { get; set; }
         [DataMember(Order = 5, EmitDefaultValue = false)] public List<string> OwnedAddresses { get; set; }
+        [DataMember(Order = 6)] public string PublicKey { get; set; }
+        [DataMember(Order = 7)] public string VoteSignature { get; set; }
     }
 
     [DataContract]
@@ -42,6 +51,10 @@ namespace PrivateCoin.Core
         [DataMember(Order = 3)] public List<TransactionInput> Inputs { get; set; } = new List<TransactionInput>();
         [DataMember(Order = 4)] public List<TransactionOutput> Outputs { get; set; } = new List<TransactionOutput>();
         [DataMember(Order = 5, EmitDefaultValue = false)] public long Fee { get; set; }
+        [DataMember(Order = 6, EmitDefaultValue = false)] public TransactionKind Kind { get; set; }
+        [DataMember(Order = 7, EmitDefaultValue = false)] public string ValidatorPublicKey { get; set; }
+        [DataMember(Order = 8, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
+        [DataMember(Order = 9, EmitDefaultValue = false)] public List<string> ValidatorOwnedAddresses { get; set; }
 
         internal string SigningPayload()
         {
@@ -52,6 +65,10 @@ namespace PrivateCoin.Core
                 value.Append('|').Append(output.Amount.ToString(CultureInfo.InvariantCulture)).Append(':').Append(output.OneTimeAddress);
             // Preserve the identifiers of fee-free transactions created by older clients.
             if (Fee != 0) value.Append("|fee:").Append(Fee.ToString(CultureInfo.InvariantCulture));
+            if (Kind != TransactionKind.Transfer)
+                value.Append("|kind:").Append(((int)Kind).ToString(CultureInfo.InvariantCulture))
+                    .Append("|validator:").Append(ValidatorPublicKey).Append("|reward:").Append(ValidatorRewardAddress)
+                    .Append("|owned:").Append(string.Join(",", ValidatorOwnedAddresses ?? new List<string>()));
             return value.ToString();
         }
 
@@ -76,7 +93,8 @@ namespace PrivateCoin.Core
         {
             string validatorProof = Validators == null ? string.Empty : string.Join("|", Validators.Select(v =>
                 v.ValidatorId + ":" + v.RewardAddress + ":" + v.LockedAmount.ToString(CultureInfo.InvariantCulture) + ":" + v.IsCreator +
-                (v.OwnedAddresses == null ? string.Empty : ":addresses:" + string.Join(",", v.OwnedAddresses))));
+                (v.OwnedAddresses == null ? string.Empty : ":addresses:" + string.Join(",", v.OwnedAddresses)) +
+                ":key:" + v.PublicKey + ":vote:" + v.VoteSignature));
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
                 string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof));
@@ -88,6 +106,10 @@ namespace PrivateCoin.Core
         public string TransactionId { get; internal set; }
         public int OutputIndex { get; internal set; }
         public TransactionOutput Output { get; internal set; }
+        public TransactionKind TransactionKind { get; internal set; }
+        public string ValidatorPublicKey { get; internal set; }
+        public string ValidatorRewardAddress { get; internal set; }
+        public IReadOnlyCollection<string> ValidatorOwnedAddresses { get; internal set; }
     }
 
 }

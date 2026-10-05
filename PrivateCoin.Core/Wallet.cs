@@ -48,6 +48,16 @@ namespace PrivateCoin.Core
 
         public IReadOnlyCollection<string> OwnedOneTimeAddresses => keys.Keys.ToArray();
 
+        public ValidatorStake CreateValidatorStake(string rewardAddress, long lockedAmount)
+        {
+            RSACryptoServiceProvider key;
+            if (!keys.TryGetValue(rewardAddress, out key)) throw new InvalidOperationException("The reward address is not owned by this wallet.");
+            string publicKey = key.ToXmlString(false);
+            string validatorId = Crypto.Sha256(publicKey);
+            return new ValidatorStake(validatorId, rewardAddress, lockedAmount, new[] { rewardAddress }, publicKey, payload =>
+                Convert.ToBase64String(key.SignData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"))));
+        }
+
         /// <summary>Indicates whether this wallet sends or receives value in a transaction.</summary>
         public bool IsParticipant(Transaction transaction)
         {
@@ -113,6 +123,51 @@ namespace PrivateCoin.Core
         /// <summary>Creates a transaction and reserves the fee for its block creator.</summary>
         public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount, long fee)
         {
+            return CreateSignedTransaction(chain, pendingTransactions, destinationOneTimeAddress, amount, fee, TransactionKind.Transfer, null, null);
+        }
+
+        public Transaction CreateStakeLockTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string rewardAddress, long amount, long fee)
+        {
+            RSACryptoServiceProvider validatorKey;
+            if (!keys.TryGetValue(rewardAddress, out validatorKey)) throw new InvalidOperationException("The reward address is not owned by this wallet.");
+            string publicKey = validatorKey.ToXmlString(false);
+            return CreateSignedTransaction(chain, pendingTransactions, Crypto.Sha256(publicKey), amount, fee,
+                TransactionKind.StakeLock, publicKey, rewardAddress, keys.Keys.OrderBy(item => item, StringComparer.Ordinal).ToList());
+        }
+
+        public Transaction CreateStakeUnlockTransaction(Blockchain chain, string rewardAddress, long fee)
+        {
+            if (chain == null) throw new ArgumentNullException(nameof(chain));
+            RSACryptoServiceProvider key;
+            if (!keys.TryGetValue(rewardAddress, out key)) throw new InvalidOperationException("The validator address is not owned by this wallet.");
+            UnspentOutput collateral = chain.GetUnspentOutputs(new[] { rewardAddress })
+                .SingleOrDefault(item => item.TransactionKind == TransactionKind.StakeLock);
+            if (collateral == null) throw new InvalidOperationException("No globally locked collateral exists for this validator.");
+            if (fee < Blockchain.TransferFeeStep || fee >= collateral.Output.Amount)
+                throw new ArgumentOutOfRangeException(nameof(fee));
+
+            var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Kind = TransactionKind.StakeUnlock };
+            transaction.Inputs.Add(new TransactionInput { TransactionId = collateral.TransactionId, OutputIndex = collateral.OutputIndex });
+            transaction.Outputs.Add(new TransactionOutput { Amount = collateral.Output.Amount - fee, OneTimeAddress = CreateReceiveAddress() });
+            byte[] payload = Encoding.UTF8.GetBytes(transaction.SigningPayload());
+            transaction.Inputs[0].PublicKey = key.ToXmlString(false);
+            transaction.Inputs[0].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+            transaction.Id = transaction.CalculateId();
+            return transaction;
+        }
+
+        private Transaction CreateSignedTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string destinationOneTimeAddress, long amount, long fee, TransactionKind kind, string validatorPublicKey, string validatorRewardAddress)
+        {
+            return CreateSignedTransaction(chain, pendingTransactions, destinationOneTimeAddress, amount, fee, kind,
+                validatorPublicKey, validatorRewardAddress, null);
+        }
+
+        private Transaction CreateSignedTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string destinationOneTimeAddress, long amount, long fee, TransactionKind kind, string validatorPublicKey,
+            string validatorRewardAddress, List<string> validatorOwnedAddresses)
+        {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (string.IsNullOrWhiteSpace(destinationOneTimeAddress)) throw new ArgumentException("Destination is required.", nameof(destinationOneTimeAddress));
@@ -130,12 +185,18 @@ namespace PrivateCoin.Core
             }
             if (total < required) throw new InvalidOperationException("Insufficient funds.");
 
-            var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee };
+            var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Kind = kind,
+                ValidatorPublicKey = validatorPublicKey, ValidatorRewardAddress = validatorRewardAddress,
+                ValidatorOwnedAddresses = validatorOwnedAddresses };
             foreach (var item in selected)
                 transaction.Inputs.Add(new TransactionInput { TransactionId = item.TransactionId, OutputIndex = item.OutputIndex });
             transaction.Outputs.Add(new TransactionOutput { Amount = amount, OneTimeAddress = destinationOneTimeAddress });
             if (total > required)
                 transaction.Outputs.Add(new TransactionOutput { Amount = total - required, OneTimeAddress = CreateReceiveAddress() });
+            if (kind == TransactionKind.StakeLock)
+                transaction.ValidatorOwnedAddresses = selected.Select(item => item.Output.OneTimeAddress)
+                    .Concat(new[] { validatorRewardAddress }).Distinct(StringComparer.Ordinal)
+                    .OrderBy(item => item, StringComparer.Ordinal).ToList();
 
             byte[] payload = Encoding.UTF8.GetBytes(transaction.SigningPayload());
             for (int index = 0; index < selected.Count; index++)

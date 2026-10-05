@@ -576,14 +576,18 @@ namespace PrivateCoin.Desktop
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 if (selected.IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
                 long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
-                if (amount > balance) throw new InvalidOperationException("Saldo insuficiente para bloquear essa garantia.");
+                long fee = Blockchain.CalculateAutomaticFee(SnapshotPending().Length, 1);
+                if (checked(amount + fee) > balance) throw new InvalidOperationException("Saldo insuficiente para bloquear essa garantia e pagar a taxa.");
 
                 string rewardAddress = selected.Wallet.CreateReceiveAddress();
+                Transaction lockTransaction = selected.Wallet.CreateStakeLockTransaction(blockchain, SnapshotPending(), rewardAddress, amount, fee);
+                Block lockBlock = blockchain.AddBlock(new[] { lockTransaction });
                 selected.ActivateValidator(amount, rewardAddress);
                 SaveState();
+                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " POVIX bloqueados como garantia para validação e criação de blocos.", true);
+                    " POVIX bloqueados globalmente no bloco #" + lockBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
                 if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
@@ -610,11 +614,16 @@ namespace PrivateCoin.Desktop
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
 
                 decimal unlockedCoins = (decimal)selected.LockedStake / Blockchain.OneCoin;
+                long fee = Blockchain.CalculateAutomaticFee(SnapshotPending().Length, 1);
+                Transaction unlockTransaction = selected.Wallet.CreateStakeUnlockTransaction(blockchain, selected.ValidatorRewardAddress, fee);
+                Block unlockBlock = blockchain.AddBlock(new[] { unlockTransaction });
                 selected.DeactivateValidator();
                 SaveState();
+                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " POVIX desbloqueados. A carteira não participa mais da validação de blocos.", true);
+                    " POVIX desbloqueados globalmente no bloco #" + unlockBlock.Height.ToString(CultureInfo.InvariantCulture) +
+                    ". A carteira não participa mais da validação de blocos.", true);
             }
             catch (Exception error)
             {

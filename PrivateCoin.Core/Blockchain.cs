@@ -17,7 +17,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 1;
+        public const int ConsensusVersion = 2;
         public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
         public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
@@ -64,6 +64,9 @@ namespace PrivateCoin.Core
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
+                ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(BuildUtxo()), pending).ToArray();
+                if (!SameStakeSet(active, globallyEligible))
+                    throw new InvalidOperationException("The proposed validators do not match the globally locked collateral set.");
                 if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
@@ -95,6 +98,13 @@ namespace PrivateCoin.Core
                         OwnedAddresses = item.OwnedAddresses.OrderBy(address => address, StringComparer.Ordinal).ToList()
                     }).ToList()
                 };
+                string votePayload = CreateVotePayload(block);
+                foreach (BlockValidator record in block.Validators)
+                {
+                    ValidatorStake validator = active.Single(item => item.ValidatorId == record.ValidatorId);
+                    record.PublicKey = validator.PublicKey;
+                    record.VoteSignature = validator.CreateVote(votePayload);
+                }
                 Mine(block);
                 blocks.Add(block);
                 return block;
@@ -235,6 +245,7 @@ namespace PrivateCoin.Core
                 var reserved = new HashSet<string>(pending.SelectMany(transaction => transaction.Inputs)
                     .Select(input => Key(input.TransactionId, input.OutputIndex)), StringComparer.Ordinal);
                 return BuildUtxo().Values.Where(item => wanted.Contains(item.Output.OneTimeAddress) &&
+                    item.TransactionKind != TransactionKind.StakeLock &&
                     !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
             }
         }
@@ -248,6 +259,14 @@ namespace PrivateCoin.Core
         public long GetBalance(IEnumerable<string> addresses)
         {
             return GetUnspentOutputs(addresses).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
+        }
+
+        public IReadOnlyList<ValidatorStake> GetActiveValidators()
+        {
+            lock (sync)
+            {
+                return StakesFromUtxo(BuildUtxo());
+            }
         }
 
         /// <summary>
@@ -273,7 +292,9 @@ namespace PrivateCoin.Core
                     if (block.Height != i || block.Hash != block.CalculateHash() || !block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal)) return false;
                     if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
                 }
-                try { ValidateWholeChain(); return true; } catch (InvalidOperationException) { return false; }
+                try { ValidateWholeChain(); return true; }
+                catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
+                    error is CryptographicException || error is OverflowException) { return false; }
             }
         }
 
@@ -321,11 +342,25 @@ namespace PrivateCoin.Core
         {
             if (block.Transactions.Count == 0) throw new InvalidOperationException("A proof-of-stake block must contain its reward.");
             BlockValidator[] records = block.Validators.ToArray();
-            if (records.Length < 2 || records.Count(item => item.IsCreator) != 1)
+            if (records.Length < 2 || records.Any(item => item == null) || records.Count(item => item.IsCreator) != 1)
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
-                item.OwnedAddresses ?? new List<string> { item.RewardAddress })).ToArray();
+                item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
+            foreach (BlockValidator record in records)
+            {
+                if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
+                    record.ValidatorId != Crypto.Sha256(record.PublicKey) ||
+                    !ProofOfStake.VerifyVote(record.PublicKey, CreateVotePayload(block), record.VoteSignature))
+                    throw new InvalidOperationException("Invalid individual validator vote signature.");
+                bool collateralExists = utxo.Values.Any(item => item.TransactionKind == TransactionKind.StakeLock &&
+                    item.ValidatorPublicKey == record.PublicKey && item.ValidatorRewardAddress == record.RewardAddress &&
+                    item.Output.Amount == record.LockedAmount);
+                if (!collateralExists) throw new InvalidOperationException("The validator collateral is not globally locked on chain.");
+            }
             Transaction[] transfers = block.Transactions.Skip(1).ToArray();
+            ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(utxo), transfers).ToArray();
+            if (!SameStakeSet(stakes, globallyEligible))
+                throw new InvalidOperationException("The validator proof does not contain the global eligible collateral set.");
             if (ExcludeTransactionParticipants(stakes, transfers).Count() != stakes.Length)
                 throw new InvalidOperationException("A transfer sender or receiver cannot create or confirm its block.");
             ValidatorStake expectedCreator = ProofOfStake.SelectCreator(stakes, previousHash, block.Height);
@@ -363,6 +398,23 @@ namespace PrivateCoin.Core
             return validators.Where(validator => !validator.OwnedAddresses.Any(endpoints.Contains));
         }
 
+        private static ValidatorStake[] StakesFromUtxo(IDictionary<string, UnspentOutput> utxo)
+        {
+            return utxo.Values.Where(item => item.TransactionKind == TransactionKind.StakeLock)
+                .Select(item => new ValidatorStake(Crypto.Sha256(item.ValidatorPublicKey), item.ValidatorRewardAddress,
+                    item.Output.Amount, item.ValidatorOwnedAddresses, item.ValidatorPublicKey, null))
+                .OrderBy(item => item.ValidatorId, StringComparer.Ordinal).ToArray();
+        }
+
+        private static bool SameStakeSet(IEnumerable<ValidatorStake> left, IEnumerable<ValidatorStake> right)
+        {
+            string[] first = left.Select(item => item.ValidatorId + "|" + item.RewardAddress + "|" + item.LockedAmount)
+                .OrderBy(item => item, StringComparer.Ordinal).ToArray();
+            string[] second = right.Select(item => item.ValidatorId + "|" + item.RewardAddress + "|" + item.LockedAmount)
+                .OrderBy(item => item, StringComparer.Ordinal).ToArray();
+            return first.SequenceEqual(second, StringComparer.Ordinal);
+        }
+
         private static bool IsWalletCreationReward(Transaction transaction)
         {
             return transaction != null && transaction.Id == transaction.CalculateId() && transaction.Inputs.Count == 0 &&
@@ -394,6 +446,10 @@ namespace PrivateCoin.Core
                 string id = Key(input.TransactionId, input.OutputIndex);
                 UnspentOutput source;
                 if (!used.Add(id) || !utxo.TryGetValue(id, out source)) throw new InvalidOperationException("Missing or already spent input.");
+                if (source.TransactionKind == TransactionKind.StakeLock && transaction.Kind != TransactionKind.StakeUnlock)
+                    throw new InvalidOperationException("Locked validator collateral requires an unlock transaction.");
+                if (source.TransactionKind != TransactionKind.StakeLock && transaction.Kind == TransactionKind.StakeUnlock)
+                    throw new InvalidOperationException("An unlock transaction may only spend validator collateral.");
                 if (Crypto.Sha256(input.PublicKey) != source.Output.OneTimeAddress) throw new InvalidOperationException("Input does not own the output.");
                 using (var rsa = new RSACryptoServiceProvider())
                 {
@@ -410,6 +466,20 @@ namespace PrivateCoin.Core
                 outputTotal = checked(outputTotal + output.Amount);
             }
             if (transaction.Fee < 0) throw new InvalidOperationException("A transaction fee cannot be negative.");
+            if (transaction.Kind == TransactionKind.StakeLock)
+            {
+                if (string.IsNullOrWhiteSpace(transaction.ValidatorPublicKey) || string.IsNullOrWhiteSpace(transaction.ValidatorRewardAddress) ||
+                    transaction.ValidatorOwnedAddresses == null || transaction.ValidatorOwnedAddresses.Count == 0 ||
+                    !transaction.ValidatorOwnedAddresses.Contains(transaction.ValidatorRewardAddress, StringComparer.Ordinal) ||
+                    transaction.Outputs.Count == 0 || transaction.Outputs[0].OneTimeAddress != Crypto.Sha256(transaction.ValidatorPublicKey))
+                    throw new InvalidOperationException("Invalid validator collateral transaction.");
+                if (utxo.Values.Any(item => item.TransactionKind == TransactionKind.StakeLock &&
+                    item.ValidatorPublicKey == transaction.ValidatorPublicKey))
+                    throw new InvalidOperationException("This validator already has globally locked collateral.");
+            }
+            else if (!string.IsNullOrEmpty(transaction.ValidatorPublicKey) || !string.IsNullOrEmpty(transaction.ValidatorRewardAddress) ||
+                transaction.ValidatorOwnedAddresses != null)
+                throw new InvalidOperationException("Validator metadata is only valid on collateral transactions.");
             if (!allowMint && transaction.Fee < TransferFeeStep)
                 throw new InvalidOperationException("The minimum transaction fee is one atomic unit.");
             if (!allowMint && inputTotal != checked(outputTotal + transaction.Fee))
@@ -422,10 +492,22 @@ namespace PrivateCoin.Core
         private static void AddOutputs(Transaction transaction, IDictionary<string, UnspentOutput> utxo)
         {
             for (int i = 0; i < transaction.Outputs.Count; i++)
-                utxo.Add(Key(transaction.Id, i), new UnspentOutput { TransactionId = transaction.Id, OutputIndex = i, Output = transaction.Outputs[i] });
+                utxo.Add(Key(transaction.Id, i), new UnspentOutput { TransactionId = transaction.Id, OutputIndex = i, Output = transaction.Outputs[i],
+                    TransactionKind = i == 0 ? transaction.Kind : TransactionKind.Transfer,
+                    ValidatorPublicKey = i == 0 ? transaction.ValidatorPublicKey : null,
+                    ValidatorRewardAddress = i == 0 ? transaction.ValidatorRewardAddress : null,
+                    ValidatorOwnedAddresses = i == 0 ? transaction.ValidatorOwnedAddresses : null });
         }
 
         private static string Key(string transactionId, int outputIndex) => transactionId + ":" + outputIndex;
+
+        internal static string CreateVotePayload(Block block)
+        {
+            return block.Height.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + block.PreviousHash + "|" +
+                string.Join("|", block.Transactions.Select(item => item.Id)) + "|" +
+                string.Join("|", block.Validators.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item =>
+                    item.ValidatorId + ":" + item.RewardAddress + ":" + item.LockedAmount.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + item.IsCreator));
+        }
 
         private static Block CreateGenesisBlock()
         {
