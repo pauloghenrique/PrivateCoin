@@ -72,20 +72,54 @@ namespace PrivateCoin.Desktop
         public WalletStore()
         {
             string applicationDirectory = FindProjectDirectory();
-            string directory = CreateHiddenDataDirectory(applicationDirectory);
-            MoveLegacyDataFile(applicationDirectory, directory, "wallets.dat");
-            MoveLegacyDataFile(applicationDirectory, directory, "Blockchain.json");
-            MoveLegacyDataFile(applicationDirectory, directory, "recovery.dat");
+            string executableDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            string directory = FindExistingHiddenDataDirectory(applicationDirectory, executableDirectory);
+            if (directory == null)
+            {
+                directory = CreateHiddenDataDirectory(GetLocalDataDirectory());
+                MigrateDataFiles(applicationDirectory, directory);
+                if (!PathsEqual(applicationDirectory, executableDirectory))
+                    MigrateDataFiles(executableDirectory, directory);
+            }
 
             walletFilePath = Path.Combine(directory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
             recoveryFilePath = Path.Combine(directory, "recovery.dat");
-            string previousNetworkFilePath = Path.Combine(applicationDirectory, "blockchain.json");
+            string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
             if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
                 File.Move(previousNetworkFilePath, networkFilePath);
-            previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
-            if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
-                File.Move(previousNetworkFilePath, networkFilePath);
+        }
+
+        private static string GetLocalDataDirectory()
+        {
+            string localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localApplicationData))
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DataDirectoryName);
+            return Path.Combine(localApplicationData, "PrivateCoin", DataDirectoryName);
+        }
+
+        private static string FindExistingHiddenDataDirectory(params string[] applicationDirectories)
+        {
+            // Older releases intentionally stored the wallet in .privatecoin beside the
+            // executable (or in the project directory while developing). Prefer that
+            // folder when it contains a wallet: an empty/new LocalAppData file must never
+            // hide a real wallet that already exists in the documented legacy location.
+            string legacyDirectory = applicationDirectories
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => Path.Combine(item, DataDirectoryName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(item => File.Exists(Path.Combine(item, "wallets.dat")))
+                .OrderByDescending(item => File.GetLastWriteTimeUtc(Path.Combine(item, "wallets.dat")))
+                .FirstOrDefault();
+            if (legacyDirectory != null) return legacyDirectory;
+
+            string localDirectory = GetLocalDataDirectory();
+            if (File.Exists(Path.Combine(localDirectory, "wallets.dat")) ||
+                File.Exists(Path.Combine(localDirectory, "Blockchain.json")) ||
+                File.Exists(Path.Combine(localDirectory, "blockchain.json")))
+                return localDirectory;
+
+            return null;
         }
 
         public bool WalletExists => File.Exists(walletFilePath);
@@ -112,9 +146,8 @@ namespace PrivateCoin.Desktop
             return AppDomain.CurrentDomain.BaseDirectory;
         }
 
-        private static string CreateHiddenDataDirectory(string applicationDirectory)
+        private static string CreateHiddenDataDirectory(string directory)
         {
-            string directory = Path.Combine(applicationDirectory, DataDirectoryName);
             Directory.CreateDirectory(directory);
             var directoryInfo = new DirectoryInfo(directory);
             if ((directoryInfo.Attributes & FileAttributes.Hidden) == 0)
@@ -122,11 +155,38 @@ namespace PrivateCoin.Desktop
             return directory;
         }
 
+        private static void MigrateDataFiles(string applicationDirectory, string destinationDirectory)
+        {
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "wallets.dat");
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "Blockchain.json");
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "blockchain.json");
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "recovery.dat");
+
+            string hiddenDirectory = Path.Combine(applicationDirectory, DataDirectoryName);
+            if (PathsEqual(hiddenDirectory, destinationDirectory)) return;
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "wallets.dat");
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "Blockchain.json");
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "blockchain.json");
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "recovery.dat");
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            return string.Equals(Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void MoveLegacyDataFile(string sourceDirectory, string destinationDirectory, string fileName)
         {
             string source = Path.Combine(sourceDirectory, fileName);
             string destination = Path.Combine(destinationDirectory, fileName);
-            if (File.Exists(source) && !File.Exists(destination)) File.Move(source, destination);
+            if (!File.Exists(source) || File.Exists(destination)) return;
+
+            // Copy first because LocalApplicationData may be on another volume. Keeping
+            // the source until the copy succeeds also avoids losing wallet material.
+            File.Copy(source, destination, false);
+            File.Delete(source);
         }
 
         public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
