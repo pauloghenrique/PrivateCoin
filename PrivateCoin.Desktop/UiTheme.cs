@@ -16,6 +16,8 @@ namespace PrivateCoin.Desktop
         internal static readonly Color SurfaceSoft = Color.FromArgb(244, 248, 247); // --pale
         internal static readonly Color Forest = Color.FromArgb(7, 31, 25); // --forest
         internal static readonly Color ForestLight = Color.FromArgb(11, 45, 35); // --forest-2
+        internal static readonly Color HeaderText = Color.FromArgb(255, 255, 255);
+        internal static readonly Color HeaderTextSecondary = Color.FromArgb(210, 255, 237);
         internal static readonly Color Primary = Color.FromArgb(98, 228, 173); // --mint
         internal static readonly Color PrimarySoft = Color.FromArgb(185, 248, 220); // --mint-soft
         internal static readonly Color PrimaryDark = Color.FromArgb(8, 127, 106); // --green

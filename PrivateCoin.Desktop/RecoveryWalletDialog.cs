@@ -23,9 +23,9 @@ namespace PrivateCoin.Desktop
             var header = new HeroPanel();
             header.SetBounds(0, 0, 570, 78);
             var mark = new BrandMark(); mark.SetBounds(21, 18, 42, 42);
-            var title = new Label { Text = "Recupere sua carteira", Font = new Font("Segoe UI", 16F, FontStyle.Bold), ForeColor = Color.White, BackColor = Color.Transparent };
+            var title = new Label { Text = "Recupere sua carteira", Font = new Font("Segoe UI", 16F, FontStyle.Bold), ForeColor = UiTheme.HeaderText, BackColor = Color.Transparent, UseCompatibleTextRendering = true };
             title.SetBounds(75, 15, 470, 34);
-            var kicker = new Label { Text = "POVIX  •  SUAS CHAVES, SEUS RECURSOS", Font = new Font("Segoe UI", 7.5F, FontStyle.Bold), ForeColor = UiTheme.Primary, BackColor = Color.Transparent };
+            var kicker = new Label { Text = "POVIX  •  SUAS CHAVES, SEUS RECURSOS", Font = new Font("Segoe UI", 8F, FontStyle.Bold), ForeColor = UiTheme.HeaderTextSecondary, BackColor = Color.Transparent, UseCompatibleTextRendering = true };
             kicker.SetBounds(77, 48, 390, 18);
             header.Controls.AddRange(new Control[] { mark, title, kicker });
             var help = new Label { Text = "Use as 12 palavras na ordem original. Seus arquivos antigos não são necessários.", ForeColor = UiTheme.Muted, AutoSize = false };

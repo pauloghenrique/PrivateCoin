@@ -74,11 +74,11 @@ namespace PrivateCoin.Desktop
             header.SetBounds(0, 0, 1040, 96);
             var brandMark = new BrandMark();
             brandMark.SetBounds(25, 25, 42, 42);
-            var brand = CreateLabel("POVIX", 19F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            var brand = CreateHeaderLabel("POVIX", 19F, UiTheme.HeaderText);
             brand.SetBounds(78, 20, 180, 33);
-            var subtitle = CreateLabel("PRIVACIDADE PARA PERTENCER", 7.5F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            var subtitle = CreateHeaderLabel("PRIVACIDADE PARA PERTENCER", 8F, UiTheme.HeaderTextSecondary);
             subtitle.SetBounds(80, 54, 260, 20);
-            var security = CreateLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
+            var security = CreateHeaderLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8.5F, UiTheme.HeaderText);
             security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             security.SetBounds(625, 35, 385, 24);
             header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
@@ -187,6 +187,16 @@ namespace PrivateCoin.Desktop
         private static System.Windows.Forms.Label CreateValueLabel(string text)
         {
             return CreateLabel(text, 9.5F, System.Drawing.FontStyle.Bold, UiTheme.Ink);
+        }
+
+        private static System.Windows.Forms.Label CreateHeaderLabel(string text, float size, System.Drawing.Color color)
+        {
+            var label = CreateLabel(text, size, System.Drawing.FontStyle.Bold, color);
+            // Header labels must not inherit the form's light background. Making
+            // transparency explicit preserves the contrast over HeroPanel's gradient.
+            label.BackColor = System.Drawing.Color.Transparent;
+            label.UseCompatibleTextRendering = true;
+            return label;
         }
 
         private static System.Windows.Forms.Label CreateMutedLabel(string text)
