@@ -361,6 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/PrivateCoin.Desktop/.privatecoin/
 /PrivateCoin.Desktop/wallets.dat
 /PrivateCoin.Desktop/Blockchain.json
 /PrivateCoin.Desktop/recovery.dat
