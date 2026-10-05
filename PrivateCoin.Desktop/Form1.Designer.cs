@@ -76,9 +76,9 @@ namespace PrivateCoin.Desktop
             brandMark.SetBounds(25, 25, 42, 42);
             var brand = CreateLabel("POVIX", 19F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
             brand.SetBounds(78, 20, 180, 33);
-            var subtitle = CreateLabel("PRIVACIDADE PARA PERTENCER", 7.5F, System.Drawing.FontStyle.Bold, UiTheme.Primary);
+            var subtitle = CreateLabel("PRIVACIDADE PARA PERTENCER", 7.5F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
             subtitle.SetBounds(80, 54, 260, 20);
-            var security = CreateLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8F, System.Drawing.FontStyle.Bold, UiTheme.PrimarySoft);
+            var security = CreateLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8F, System.Drawing.FontStyle.Bold, System.Drawing.Color.White);
             security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             security.SetBounds(625, 35, 385, 24);
             header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
@@ -111,21 +111,7 @@ namespace PrivateCoin.Desktop
                 createWalletButton, recoverWalletButton, receiveAddressTextBox, copyAddressButton, newAddressButton,
                 destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton });
 
-            var networkCard = CreateCard(684, 112, 332, 220, "Rede", "Conecte-se à rede descentralizada");
-            AddFieldLabel(networkCard, "PORTA LOCAL", 20, 70, 100);
-            listenPortTextBox.SetBounds(20, 92, 88, 27);
-            startNodeButton.SetBounds(118, 90, 104, 31);
-            showPeersButton.SetBounds(232, 90, 80, 31);
-            nodeStatusLabel.ForeColor = UiTheme.Success;
-            nodeStatusLabel.SetBounds(20, 127, 292, 24);
-            AddFieldLabel(networkCard, "CONECTAR MANUALMENTE", 20, 155, 180);
-            peerHostTextBox.SetBounds(20, 177, 134, 27);
-            peerPortTextBox.SetBounds(164, 177, 58, 27);
-            connectButton.SetBounds(232, 175, 80, 31);
-            networkCard.Controls.AddRange(new System.Windows.Forms.Control[] { listenPortTextBox, startNodeButton,
-                showPeersButton, nodeStatusLabel, peerHostTextBox, peerPortTextBox, connectButton });
-
-            var validatorCard = CreateCard(684, 348, 332, 122, "Validador", "Ajude a proteger a rede");
+            var validatorCard = CreateCard(684, 112, 332, 122, "Validador", "Ajude a proteger a rede");
             stakeAmountTextBox.SetBounds(20, 75, 72, 27);
             activateValidatorButton.SetBounds(102, 73, 130, 31);
             unlockStakeButton.SetBounds(242, 73, 70, 31);
@@ -170,7 +156,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.BackColor = UiTheme.Background;
             this.ClientSize = new System.Drawing.Size(1040, 760);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { walletCard, networkCard, validatorCard, activityCard, header });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { walletCard, validatorCard, activityCard, header });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
