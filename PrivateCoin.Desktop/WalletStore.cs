@@ -72,12 +72,15 @@ namespace PrivateCoin.Desktop
         public WalletStore()
         {
             string applicationDirectory = FindProjectDirectory();
-            string directory = CreateHiddenDataDirectory(GetLocalDataDirectory());
-            MigrateDataFiles(applicationDirectory, directory);
-
             string executableDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            if (!PathsEqual(applicationDirectory, executableDirectory))
-                MigrateDataFiles(executableDirectory, directory);
+            string directory = FindExistingHiddenDataDirectory(applicationDirectory, executableDirectory);
+            if (directory == null)
+            {
+                directory = CreateHiddenDataDirectory(GetLocalDataDirectory());
+                MigrateDataFiles(applicationDirectory, directory);
+                if (!PathsEqual(applicationDirectory, executableDirectory))
+                    MigrateDataFiles(executableDirectory, directory);
+            }
 
             walletFilePath = Path.Combine(directory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
@@ -93,6 +96,28 @@ namespace PrivateCoin.Desktop
             if (string.IsNullOrWhiteSpace(localApplicationData))
                 return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DataDirectoryName);
             return Path.Combine(localApplicationData, "PrivateCoin", DataDirectoryName);
+        }
+
+        private static string FindExistingHiddenDataDirectory(params string[] applicationDirectories)
+        {
+            // Older releases intentionally stored the wallet in .privatecoin beside the
+            // executable (or in the project directory while developing). Prefer that
+            // folder when it contains a wallet: an empty/new LocalAppData file must never
+            // hide a real wallet that already exists in the documented legacy location.
+            foreach (string applicationDirectory in applicationDirectories.Where(item => !string.IsNullOrWhiteSpace(item)))
+            {
+                string hiddenDirectory = Path.Combine(applicationDirectory, DataDirectoryName);
+                if (File.Exists(Path.Combine(hiddenDirectory, "wallets.dat")))
+                    return hiddenDirectory;
+            }
+
+            string localDirectory = GetLocalDataDirectory();
+            if (File.Exists(Path.Combine(localDirectory, "wallets.dat")) ||
+                File.Exists(Path.Combine(localDirectory, "Blockchain.json")) ||
+                File.Exists(Path.Combine(localDirectory, "blockchain.json")))
+                return localDirectory;
+
+            return null;
         }
 
         public bool WalletExists => File.Exists(walletFilePath);
