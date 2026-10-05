@@ -75,21 +75,6 @@ namespace PrivateCoin.Core
             return SignVote(payload);
         }
 
-        internal static bool VerifyVote(string publicKey, string payload, string signature)
-        {
-            if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(signature)) return false;
-            try
-            {
-                using (var rsa = new RSACryptoServiceProvider())
-                {
-                    rsa.PersistKeyInCsp = false;
-                    rsa.FromXmlString(publicKey);
-                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(signature));
-                }
-            }
-            catch (FormatException) { return false; }
-            catch (CryptographicException) { return false; }
-        }
     }
 
     /// <summary>The portion of a block reward assigned by the protocol.</summary>
@@ -128,6 +113,22 @@ namespace PrivateCoin.Core
             new RewardPhase(3, 2 * BlocksPerPhase + 1, 3 * BlocksPerPhase, 150L * Blockchain.OneCoin / 100L),
             new RewardPhase(4, 3 * BlocksPerPhase + 1, RewardedBlockCount, Blockchain.OneCoin)
         };
+
+        internal static bool VerifyVote(string publicKey, string payload, string signature)
+        {
+            if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(signature)) return false;
+            try
+            {
+                using (var rsa = new RSACryptoServiceProvider())
+                {
+                    rsa.PersistKeyInCsp = false;
+                    rsa.FromXmlString(publicKey);
+                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(signature));
+                }
+            }
+            catch (FormatException) { return false; }
+            catch (CryptographicException) { return false; }
+        }
 
         /// <summary>Returns a copy of the complete, auditable emission schedule.</summary>
         public static IReadOnlyList<RewardPhase> RewardPhases => rewardPhases.ToArray();
