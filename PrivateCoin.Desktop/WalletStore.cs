@@ -33,7 +33,7 @@ namespace PrivateCoin.Desktop
         public bool IsDeterministic { get; private set; }
         public bool IsValidator => LockedStake > 0;
         public ValidatorStake Validator => IsValidator
-            ? new ValidatorStake(Name, ValidatorRewardAddress, LockedStake, Wallet.OwnedOneTimeAddresses)
+            ? Wallet.CreateValidatorStake(ValidatorRewardAddress, LockedStake)
             : null;
 
         public ValidatorStake ActivateValidator(long amount, string rewardAddress)
