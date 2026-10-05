@@ -229,6 +229,18 @@ namespace PrivateCoin.Desktop
             UpdateWalletSummary();
         }
 
+        private void CopyAddressButtonClick(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(receiveAddressTextBox.Text))
+            {
+                Log("Gere um endereço antes de copiá-lo.", false);
+                return;
+            }
+
+            Clipboard.SetText(receiveAddressTextBox.Text);
+            Log("Endereço de recebimento copiado para a área de transferência.", true);
+        }
+
         private void StartNodeButtonClick(object sender, EventArgs e)
         {
             int port;
@@ -647,10 +659,13 @@ namespace PrivateCoin.Desktop
             long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             long availableBalance = Math.Max(0, totalBalance - lockedStake);
-            balanceLabel.Text = "Saldo disponível: " + ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
+            balanceLabel.Text = ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             validatorStatusLabel.Text = lockedStake == 0
                 ? "Validador inativo"
                 : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
+            validatorStatusLabel.ForeColor = lockedStake == 0
+                ? System.Drawing.Color.FromArgb(100, 116, 139)
+                : System.Drawing.Color.FromArgb(5, 150, 105);
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
@@ -698,7 +713,10 @@ namespace PrivateCoin.Desktop
             ListViewItem item = validationListView.Items.Insert(0, DateTime.Now.ToString("HH:mm:ss", CultureInfo.CurrentCulture));
             item.SubItems.Add(accepted ? "APROVADO" : "ATENÇÃO");
             item.SubItems.Add(message);
-            item.ForeColor = accepted ? System.Drawing.Color.DarkGreen : System.Drawing.Color.DarkRed;
+            item.ForeColor = accepted ? System.Drawing.Color.FromArgb(4, 120, 87) : System.Drawing.Color.FromArgb(190, 18, 60);
+            item.BackColor = validationListView.Items.Count % 2 == 0
+                ? System.Drawing.Color.White
+                : System.Drawing.Color.FromArgb(248, 250, 252);
         }
 
         private bool TryReadPort(string value, out int port)

@@ -11,23 +11,29 @@ namespace PrivateCoin.Desktop
 
         private RecoveryWalletDialog()
         {
-            Text = "Recuperar carteira";
+            Text = "POVIX — Recuperar carteira";
             Font = new Font("Segoe UI", 9F);
-            ClientSize = new Size(550, 205);
+            BackColor = UiTheme.Background;
+            ClientSize = new Size(570, 260);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
 
-            var help = new Label { Text = "Informe as 12 palavras na ordem original. Nenhum arquivo de carteira é necessário.", AutoSize = false };
-            help.SetBounds(18, 16, 514, 38);
-            var nameLabel = new Label { Text = "Nome" }; nameLabel.SetBounds(18, 65, 75, 22);
-            nameTextBox.SetBounds(100, 62, 432, 23);
-            var phraseLabel = new Label { Text = "Frase" }; phraseLabel.SetBounds(18, 102, 75, 22);
-            phraseTextBox.SetBounds(100, 99, 432, 46); phraseTextBox.Multiline = true;
-            var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel }; cancel.SetBounds(342, 162, 90, 28);
-            var recover = new Button { Text = "Recuperar", DialogResult = DialogResult.OK }; recover.SetBounds(442, 162, 90, 28);
-            Controls.AddRange(new Control[] { help, nameLabel, nameTextBox, phraseLabel, phraseTextBox, cancel, recover });
+            var title = new Label { Text = "Recupere sua carteira", Font = new Font("Segoe UI", 16F, FontStyle.Bold), ForeColor = UiTheme.Ink };
+            title.SetBounds(22, 16, 526, 34);
+            var help = new Label { Text = "Use as 12 palavras na ordem original. Seus arquivos antigos não são necessários.", ForeColor = UiTheme.Muted, AutoSize = false };
+            help.SetBounds(24, 51, 522, 34);
+            var nameLabel = new Label { Text = "NOME DA CARTEIRA", Font = new Font("Segoe UI", 8F, FontStyle.Bold), ForeColor = UiTheme.Muted };
+            nameLabel.SetBounds(24, 92, 180, 18);
+            nameTextBox.SetBounds(24, 111, 522, 27);
+            nameTextBox.BorderStyle = BorderStyle.FixedSingle;
+            var phraseLabel = new Label { Text = "FRASE DE RECUPERAÇÃO", Font = new Font("Segoe UI", 8F, FontStyle.Bold), ForeColor = UiTheme.Muted };
+            phraseLabel.SetBounds(24, 149, 200, 18);
+            phraseTextBox.SetBounds(24, 168, 522, 42); phraseTextBox.Multiline = true; phraseTextBox.BorderStyle = BorderStyle.FixedSingle;
+            var cancel = new AccentButton { Text = "Cancelar", DialogResult = DialogResult.Cancel, Primary = false }; cancel.SetBounds(298, 222, 104, 31);
+            var recover = new AccentButton { Text = "Recuperar carteira", DialogResult = DialogResult.OK, Primary = true }; recover.SetBounds(412, 222, 134, 31);
+            Controls.AddRange(new Control[] { title, help, nameLabel, nameTextBox, phraseLabel, phraseTextBox, cancel, recover });
             AcceptButton = recover;
             CancelButton = cancel;
         }
