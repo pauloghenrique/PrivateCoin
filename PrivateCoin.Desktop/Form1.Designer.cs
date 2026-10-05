@@ -31,6 +31,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Label chainStatusLabel;
         private System.Windows.Forms.ListView validationListView;
         private System.Windows.Forms.ToolTip toolTip;
+        private System.Windows.Forms.Button updateButton;
 
         protected override void Dispose(bool disposing)
         {
@@ -69,6 +70,7 @@ namespace PrivateCoin.Desktop
             this.miningStatusLabel = CreateValueLabel("Aguardando uma transferência válida");
             this.chainStatusLabel = CreateMutedLabel("");
             this.validationListView = new System.Windows.Forms.ListView();
+            this.updateButton = CreateButton("Buscar atualização", false);
 
             var header = new HeroPanel();
             header.SetBounds(0, 0, 1040, 96);
@@ -80,8 +82,9 @@ namespace PrivateCoin.Desktop
             subtitle.SetBounds(80, 54, 260, 20);
             var security = CreateHeaderLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8.5F, UiTheme.HeaderText);
             security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            security.SetBounds(625, 35, 385, 24);
-            header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
+            security.SetBounds(430, 35, 385, 24);
+            updateButton.SetBounds(842, 31, 168, 32);
+            header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security, updateButton });
 
             var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
             AddFieldLabel(walletCard, "CARTEIRA ATIVA", 24, 72, 220);
@@ -148,6 +151,7 @@ namespace PrivateCoin.Desktop
             createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
             activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
             unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
+            updateButton.Click += new System.EventHandler(this.UpdateButtonClick);
             connectButton.Enabled = false;
             showPeersButton.Enabled = false;
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");

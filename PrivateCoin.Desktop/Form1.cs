@@ -21,6 +21,7 @@ namespace PrivateCoin.Desktop
         private PeerNode peerNode;
         private bool persistenceAvailable = true;
         private bool miningInProgress;
+        private bool updateCheckInProgress;
 
         private sealed class FeeChoice
         {
@@ -110,6 +111,64 @@ namespace PrivateCoin.Desktop
             bool autoStart;
             if (!bool.TryParse(ConfigurationManager.AppSettings["AutoStartNode"], out autoStart) || autoStart)
                 StartNodeButtonClick(this, EventArgs.Empty);
+            if (!string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["UpdateManifestUrl"]))
+                BeginInvoke(new Action(() => CheckForUpdatesAsync(false)));
+        }
+
+        private async void UpdateButtonClick(object sender, EventArgs e)
+        {
+            await CheckForUpdatesAsync(true);
+        }
+
+        private async Task CheckForUpdatesAsync(bool interactive)
+        {
+            if (updateCheckInProgress) return;
+            string manifestUrl = ConfigurationManager.AppSettings["UpdateManifestUrl"];
+            if (string.IsNullOrWhiteSpace(manifestUrl))
+            {
+                if (interactive) MessageBox.Show("O canal de atualização ainda não foi configurado neste build.", "Atualização do POVIX",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            updateCheckInProgress = true;
+            updateButton.Enabled = false;
+            updateButton.Text = "Verificando...";
+            try
+            {
+                var updater = new DesktopUpdater(manifestUrl.Trim());
+                UpdateManifest update = await updater.CheckAsync();
+                if (update == null)
+                {
+                    if (interactive) MessageBox.Show("Você já está usando a versão mais recente.", "Atualização do POVIX",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string notes = string.IsNullOrWhiteSpace(update.ReleaseNotes) ? string.Empty : "\n\n" + update.ReleaseNotes.Trim();
+                if (MessageBox.Show("A versão " + update.Version + " está disponível." + notes +
+                    "\n\nBaixar, instalar e reiniciar agora? Seus arquivos de carteira e blockchain serão preservados.",
+                    "Atualização do POVIX", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+
+                updateButton.Text = "Baixando 0%";
+                var progress = new Progress<int>(value => updateButton.Text = "Baixando " + value + "%");
+                string payload = await updater.DownloadAsync(update, progress);
+                SaveState();
+                DesktopUpdater.LaunchInstaller(payload);
+                Application.Exit();
+            }
+            catch (Exception error)
+            {
+                if (interactive) MessageBox.Show("Não foi possível verificar ou instalar a atualização.\n\n" + error.Message,
+                    "Atualização do POVIX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                else Log("A verificação automática de atualização falhou: " + error.Message, false);
+            }
+            finally
+            {
+                updateCheckInProgress = false;
+                updateButton.Enabled = true;
+                updateButton.Text = "Buscar atualização";
+            }
         }
 
         private async void CreateWalletButtonClick(object sender, EventArgs e)
