@@ -69,7 +69,19 @@ namespace PrivateCoin.Desktop
         private readonly Dictionary<string, StoredNetworkWallet> knownNetworkWallets =
             new Dictionary<string, StoredNetworkWallet>(StringComparer.Ordinal);
 
-        public WalletStore()
+        public WalletStore() : this(FindDataDirectory()) { }
+
+        internal WalletStore(string directory)
+        {
+            walletFilePath = Path.Combine(directory, "wallets.dat");
+            networkFilePath = Path.Combine(directory, "Blockchain.json");
+            recoveryFilePath = Path.Combine(directory, "recovery.dat");
+            string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
+            if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
+                File.Move(previousNetworkFilePath, networkFilePath);
+        }
+
+        private static string FindDataDirectory()
         {
             string applicationDirectory = FindProjectDirectory();
             string executableDirectory = AppDomain.CurrentDomain.BaseDirectory;
@@ -82,12 +94,7 @@ namespace PrivateCoin.Desktop
                     MigrateDataFiles(executableDirectory, directory);
             }
 
-            walletFilePath = Path.Combine(directory, "wallets.dat");
-            networkFilePath = Path.Combine(directory, "Blockchain.json");
-            recoveryFilePath = Path.Combine(directory, "recovery.dat");
-            string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
-            if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
-                File.Move(previousNetworkFilePath, networkFilePath);
+            return directory;
         }
 
         private static string GetLocalDataDirectory()
@@ -104,12 +111,14 @@ namespace PrivateCoin.Desktop
             // executable (or in the project directory while developing). Prefer that
             // folder when it contains a wallet: an empty/new LocalAppData file must never
             // hide a real wallet that already exists in the documented legacy location.
-            foreach (string applicationDirectory in applicationDirectories.Where(item => !string.IsNullOrWhiteSpace(item)))
-            {
-                string hiddenDirectory = Path.Combine(applicationDirectory, DataDirectoryName);
-                if (File.Exists(Path.Combine(hiddenDirectory, "wallets.dat")))
-                    return hiddenDirectory;
-            }
+            string legacyDirectory = applicationDirectories
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => Path.Combine(item, DataDirectoryName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(item => File.Exists(Path.Combine(item, "wallets.dat")))
+                .OrderByDescending(item => File.GetLastWriteTimeUtc(Path.Combine(item, "wallets.dat")))
+                .FirstOrDefault();
+            if (legacyDirectory != null) return legacyDirectory;
 
             string localDirectory = GetLocalDataDirectory();
             if (File.Exists(Path.Combine(localDirectory, "wallets.dat")) ||
@@ -207,14 +216,14 @@ namespace PrivateCoin.Desktop
                     Id = id,
                     Name = wallet.Name,
                     Addresses = addresses,
-                    TokenBalance = blockchain.GetBalance(addresses),
                     RecoveryId = recoveryId,
                     LockedStake = wallet.LockedStake,
                     ValidatorRewardAddress = wallet.ValidatorRewardAddress
                 };
             }
+            IReadOnlyDictionary<string, long> balances = blockchain.GetBalancesByAddress();
             foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
-                wallet.TokenBalance = blockchain.GetBalance(wallet.Addresses);
+                wallet.TokenBalance = GetWalletBalance(wallet.Addresses, balances);
 
             byte[] networkData = Serialize(new StoredNetworkData
             {
@@ -365,7 +374,7 @@ namespace PrivateCoin.Desktop
                 foreach (StoredWallet item in state.Wallets)
                 {
                     Wallet wallet = item.RecoveryVersion == 1
-                        ? Wallet.FromSeed(RecoveryPhraseGenerator.ToSeed(item.RecoveryPhrase), item.PrivateKeys.Count)
+                        ? Wallet.FromPrivateKeys(item.PrivateKeys, RecoveryPhraseGenerator.ToSeed(item.RecoveryPhrase))
                         : Wallet.FromPrivateKeys(item.PrivateKeys);
                     if (item.Addresses != null && item.Addresses.Count > 0 &&
                         !wallet.OwnedOneTimeAddresses.SequenceEqual(item.Addresses, StringComparer.Ordinal))
@@ -442,11 +451,12 @@ namespace PrivateCoin.Desktop
             blockchain.ValidatePendingTransactions(pendingTransactions);
             if (validatePublicBalances)
             {
+                IReadOnlyDictionary<string, long> balances = state.SchemaVersion >= 4
+                    ? blockchain.GetBalancesByAddress()
+                    : blockchain.GetBalancesByAddress(pendingTransactions);
                 foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
                 {
-                    long calculatedBalance = state.SchemaVersion >= 4
-                        ? blockchain.GetBalance(wallet.Addresses)
-                        : blockchain.GetBalance(wallet.Addresses, pendingTransactions);
+                    long calculatedBalance = GetWalletBalance(wallet.Addresses, balances);
                     if (wallet.TokenBalance != calculatedBalance)
                         throw new SerializationException("O saldo público de uma carteira não confere com a blockchain.");
                 }
@@ -455,6 +465,17 @@ namespace PrivateCoin.Desktop
                 pendingTransactions.Select(transaction => transaction.Id).Distinct(StringComparer.Ordinal).Count() != pendingTransactions.Count)
                 throw new SerializationException("A fila de transações pendentes da rede é inválida.");
             return blockchain;
+        }
+
+        private static long GetWalletBalance(IEnumerable<string> addresses, IReadOnlyDictionary<string, long> balances)
+        {
+            long total = 0;
+            foreach (string address in addresses.Distinct(StringComparer.Ordinal))
+            {
+                long balance;
+                if (balances.TryGetValue(address, out balance)) total = checked(total + balance);
+            }
+            return total;
         }
 
         /// <summary>Reads the original combined wallets.dat so existing installations can be migrated.</summary>
