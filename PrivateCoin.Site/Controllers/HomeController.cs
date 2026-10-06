@@ -1,3 +1,4 @@
+using System.Configuration;
 using System.Web.Mvc;
 
 namespace PrivateCoin.Site.Controllers
@@ -16,6 +17,14 @@ namespace PrivateCoin.Site.Controllers
 
         public ActionResult Token()
         {
+            return View();
+        }
+
+        public ActionResult Swap()
+        {
+            bool enabled;
+            ViewBag.SwapExecutionEnabled = bool.TryParse(
+                ConfigurationManager.AppSettings["PovixSwapExecutionEnabled"], out enabled) && enabled;
             return View();
         }
 

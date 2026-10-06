@@ -24,6 +24,7 @@
                     <li class="nav-item">@Html.ActionLink("Token", "Token", "Home", new { area = "" }, new { @class = "nav-link" })</li>
                     <li class="nav-item">@Html.ActionLink("White Paper", "WhitePaper", "Home", new { area = "" }, new { @class = "nav-link" })</li>
                     <li class="nav-item">@Html.ActionLink("Explorador", "Explorer", "Home", new { area = "" }, new { @class = "nav-link" })</li>
+                    <li class="nav-item">@Html.ActionLink("Swap", "Swap", "Home", new { area = "" }, new { @class = "nav-link" })</li>
                     <li class="nav-item nav-cta"><a class="nav-link" href="@Url.Action("Index", "Home")#comece">Entrar na rede <span aria-hidden="true">↗</span></a></li>
                 </ul>
             </div>
@@ -36,7 +37,7 @@
         <div class="container footer-grid">
             <div><a class="brand-lockup footer-brand" href="@Url.Action("Index", "Home")"><span class="brand-symbol" aria-hidden="true"><i></i></span><span>PONIX</span></a><p>Privacidade para pertencer.<br />Liberdade para movimentar.</p></div>
             <div><strong>Explore</strong><a href="@Url.Action("Index", "Home")#sobre">Sobre</a><a href="@Url.Action("Index", "Home")#tecnologia">Tecnologia</a><a href="@Url.Action("Token", "Home")">Token</a><a href="@Url.Action("WhitePaper", "Home")">White Paper</a></div>
-            <div><strong>Rede</strong><a href="@Url.Action("Explorer", "Home")">Explorador</a><a href="@Url.Action("Index", "Home")#comece">Participar</a></div>
+            <div><strong>Rede</strong><a href="@Url.Action("Explorer", "Home")">Explorador</a><a href="@Url.Action("Swap", "Home")">POVIX Swap</a><a href="@Url.Action("Index", "Home")#comece">Participar</a></div>
             <div class="footer-note"><span>PROTOCOLO ABERTO</span><p>&copy; @DateTime.Now.Year PONIX.<br />Construído pela comunidade.</p></div>
         </div>
     </footer>

@@ -1,0 +1,31 @@
+<main class="povix-swap" id="povix-swap" data-execution-enabled="false">
+  <div class="swap-topline"><a class="swap-brand" href="#povix-swap"><span class="swap-brand-icon" aria-hidden="true">P</span>POVIX <strong>SWAP</strong></a><span class="swap-preview">Prévia · envio desativado</span></div>
+  <div class="swap-layout">
+    <section class="swap-intro" aria-labelledby="swap-title">
+      <p class="swap-eyebrow"><span aria-hidden="true"></span> Sua carteira. Suas moedas.</p>
+      <h1 id="swap-title">Uma troca.<br>Novas <em>possibilidades.</em></h1>
+      <p class="swap-lead">Troque Bitcoin, Ethereum e BNB entre suas redes originais. Você escolhe o destino e confirma cada transação na sua carteira.</p>
+      <div class="swap-asset-line" aria-label="Moedas disponíveis"><span class="swap-coin btc" aria-hidden="true">₿</span><span class="swap-coin eth" aria-hidden="true">◇</span><span class="swap-coin bnb" aria-hidden="true">◆</span><span>BTC <i>↔</i> ETH <i>↔</i> BNB</span></div>
+      <div class="swap-principles"><article><span aria-hidden="true">↗</span><div><h2>Entre redes</h2><p>Moedas nativas, com liquidez do THORChain.</p></div></article><article><span aria-hidden="true">⌘</span><div><h2>Você confirma</h2><p>A assinatura acontece na sua carteira.</p></div></article><article><span aria-hidden="true">◎</span><div><h2>Clareza antes da troca</h2><p>Recebimento mínimo, taxas e estimativa de prazo.</p></div></article></div>
+      <p class="swap-povix-note">A moeda POVIX será integrada em uma próxima etapa. Esta prévia negocia apenas BTC, ETH e BNB.</p>
+    </section>
+    <section class="swap-card" aria-labelledby="swap-card-title">
+      <div class="swap-card-heading"><div><p class="swap-eyebrow">Troca entre redes</p><h2 id="swap-card-title">Fazer swap</h2></div><span class="swap-route-badge">THORChain</span></div>
+      <form id="swap-form" novalidate>
+        <div class="swap-token-box"><div class="swap-field-heading"><label for="swap-amount">Você envia</label><button type="button" id="swap-connect" class="swap-text-button">Conectar carteira ↗</button></div><div class="swap-token-input"><input id="swap-amount" name="amount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-describedby="swap-amount-help"><label class="swap-sr-only" for="swap-from">Moeda de origem</label><select id="swap-from" name="from"><option value="ETH">ETH</option><option value="BTC">BTC</option><option value="BNB">BNB</option></select></div><div class="swap-field-bottom"><span id="swap-from-network">Ethereum</span><span id="swap-wallet-status">Carteira desconectada</span></div></div>
+        <div class="swap-direction"><button type="button" id="swap-reverse" aria-label="Inverter moedas">⇅</button></div>
+        <div class="swap-token-box swap-receive-box"><div class="swap-field-heading"><label for="swap-received">Você recebe, aproximadamente</label></div><div class="swap-token-input"><output id="swap-received">—</output><label class="swap-sr-only" for="swap-to">Moeda de destino</label><select id="swap-to" name="to"><option value="BTC">BTC</option><option value="ETH">ETH</option><option value="BNB">BNB</option></select></div><div class="swap-field-bottom"><span id="swap-to-network">Bitcoin</span><span>Na sua carteira de destino</span></div></div>
+        <p id="swap-amount-help" class="swap-help">Até 8 casas decimais. Use ponto ou vírgula, sem separadores de milhar.</p>
+        <div class="swap-destination"><div class="swap-field-heading"><label for="swap-destination">Endereço de recebimento</label><button type="button" id="swap-connect-destination" class="swap-text-button">Usar minha carteira</button></div><input id="swap-destination" name="destination" type="text" placeholder="bc1…" autocomplete="off" spellcheck="false" aria-describedby="swap-destination-help"><p id="swap-destination-help" class="swap-help">Use um endereço Bitcoin mainnet SegWit ou Taproot (bc1…).</p></div>
+        <div class="swap-tolerance"><label for="swap-slippage">Variação máxima de preço</label><select id="swap-slippage" name="slippage"><option value="50">0,5%</option><option value="100" selected>1%</option><option value="300">3%</option></select></div>
+        <div id="swap-message" class="swap-message" role="status" aria-live="polite" hidden></div>
+        <button id="swap-quote" class="swap-primary" type="submit">Consultar cotação <span aria-hidden="true">→</span></button>
+        <div id="swap-details" class="swap-details" hidden><dl><div><dt>Mínimo a receber</dt><dd id="swap-minimum">—</dd></div><div><dt>Taxas incluídas na cotação</dt><dd id="swap-fees">—</dd></div><div><dt>Tempo estimado</dt><dd id="swap-time">—</dd></div><div><dt>Cotação válida por</dt><dd id="swap-expiry">—</dd></div></dl><p class="swap-help">A taxa de envio da rede de origem será apresentada pela carteira. A conclusão depende das confirmações das redes.</p><button id="swap-review" class="swap-primary" type="button" disabled>Envio desativado nesta prévia</button></div>
+      </form>
+      <div class="swap-card-footer"><span aria-hidden="true">◇</span> Cotações reais quando o serviço estiver disponível. Nenhum valor é simulado.</div>
+    </section>
+  </div>
+  <section class="swap-history" id="swap-history" hidden aria-labelledby="swap-history-title"><h2 id="swap-history-title">Acompanhar troca</h2><p id="swap-tx-status" role="status" aria-live="polite"></p><a id="swap-tx-link" target="_blank" rel="noopener noreferrer">Ver transação no explorador ↗</a></section>
+  <dialog id="swap-confirm" class="swap-confirm"><form method="dialog"><button class="swap-dialog-close" aria-label="Fechar revisão">×</button></form><h2>Revise sua troca</h2><p id="swap-confirm-summary"></p><dl><div><dt>Endereço de recebimento</dt><dd id="swap-confirm-destination"></dd></div><div><dt>Mínimo a receber</dt><dd id="swap-confirm-minimum"></dd></div></dl><p>A carteira abrirá para você conferir e assinar. As redes podem levar alguns minutos para concluir a troca.</p><button id="swap-sign" class="swap-primary" type="button">Confirmar na carteira</button></dialog>
+  <noscript><p class="swap-message">Ative o JavaScript para conectar a carteira e consultar cotações.</p></noscript>
+</main>

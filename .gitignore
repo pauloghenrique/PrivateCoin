@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# POVIX Swap browser dependencies and standalone build
+PrivateCoin.Site/Swap/node_modules/
+PrivateCoin.Site/Swap/dist/
+
 # User-specific files
 *.rsuser
 *.suo
