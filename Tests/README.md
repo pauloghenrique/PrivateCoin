@@ -19,3 +19,15 @@ mixed wallet persistence, confirmed/projected balances, schema 3 compatibility,
 and rejection of incorrect addresses, checksums, and public balances. It prints
 the load time for 41 wallets and an estimate of the previous RSA regeneration
 cost based on one wallet. Timing is diagnostic, not a pass/fail threshold.
+
+## Povix Swap
+
+Run the swap regression with Node.js, without installing dependencies:
+
+```sh
+node Tests/PovixSwapRegression.js
+```
+
+It covers decimal input, fees, minimum receipts, atomic rounding, invalid pairs,
+insufficient balances, confirmation and demo reset. The swap uses fixed example
+prices and never submits blockchain transactions.
