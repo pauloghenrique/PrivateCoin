@@ -1,9 +1,13 @@
-﻿<!DOCTYPE html>
+﻿@{
+    var networkName = ViewBag.NetworkName as string ?? "PONIX";
+    var brandName = networkName.ToUpperInvariant();
+}
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@ViewBag.Title | PONIX</title>
+    <title>@ViewBag.Title | @brandName</title>
     @Styles.Render("~/Content/css")
     @RenderSection("styles", required: false)
     @Scripts.Render("~/bundles/modernizr")
@@ -11,8 +15,8 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark site-nav">
         <div class="container nav-shell">
-            <a class="navbar-brand brand-lockup" href="@Url.Action("Index", "Home")" aria-label="PONIX — página inicial">
-                <span class="brand-symbol" aria-hidden="true"><i></i></span><span>PONIX</span>
+            <a class="navbar-brand brand-lockup" href="@Url.Action("Index", "Home")" aria-label="@networkName — página inicial">
+                <span class="brand-symbol" aria-hidden="true"><i></i></span><span>@brandName</span>
             </a>
             <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" title="Abrir navegação" aria-controls="site-navigation"
                     aria-expanded="false" aria-label="Toggle navigation">
@@ -36,10 +40,10 @@
     </div>
     <footer class="site-footer">
         <div class="container footer-grid">
-            <div><a class="brand-lockup footer-brand" href="@Url.Action("Index", "Home")"><span class="brand-symbol" aria-hidden="true"><i></i></span><span>PONIX</span></a><p>Privacidade para pertencer.<br />Liberdade para movimentar.</p></div>
+            <div><a class="brand-lockup footer-brand" href="@Url.Action("Index", "Home")"><span class="brand-symbol" aria-hidden="true"><i></i></span><span>@brandName</span></a><p>Privacidade para pertencer.<br />Liberdade para movimentar.</p></div>
             <div><strong>Explore</strong><a href="@Url.Action("Index", "Home")#sobre">Sobre</a><a href="@Url.Action("Index", "Home")#tecnologia">Tecnologia</a><a href="@Url.Action("Token", "Home")">Token</a><a href="@Url.Action("WhitePaper", "Home")">White Paper</a></div>
             <div><strong>Rede</strong><a href="@Url.Action("Explorer", "Home")">Explorador</a><a href="@Url.Action("Swap", "Home")">Povix Swap</a><a href="@Url.Action("Index", "Home")#comece">Participar</a></div>
-            <div class="footer-note"><span>PROTOCOLO ABERTO</span><p>&copy; @DateTime.Now.Year PONIX.<br />Construído pela comunidade.</p></div>
+            <div class="footer-note"><span>PROTOCOLO ABERTO</span><p>&copy; @DateTime.Now.Year @brandName.<br />Construído pela comunidade.</p></div>
         </div>
     </footer>
 

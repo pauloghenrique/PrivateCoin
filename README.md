@@ -39,11 +39,12 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 `/Home/Swap`), com acesso pelo menu e pelo rodapé. O simulador oferece pares entre
 POVIX, USDT, BNB, ETH e BTC, taxa de exemplo de 0,30%, tolerância de variação,
 revisão antes da confirmação, saldos fictícios e histórico das últimas dez
-simulações. Os valores usam oito casas decimais e unidades inteiras.
+simulações. A rede é identificada como **Povix**. Os valores usam oito casas
+decimais e unidades inteiras.
 
 As conversões são exemplos fixos, não cotações de mercado. A carteira demo vive
 somente na página e reinicia ao recarregar; não solicita chaves e não transmite
-transações. A rede atual não inclui um serviço de liquidez ou execução de swaps
+transações. A rede Povix não inclui um serviço de liquidez ou execução de swaps
 entre blockchains. Execute `node Tests/PovixSwapRegression.js` para validar o
 simulador.
 

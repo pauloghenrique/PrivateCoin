@@ -1,5 +1,6 @@
 @{
     ViewBag.Title = "Povix Swap";
+    ViewBag.NetworkName = "Povix";
 }
 
 @section styles {
@@ -14,7 +15,7 @@
                 <h1>Povix <em>Swap</em><span class="swap-demo-badge">Demonstração</span></h1>
                 <p>Explore suas próximas trocas. Tudo começa com uma simulação.</p>
             </div>
-            <a class="swap-explorer-link" href="@Url.Action("Explorer", "Home")">Explorador da rede <span aria-hidden="true">↗</span></a>
+            <a class="swap-explorer-link" href="@Url.Action("Explorer", "Home")">Explorador da rede Povix <span aria-hidden="true">↗</span></a>
         </header>
 
         <div class="swap-workspace">
@@ -49,6 +50,7 @@
                     <p id="swap-input-help" class="swap-input-help">Use vírgula ou ponto decimal, sem separador de milhar. Até 8 casas decimais.</p>
                     <div class="swap-slippage"><label for="swap-slippage">Tolerância de variação <span title="Usada para calcular o recebimento mínimo da simulação.">ⓘ</span></label><select id="swap-slippage"><option value="10">0,1%</option><option value="50" selected>0,5%</option><option value="100">1,0%</option><option value="300">3,0%</option></select></div>
                     <dl class="swap-quote-details">
+                        <div><dt>Rede</dt><dd>@ViewBag.NetworkName</dd></div>
                         <div><dt>Conversão de exemplo</dt><dd id="swap-rate">—</dd></div>
                         <div><dt>Taxa de exemplo <span>(0,30%)</span></dt><dd id="swap-fee">—</dd></div>
                         <div><dt>Recebimento mínimo</dt><dd id="swap-minimum">—</dd></div>
@@ -72,7 +74,7 @@
                 <section class="swap-about-card" aria-labelledby="swap-about-title">
                     <span class="swap-eyebrow">CONHEÇA O PROTOCOLO</span>
                     <h2 id="swap-about-title">O próximo passo<br />do ecossistema.</h2>
-                    <p>POVIX usa uma blockchain própria. Trocas reais com outras redes dependem de uma integração de liquidez e execução.</p>
+                    <p>POVIX é a moeda da rede Povix, que usa uma blockchain própria. Trocas reais com outras redes dependem de uma integração de liquidez e execução.</p>
                     <a href="@Url.Action("Token", "Home")">Entender o POVIX <span aria-hidden="true">↗</span></a>
                 </section>
             </aside>
