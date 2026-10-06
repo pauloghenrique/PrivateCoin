@@ -261,6 +261,31 @@ namespace PrivateCoin.Core
             return GetUnspentOutputs(addresses).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
+        /// <summary>Calculates all confirmed address balances from a single chain snapshot.</summary>
+        public IReadOnlyDictionary<string, long> GetBalancesByAddress()
+        {
+            return GetBalancesByAddress(Enumerable.Empty<Transaction>());
+        }
+
+        /// <summary>Calculates all address balances after applying the ordered pending transactions.</summary>
+        public IReadOnlyDictionary<string, long> GetBalancesByAddress(IEnumerable<Transaction> pendingTransactions)
+        {
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            lock (sync)
+            {
+                var utxo = BuildUtxo();
+                foreach (Transaction transaction in pendingTransactions) Apply(transaction, utxo, false);
+                var balances = new Dictionary<string, long>(StringComparer.Ordinal);
+                foreach (UnspentOutput item in utxo.Values)
+                {
+                    long balance;
+                    balances.TryGetValue(item.Output.OneTimeAddress, out balance);
+                    balances[item.Output.OneTimeAddress] = checked(balance + item.Output.Amount);
+                }
+                return balances;
+            }
+        }
+
         public IReadOnlyList<ValidatorStake> GetActiveValidators()
         {
             lock (sync)
