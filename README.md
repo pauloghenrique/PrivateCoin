@@ -33,6 +33,20 @@ O endereço retornado por `CreateReceiveAddress` deve ser entregue diretamente a
 
 Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, chame `Start()` e conecte aos pares conhecidos com `ConnectAsync`. Uma aplicação deve validar transações recebidas e adotar somente cadeias aceitas por `Blockchain.TryReplaceChain`.
 
+## Povix Swap no site
+
+`PrivateCoin.Site` inclui o **Povix Swap** em `/swap` (também disponível em
+`/Home/Swap`), com acesso pelo menu e pelo rodapé. O simulador oferece pares entre
+POVIX, USDT, BNB, ETH e BTC, taxa de exemplo de 0,30%, tolerância de variação,
+revisão antes da confirmação, saldos fictícios e histórico das últimas dez
+simulações. Os valores usam oito casas decimais e unidades inteiras.
+
+As conversões são exemplos fixos, não cotações de mercado. A carteira demo vive
+somente na página e reinicia ao recarregar; não solicita chaves e não transmite
+transações. A rede atual não inclui um serviço de liquidez ou execução de swaps
+entre blockchains. Execute `node Tests/PovixSwapRegression.js` para validar o
+simulador.
+
 ## Aplicação Desktop
 
 ### Atualizações do Desktop
