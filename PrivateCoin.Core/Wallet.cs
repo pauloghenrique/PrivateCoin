@@ -70,8 +70,19 @@ namespace PrivateCoin.Core
         /// <summary>Restores a wallet from RSA private keys previously exported by this class.</summary>
         public static Wallet FromPrivateKeys(IEnumerable<string> privateKeys)
         {
+            return FromPrivateKeys(privateKeys, null);
+        }
+
+        /// <summary>
+        /// Imports saved keys without regenerating them. The optional seed preserves
+        /// deterministic generation of subsequent addresses at the next unused index.
+        /// </summary>
+        public static Wallet FromPrivateKeys(IEnumerable<string> privateKeys, byte[] seed)
+        {
             if (privateKeys == null) throw new ArgumentNullException(nameof(privateKeys));
-            var wallet = new Wallet();
+            if (seed != null && seed.Length < 16)
+                throw new ArgumentException("A deterministic seed must contain at least 128 bits.", nameof(seed));
+            var wallet = seed == null ? new Wallet() : new Wallet(seed);
             try
             {
                 foreach (string privateKey in privateKeys)
@@ -79,14 +90,20 @@ namespace PrivateCoin.Core
                     if (string.IsNullOrWhiteSpace(privateKey)) throw new ArgumentException("A private key is invalid.", nameof(privateKeys));
                     var key = new RSACryptoServiceProvider(2048);
                     key.PersistKeyInCsp = false;
-                    key.FromXmlString(privateKey);
-                    string address = Crypto.Sha256(key.ToXmlString(false));
-                    if (wallet.keys.ContainsKey(address))
+                    try
+                    {
+                        key.FromXmlString(privateKey);
+                        string address = Crypto.Sha256(key.ToXmlString(false));
+                        if (wallet.keys.ContainsKey(address))
+                            throw new ArgumentException("A private key is duplicated.", nameof(privateKeys));
+                        wallet.keys.Add(address, key);
+                        wallet.nextKeyIndex++;
+                    }
+                    catch
                     {
                         key.Dispose();
-                        throw new ArgumentException("A private key is duplicated.", nameof(privateKeys));
+                        throw;
                     }
-                    wallet.keys.Add(address, key);
                 }
                 return wallet;
             }
