@@ -1,0 +1,21 @@
+POVIX / PrivateCoin.Desktop
+
+Requisitos: Windows 10 ou 11 (x86/x64) e .NET Framework 4.8 ou superior.
+O instalador verifica o .NET e instala a versão 4.8 se necessário.
+A edição Online requer internet apenas para baixar o .NET caso ele falte.
+A edição Offline inclui o instalador do .NET. O Windows pode precisar
+de reinicialização ou atualizações pendentes antes de usar o aplicativo.
+
+O aplicativo é instalado somente para o usuário atual, em:
+%LOCALAPPDATA%\Programs\PrivateCoin
+Use o atalho POVIX Desktop no Menu Iniciar ou na área de trabalho.
+
+As carteiras novas são armazenadas em:
+%LOCALAPPDATA%\PrivateCoin\.privatecoin
+Instalações antigas podem continuar usando a pasta .privatecoin ao lado
+do executável. A desinstalação preserva os dados das carteiras.
+Guarde sua frase de recuperação em local seguro. Não compartilhe wallets.dat.
+
+Feche o aplicativo antes de reinstalar ou desinstalar.
+Conectar à rede POVIX requer internet e um par inicial disponível.
+Uma porta pública ou regra de firewall não é necessária para conexões de saída.
