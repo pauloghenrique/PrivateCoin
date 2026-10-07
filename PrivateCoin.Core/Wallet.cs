@@ -226,6 +226,93 @@ namespace PrivateCoin.Core
             return transaction;
         }
 
+        /// <summary>Creates a fixed-supply token; supply is expressed in atomic token units.</summary>
+        public Transaction CreateTokenTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string name, string symbol, int decimals, long supply, string destinationOneTimeAddress, long fee)
+        {
+            var token = new TokenDefinition { Name = name, Symbol = symbol, Decimals = decimals, Supply = supply };
+            token.Validate();
+            var selected = SelectTokenFunding(chain, pendingTransactions, fee);
+            var tx = new Transaction { Kind = TransactionKind.TokenCreate, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Token = token };
+            AddTokenInputs(tx, selected);
+            token.Id = TokenDefinition.IdFor(tx.Inputs[0]);
+            tx.Outputs.Add(new TransactionOutput { Amount = supply, OneTimeAddress = RequireTokenDestination(destinationOneTimeAddress), AssetId = token.Id });
+            AddTokenFeeChange(tx, selected, fee);
+            SignTokenTransaction(tx, selected);
+            return tx;
+        }
+
+        public Transaction CreateTokenTransferTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string tokenId, string destinationOneTimeAddress, long amount, long fee)
+        {
+            if (chain == null) throw new ArgumentNullException(nameof(chain));
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            string destination = RequireTokenDestination(destinationOneTimeAddress);
+            var pending = pendingTransactions.ToList();
+            var funding = SelectTokenFunding(chain, pending, fee);
+            var tokens = new List<UnspentOutput>();
+            long total = 0;
+            foreach (var item in chain.GetSpendableTokenOutputs(keys.Keys, pending, tokenId))
+            {
+                tokens.Add(item); total = checked(total + item.Output.Amount);
+                if (total >= amount) break;
+            }
+            if (total < amount) throw new InvalidOperationException("Insufficient token balance.");
+            var tx = new Transaction { Kind = TransactionKind.TokenTransfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee };
+            var selected = funding.Concat(tokens).ToList();
+            AddTokenInputs(tx, selected);
+            tx.Outputs.Add(new TransactionOutput { Amount = amount, OneTimeAddress = destination, AssetId = tokenId });
+            if (total > amount) tx.Outputs.Add(new TransactionOutput { Amount = total - amount, OneTimeAddress = CreateReceiveAddress(), AssetId = tokenId });
+            AddTokenFeeChange(tx, funding, fee);
+            SignTokenTransaction(tx, selected);
+            return tx;
+        }
+
+        private List<UnspentOutput> SelectTokenFunding(Blockchain chain, IEnumerable<Transaction> pending, long fee)
+        {
+            if (chain == null) throw new ArgumentNullException(nameof(chain));
+            if (fee < Blockchain.TransferFeeStep) throw new ArgumentOutOfRangeException(nameof(fee));
+            var selected = new List<UnspentOutput>();
+            long total = 0;
+            foreach (var item in chain.GetSpendableOutputs(keys.Keys, pending))
+            {
+                selected.Add(item); total = checked(total + item.Output.Amount);
+                if (total >= fee) break;
+            }
+            if (total < fee) throw new InvalidOperationException("Insufficient POVIX for the transaction fee.");
+            return selected;
+        }
+
+        private static string RequireTokenDestination(string destination)
+        {
+            if (string.IsNullOrWhiteSpace(destination)) throw new ArgumentException("Destination is required.", nameof(destination));
+            return destination;
+        }
+
+        private static void AddTokenInputs(Transaction tx, IEnumerable<UnspentOutput> selected)
+        {
+            foreach (var item in selected) tx.Inputs.Add(new TransactionInput { TransactionId = item.TransactionId, OutputIndex = item.OutputIndex });
+        }
+
+        private void AddTokenFeeChange(Transaction tx, IEnumerable<UnspentOutput> funding, long fee)
+        {
+            long total = funding.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount));
+            if (total > fee) tx.Outputs.Add(new TransactionOutput { Amount = total - fee, OneTimeAddress = CreateReceiveAddress() });
+        }
+
+        private void SignTokenTransaction(Transaction tx, IList<UnspentOutput> selected)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(tx.SigningPayload());
+            for (int i = 0; i < selected.Count; i++)
+            {
+                var key = keys[selected[i].Output.OneTimeAddress];
+                tx.Inputs[i].PublicKey = key.ToXmlString(false);
+                tx.Inputs[i].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+            }
+            tx.Id = tx.CalculateId();
+        }
+
         public void Dispose()
         {
             foreach (var key in keys.Values) key.Dispose();

@@ -32,15 +32,21 @@ It covers decimal input, fees, minimum receipts, atomic rounding, invalid pairs,
 insufficient balances, confirmation and demo reset. The swap uses fixed example
 prices and never submits blockchain transactions.
 
-## Tesouraria de liquidez própria
+## Native fixed-supply tokens
+
+Compile the regression with Core sources (internal signing helpers are used to
+construct correctly signed invalid transactions):
 
 ```sh
-python3 Tests/PovixLiquidityRegression.py
+mkdir -p work/tokens
+mcs -out:work/tokens/TokenRegression.exe \
+  -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization \
+  -r:System.Net.Http -r:System.Xml.Linq \
+  PrivateCoin.Core/*.cs PrivateCoin.Site/Models/HomeViewModel.cs Tests/TokenRegression.cs
+mono work/tokens/TokenRegression.exe
 ```
 
-Usa apenas a biblioteca padrão do Python e fixtures locais. Confere reservas
-concorrentes, precisão, persistência, idempotência, proteção de códigos, alocação
-exclusiva de endereços, provas não reutilizáveis, depósito/pagamento verificados,
-contrato/rede incorretos, reorgs, confirmações, autenticação administrativa e
-origem HTTP. Não move fundos nem substitui validação integrada no IIS e nas
-redes de produção. Veja `PrivateCoin.Swap/README.md`.
+Covers fixed-supply creation, unique identifiers, signed metadata, validator
+rewards/fees, transfers/change, separate POVIX balances, pending reservations,
+double spends, inflation, asset substitution, ordinary-payment isolation,
+multiple assets, ledger queries and serialized chain replay/synchronization.
