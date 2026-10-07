@@ -1,0 +1,96 @@
+@model DEXPovix.Models.TokenDashboard
+@{
+    ViewBag.Title = "Tokens";
+}
+<header class="dex-header">
+    <div>
+        <p class="text-muted">BLOCKCHAIN PRIVATECOIN</p>
+        <h1>Tokens na DEXPovix</h1>
+        <p>Consulte os ativos da rede e crie um token de quantidade fixa.</p>
+    </div>
+    <div class="network-card">
+        <strong id="network-status">@Model.ConnectedPeers pares · bloco @Model.Height</strong>
+        <small>@Model.NetworkId</small>
+        <span>Taxa estimada: <strong id="fee-estimate">@Model.Fee POVIX</strong></span>
+    </div>
+</header>
+
+<div class="dex-grid">
+    <section class="dex-card" aria-labelledby="wallet-heading">
+        <h2 id="wallet-heading">Sua carteira</h2>
+        <p>As chaves ficam neste navegador. O backup é cifrado com sua senha.</p>
+        <div id="wallet-setup">
+            <label class="form-label" for="backup-password">Senha do backup</label>
+            <input class="form-control mb-3" type="password" id="backup-password" minlength="12" autocomplete="new-password" placeholder="Pelo menos 12 caracteres" />
+            <button class="btn btn-outline-primary mb-3" id="new-wallet" type="button">Criar carteira e baixar backup</button>
+            <label class="form-label" for="wallet-file">Abrir backup DEXPovix</label>
+            <input class="form-control mb-2" type="file" id="wallet-file" accept=".json,application/json" />
+            <button class="btn btn-outline-secondary" id="open-wallet" type="button">Abrir carteira</button>
+        </div>
+        <div id="wallet-connected" hidden>
+            <label class="form-label">Endereço para receber POVIX</label>
+            <p class="identifier address" id="receive-address"></p>
+            <p class="small">Envie POVIX pela carteira PrivateCoin e aguarde a confirmação. O saldo paga a taxa de criação.</p>
+            <button class="btn btn-outline-primary" type="button" id="backup-wallet">Baixar backup atualizado</button>
+        </div>
+        <p class="small text-muted mt-3">Guarde a senha e o arquivo. Fechar a página encerra a carteira aberta. Os backups DEXPovix têm formato próprio.</p>
+    </section>
+
+    <section class="dex-card" aria-labelledby="create-heading">
+        <h2 id="create-heading">Criar token</h2>
+        <form id="create-token" data-prepare-url="@Url.Action("Prepare", "Tokens")" data-submit-url="@Url.Action("Submit", "Tokens")" data-list-url="@Url.Action("List", "Tokens")">
+            @Html.AntiForgeryToken()
+            <label class="form-label" for="token-name">Nome</label>
+            <input class="form-control mb-3" id="token-name" name="Name" required maxlength="64" placeholder="Meu Token" />
+            <div class="row">
+                <div class="col-sm-6">
+                    <label class="form-label" for="token-symbol">Símbolo</label>
+                    <input class="form-control mb-3" id="token-symbol" name="Symbol" required maxlength="10" pattern="[A-Za-z]{1,10}" placeholder="MTK" />
+                </div>
+                <div class="col-sm-6">
+                    <label class="form-label" for="token-decimals">Casas decimais</label>
+                    <select class="form-select mb-3" id="token-decimals" name="Decimals">
+                        @for (int value = 0; value <= 8; value++) { <option value="@value">@value</option> }
+                    </select>
+                </div>
+            </div>
+            <label class="form-label" for="token-supply">Quantidade total</label>
+            <input class="form-control mb-3" id="token-supply" name="Supply" required inputmode="decimal" maxlength="40" placeholder="1000000" />
+            <p class="small text-muted">Use ponto ou vírgula para os decimais, sem separador de milhares. A quantidade não pode aumentar após a criação.</p>
+            <button class="btn btn-primary" type="submit" id="prepare-token" disabled>Preparar token</button>
+        </form>
+        <div id="prepared-token" class="mt-3" hidden>
+            <p class="identifier" id="preview"></p>
+            <button class="btn btn-success" id="submit-token" type="button" disabled>Backup salvo: assinar e enviar</button>
+            <button class="btn btn-outline-secondary" id="cancel-preparation" type="button">Cancelar</button>
+        </div>
+    </section>
+</div>
+<div id="operation-status" role="status" aria-live="polite" class="alert alert-info mt-3" hidden></div>
+
+<section class="dex-card mt-4" aria-labelledby="list-heading">
+    <div class="list-heading">
+        <h2 id="list-heading">Tokens da rede</h2>
+        <button class="btn btn-outline-secondary" id="refresh-tokens" type="button">Atualizar</button>
+    </div>
+    <p>Uma criação pendente passa a confirmada quando entra em um bloco aprovado pelos validadores. O ID distingue tokens com símbolos iguais.</p>
+    <p id="empty-tokens" hidden="@(Model.Tokens.Length != 0 ? "hidden" : null)">Nenhum token encontrado na cadeia sincronizada.</p>
+    <div class="table-responsive">
+        <table class="table align-middle">
+            <thead><tr><th>Nome</th><th>Símbolo</th><th>Quantidade</th><th>Decimais</th><th>ID do token</th><th>Status</th><th>Transação</th></tr></thead>
+            <tbody id="tokens-body">
+                @foreach (var token in Model.Tokens)
+                {
+                    <tr><td>@token.Name</td><td>@token.Symbol</td><td>@token.Supply</td><td>@token.Decimals</td>
+                        <td class="identifier">@token.Id</td><td>@token.Status @if (token.Height.HasValue) { <span>· bloco @token.Height</span> }</td>
+                        <td class="identifier">@token.TransactionId</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted">O protocolo atual oferece tokens nativos de quantidade fixa. Não há execução de código de contratos inteligentes.</p>
+</section>
+@section scripts {
+    <script src="@Url.Content("~/Scripts/dexpovix-wallet.js")"></script>
+    <script src="@Url.Content("~/Scripts/dexpovix-tokens.js")"></script>
+}

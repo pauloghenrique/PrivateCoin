@@ -366,3 +366,6 @@ FodyWeavers.xsd
 /PrivateCoin.Desktop/Blockchain.json
 /PrivateCoin.Desktop/recovery.dat
 /PrivateCoin.Desktop/peers.dat
+/DEXPovix/App_Data/DEXBlockchain.json*
+/DEXPovix/App_Data/peers.dat
+/work/

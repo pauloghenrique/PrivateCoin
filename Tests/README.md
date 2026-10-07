@@ -50,3 +50,34 @@ Covers fixed-supply creation, unique identifiers, signed metadata, validator
 rewards/fees, transfers/change, separate POVIX balances, pending reservations,
 double spends, inflation, asset substitution, ordinary-payment isolation,
 multiple assets, ledger queries and serialized chain replay/synchronization.
+
+## DEXPovix token creation
+
+With Node.js 18+ and Mono installed, run from the repository root:
+
+```sh
+mkdir -p work/dexpovix
+mcs -out:work/dexpovix/DEXPovixRegression.exe \
+  -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization \
+  -r:System.Net.Http -r:System.Xml.Linq -r:System.Web.Extensions \
+  PrivateCoin.Core/*.cs DEXPovix/Models/TokenModels.cs \
+  DEXPovix/Services/TokenNetworkService.cs Tests/DEXPovixRegression.cs
+node Tests/DEXPovixWalletRegression.js prepare work/dexpovix
+mono work/dexpovix/DEXPovixRegression.exe prepare work/dexpovix
+node Tests/DEXPovixWalletRegression.js sign work/dexpovix
+mono work/dexpovix/DEXPovixRegression.exe verify work/dexpovix
+```
+
+These disposable fixtures contain only newly generated test keys and public
+chain data. Tests cover encrypted backup restore/tampering/password errors,
+100-key export, exact Web Crypto/Core RSA XML and signatures, Unicode token
+names, quantities beyond JavaScript integer precision, private-key rejection,
+offline refusal, idempotent submission, competing funding drafts, P2P gossip,
+validator-confirmed listing, pending persistence and node restart. The final
+phase opens local TCP sockets and needs network permission in a sandbox.
+
+After restoring NuGet packages, build the web application:
+
+```sh
+msbuild DEXPovix/DEXPovix.csproj /p:Configuration=Release
+```

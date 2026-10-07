@@ -10,7 +10,7 @@ namespace DEXPovix.Controllers
     {
         public ActionResult Index()
         {
-            return View();
+            return RedirectToAction("Index", "Tokens");
         }
 
         public ActionResult About()

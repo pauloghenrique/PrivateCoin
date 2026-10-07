@@ -75,9 +75,12 @@ chain.ValidatePendingTransactions(new[] { transfer });
 long confirmedBalance = chain.GetTokenBalance(wallet.OwnedOneTimeAddresses, tokenId);
 ```
 
-O suporte inicial é pela API do Core; o Desktop ainda não tem formulário de
-criação, transferência ou exibição dos saldos de tokens. Nenhum token é criado
-apenas ao compilar o projeto ou executar os testes.
+A API do Core oferece criação e transferência. O projeto `DEXPovix` também
+oferece criação e listagem em `/Tokens`, sincronização P2P e assinatura local
+no navegador com backup cifrado. Consulte [DEXPovix/README.md](DEXPovix/README.md)
+para configurar os pares, financiar a taxa em POVIX e executar a aplicação.
+O Desktop ainda não tem formulário de criação, transferência ou exibição dos
+saldos de tokens. Nenhum token é criado apenas ao compilar ou executar testes.
 
 **Ativação:** clientes de consenso 3 aceitam as novas operações a partir do
 primeiro bloco após o gênese e preservam a validação de cadeias antigas sem
