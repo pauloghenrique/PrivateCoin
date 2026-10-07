@@ -1,0 +1,101 @@
+@{
+    ViewBag.Title = "Povix Swap";
+}
+
+@section styles {
+    <link rel="stylesheet" href="@Url.Content("~/Content/PovixSwap.css")" />
+}
+
+<main class="povix-swap" id="povix-swap">
+    <div class="container swap-shell">
+        <header class="swap-heading">
+            <div>
+                <p class="swap-eyebrow"><span aria-hidden="true">⇄</span> POVIX ECOSYSTEM</p>
+                <h1>Povix <em>Swap</em><span class="swap-demo-badge">Demonstração</span></h1>
+                <p>Explore suas próximas trocas. Tudo começa com uma simulação.</p>
+            </div>
+            <a class="swap-explorer-link" href="@Url.Action("Explorer", "Home")">Explorador da rede <span aria-hidden="true">↗</span></a>
+        </header>
+
+        <div class="swap-workspace">
+            <section class="swap-card" aria-labelledby="swap-form-title">
+                <div class="swap-card-heading">
+                    <div><p class="swap-eyebrow">UMA MOEDA. NOVAS POSSIBILIDADES.</p><h2 id="swap-form-title">Simular troca</h2></div>
+                    <span class="swap-card-mark" aria-hidden="true">⇄</span>
+                </div>
+                <p class="swap-demo-notice" id="swap-demo-notice">Valores de exemplo, sem cotação de mercado. Nenhuma moeda real é movimentada.</p>
+                <noscript><p class="swap-error">Ative o JavaScript para utilizar o simulador.</p></noscript>
+                <form id="swap-form" novalidate aria-describedby="swap-demo-notice">
+                    <fieldset class="swap-amount-box">
+                        <legend>Você paga</legend>
+                        <div class="swap-amount-row">
+                            <label class="swap-visually-hidden" for="swap-amount">Quantidade a trocar</label>
+                            <input id="swap-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="100" maxlength="24" aria-describedby="swap-input-help swap-error" />
+                            <label class="swap-visually-hidden" for="swap-from">Moeda de origem</label>
+                            <select id="swap-from"><option value="POVIX">POVIX</option><option value="USDT" selected>USDT</option><option value="BNB">BNB</option><option value="ETH">ETH</option><option value="BTC">BTC</option></select>
+                        </div>
+                        <div class="swap-amount-meta"><span id="swap-from-balance">Saldo demo: —</span><button id="swap-max" type="button" disabled>Máximo</button></div>
+                    </fieldset>
+                    <div class="swap-direction-row"><button id="swap-reverse" type="button" aria-label="Inverter moedas"><span aria-hidden="true">↓ ↑</span></button></div>
+                    <fieldset class="swap-amount-box swap-receive-box">
+                        <legend>Você recebe <span>(estimativa)</span></legend>
+                        <div class="swap-amount-row">
+                            <output id="swap-receive" for="swap-amount swap-from swap-to">—</output>
+                            <label class="swap-visually-hidden" for="swap-to">Moeda de destino</label>
+                            <select id="swap-to"><option value="POVIX" selected>POVIX</option><option value="USDT">USDT</option><option value="BNB">BNB</option><option value="ETH">ETH</option><option value="BTC">BTC</option></select>
+                        </div>
+                        <div class="swap-amount-meta"><span id="swap-to-balance">Saldo demo: —</span><span>Após taxa de exemplo</span></div>
+                    </fieldset>
+                    <p id="swap-input-help" class="swap-input-help">Use vírgula ou ponto decimal, sem separador de milhar. Até 8 casas decimais.</p>
+                    <div class="swap-slippage"><label for="swap-slippage">Tolerância de variação <span title="Usada para calcular o recebimento mínimo da simulação.">ⓘ</span></label><select id="swap-slippage"><option value="10">0,1%</option><option value="50" selected>0,5%</option><option value="100">1,0%</option><option value="300">3,0%</option></select></div>
+                    <dl class="swap-quote-details">
+                        <div><dt>Conversão de exemplo</dt><dd id="swap-rate">—</dd></div>
+                        <div><dt>Taxa de exemplo <span>(0,30%)</span></dt><dd id="swap-fee">—</dd></div>
+                        <div><dt>Recebimento mínimo</dt><dd id="swap-minimum">—</dd></div>
+                        <div><dt>Custo de rede</dt><dd>Sem transação na rede</dd></div>
+                    </dl>
+                    <p id="swap-error" class="swap-error" role="alert" hidden></p>
+                    <button class="swap-primary-button" id="swap-submit" type="submit" disabled>Ativar carteira demo</button>
+                    <p class="swap-session-note">Saldos fictícios somente nesta página. Recarregar reinicia a demonstração.</p>
+                </form>
+                <p id="swap-status" class="swap-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <aside class="swap-sidebar">
+                <section class="swap-wallet-card" aria-labelledby="swap-wallet-title">
+                    <div class="swap-side-heading"><span class="swap-small-icon" aria-hidden="true">◫</span><span class="swap-pill" id="swap-wallet-state">Não ativada</span></div>
+                    <h2 id="swap-wallet-title">Sua carteira demo</h2>
+                    <p>Experimente o fluxo com saldos fictícios. Sem conectar uma carteira ou informar chaves.</p>
+                    <dl class="swap-balances" id="swap-balances"><div><dt>POVIX</dt><dd>—</dd></div><div><dt>USDT</dt><dd>—</dd></div><div><dt>BNB</dt><dd>—</dd></div><div><dt>ETH</dt><dd>—</dd></div><div><dt>BTC</dt><dd>—</dd></div></dl>
+                    <button class="swap-secondary-button" id="swap-wallet" type="button" disabled>Ativar carteira demo</button>
+                </section>
+                <section class="swap-about-card" aria-labelledby="swap-about-title">
+                    <span class="swap-eyebrow">CONHEÇA O PROTOCOLO</span>
+                    <h2 id="swap-about-title">O próximo passo<br />do ecossistema.</h2>
+                    <p>POVIX usa uma blockchain própria. Trocas reais com outras redes dependem de uma integração de liquidez e execução.</p>
+                    <a href="@Url.Action("Token", "Home")">Entender o POVIX <span aria-hidden="true">↗</span></a>
+                </section>
+            </aside>
+        </div>
+
+        <section class="swap-activity" aria-labelledby="swap-activity-title">
+            <div class="swap-activity-heading"><div><p class="swap-eyebrow">NESTA SESSÃO</p><h2 id="swap-activity-title">Suas simulações</h2></div><span>Histórico local · últimas 10</span></div>
+            <p id="swap-history-empty" class="swap-empty">Sua primeira simulação aparece aqui. Ative a carteira demo para começar.</p>
+            <div class="swap-history-wrap" id="swap-history-wrap" hidden><table><caption class="swap-visually-hidden">Histórico de trocas simuladas nesta página</caption><thead><tr><th scope="col">Horário</th><th scope="col">Você pagou</th><th scope="col">Você recebeu</th><th scope="col">Estado</th></tr></thead><tbody id="swap-history"></tbody></table></div>
+        </section>
+
+        <section class="swap-how" aria-label="Como usar o Povix Swap"><article><span>01</span><div><h3>Escolha seu par</h3><p>Selecione as moedas e informe o valor.</p></div></article><article><span>02</span><div><h3>Confira os detalhes</h3><p>Revise a taxa e o recebimento mínimo.</p></div></article><article><span>03</span><div><h3>Teste a troca</h3><p>Veja os saldos demo e o histórico atualizarem.</p></div></article></section>
+    </div>
+
+    <dialog id="swap-review" class="swap-review" aria-labelledby="swap-review-title" aria-describedby="swap-review-description">
+        <div class="swap-review-heading"><h2 id="swap-review-title">Revisar simulação</h2><button id="swap-review-close" type="button" aria-label="Fechar revisão">×</button></div>
+        <p id="swap-review-description">Esta operação altera apenas os saldos fictícios desta página.</p>
+        <dl id="swap-review-details" class="swap-quote-details"></dl>
+        <div class="swap-review-actions"><button id="swap-review-cancel" class="swap-secondary-button" type="button">Voltar</button><button id="swap-confirm" class="swap-primary-button" type="button">Confirmar simulação</button></div>
+    </dialog>
+</main>
+
+@section scripts {
+    <script src="@Url.Content("~/Scripts/povix-swap-core.js")"></script>
+    <script src="@Url.Content("~/Scripts/povix-swap.js")"></script>
+}

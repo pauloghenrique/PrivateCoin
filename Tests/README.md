@@ -31,3 +31,16 @@ node Tests/PovixSwapRegression.js
 It covers decimal input, fees, minimum receipts, atomic rounding, invalid pairs,
 insufficient balances, confirmation and demo reset. The swap uses fixed example
 prices and never submits blockchain transactions.
+
+## Tesouraria de liquidez própria
+
+```sh
+python3 Tests/PovixLiquidityRegression.py
+```
+
+Usa apenas a biblioteca padrão do Python e fixtures locais. Confere reservas
+concorrentes, precisão, persistência, idempotência, proteção de códigos, alocação
+exclusiva de endereços, provas não reutilizáveis, depósito/pagamento verificados,
+contrato/rede incorretos, reorgs, confirmações, autenticação administrativa e
+origem HTTP. Não move fundos nem substitui validação integrada no IIS e nas
+redes de produção. Veja `PrivateCoin.Swap/README.md`.

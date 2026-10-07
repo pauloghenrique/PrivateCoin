@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -115,6 +115,7 @@
     <Compile Include="App_Start\FilterConfig.cs" />
     <Compile Include="App_Start\RouteConfig.cs" />
     <Compile Include="Controllers\HomeController.cs" />
+    <Compile Include="Controllers\SwapNetworkController.cs" />
     <Compile Include="Models\HomeViewModel.cs" />
     <Compile Include="Services\PublicNetworkService.cs" />
     <Compile Include="Global.asax.cs">
@@ -151,6 +152,7 @@
     <Content Include="Content\PovixSwap.css" />
     <Content Include="Scripts\povix-swap-core.js" />
     <Content Include="Scripts\povix-swap.js" />
+    <Content Include="Scripts\povix-swap-live.js" />
     <Content Include="Scripts\bootstrap.bundle.js" />
     <Content Include="Scripts\bootstrap.bundle.min.js" />
     <Content Include="Scripts\bootstrap.esm.js" />
@@ -185,6 +187,7 @@
     <Content Include="Views\Home\Explorer.cshtml" />
     <Content Include="Views\Home\Token.cshtml" />
     <Content Include="Views\Home\Swap.cshtml" />
+    <Content Include="Views\Home\SwapDemo.cshtml" />
     <Content Include="Views\Home\WhitePaper.cshtml" />
   </ItemGroup>
   <ItemGroup>
