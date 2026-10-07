@@ -11,7 +11,33 @@ namespace PrivateCoin.Core
     {
         Transfer = 0,
         StakeLock = 1,
-        StakeUnlock = 2
+        StakeUnlock = 2,
+        TokenCreate = 3,
+        TokenTransfer = 4
+    }
+
+    [DataContract]
+    public sealed class TokenDefinition
+    {
+        [DataMember(Order = 1)] public string Id { get; set; }
+        [DataMember(Order = 2)] public string Name { get; set; }
+        [DataMember(Order = 3)] public string Symbol { get; set; }
+        [DataMember(Order = 4)] public int Decimals { get; set; }
+        [DataMember(Order = 5)] public long Supply { get; set; }
+
+        internal static string IdFor(TransactionInput input)
+        {
+            return Crypto.Sha256("povix-token-v1|" + input.TransactionId + "|" +
+                input.OutputIndex.ToString(CultureInfo.InvariantCulture));
+        }
+
+        internal void Validate()
+        {
+            if (string.IsNullOrWhiteSpace(Name) || Name.Length > 64 || Name.Any(char.IsControl) ||
+                string.IsNullOrEmpty(Symbol) || Symbol.Length > 10 ||
+                Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > 8 || Supply <= 0)
+                throw new InvalidOperationException("Invalid token: name up to 64 characters, symbol A-Z up to 10, decimals 0-8, positive atomic supply required.");
+        }
     }
 
     [DataContract]
@@ -39,6 +65,7 @@ namespace PrivateCoin.Core
     public sealed class TransactionOutput
     {
         [DataMember(Order = 1)] public long Amount { get; set; }
+        [DataMember(Order = 3, EmitDefaultValue = false)] public string AssetId { get; set; }
         // A one-use hash. No persistent wallet address is ever written to the chain.
         [DataMember(Order = 2)] public string OneTimeAddress { get; set; }
     }
@@ -56,6 +83,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 8, EmitDefaultValue = false)] public string ValidatorRewardAddress { get; set; }
         [DataMember(Order = 9, EmitDefaultValue = false)] public List<string> ValidatorOwnedAddresses { get; set; }
 
+        [DataMember(Order = 10, EmitDefaultValue = false)] public TokenDefinition Token { get; set; }
+
         internal string SigningPayload()
         {
             var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture));
@@ -69,7 +98,24 @@ namespace PrivateCoin.Core
                 value.Append("|kind:").Append(((int)Kind).ToString(CultureInfo.InvariantCulture))
                     .Append("|validator:").Append(ValidatorPublicKey).Append("|reward:").Append(ValidatorRewardAddress)
                     .Append("|owned:").Append(string.Join(",", ValidatorOwnedAddresses ?? new List<string>()));
+            // Length-prefix new fields so delimiters in token names cannot change the encoding.
+            if (Token != null || Outputs.Any(output => output.AssetId != null))
+            {
+                value.Append("|assets-v1|");
+                foreach (var output in Outputs) AppendField(value, output.AssetId);
+                if (Token != null)
+                {
+                    AppendField(value, Token.Id); AppendField(value, Token.Name); AppendField(value, Token.Symbol);
+                    value.Append('|').Append(Token.Decimals.ToString(CultureInfo.InvariantCulture))
+                        .Append('|').Append(Token.Supply.ToString(CultureInfo.InvariantCulture));
+                }
+            }
             return value.ToString();
+        }
+
+        private static void AppendField(StringBuilder value, string field)
+        {
+            value.Append('|').Append(field == null ? -1 : field.Length).Append(':').Append(field);
         }
 
         internal string CalculateId()

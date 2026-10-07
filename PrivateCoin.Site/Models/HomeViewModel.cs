@@ -31,6 +31,9 @@ namespace PrivateCoin.Site.Models
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
 
+            // Token quantities and native change are not POVIX payments.
+            if (entry.Type == LedgerEntryType.TokenCreation || entry.Type == LedgerEntryType.TokenTransfer) return 0;
+
             // Wallet transfers always place the payment first and an optional
             // refund to the sender second. The sum of all outputs therefore
             // includes the refund and is not the amount that was transferred.
@@ -46,6 +49,8 @@ namespace PrivateCoin.Site.Models
             {
                 case LedgerEntryType.InitialDistribution: return "Emissão inicial";
                 case LedgerEntryType.ValidatorReward: return "Recompensa";
+                case LedgerEntryType.TokenCreation: return "Criação de token";
+                case LedgerEntryType.TokenTransfer: return "Transferência de token";
                 default: return "Transferência";
             }
         }

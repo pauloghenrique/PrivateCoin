@@ -31,3 +31,22 @@ node Tests/PovixSwapRegression.js
 It covers decimal input, fees, minimum receipts, atomic rounding, invalid pairs,
 insufficient balances, confirmation and demo reset. The swap uses fixed example
 prices and never submits blockchain transactions.
+
+## Native fixed-supply tokens
+
+Compile the regression with Core sources (internal signing helpers are used to
+construct correctly signed invalid transactions):
+
+```sh
+mkdir -p work/tokens
+mcs -out:work/tokens/TokenRegression.exe \
+  -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization \
+  -r:System.Net.Http -r:System.Xml.Linq \
+  PrivateCoin.Core/*.cs PrivateCoin.Site/Models/HomeViewModel.cs Tests/TokenRegression.cs
+mono work/tokens/TokenRegression.exe
+```
+
+Covers fixed-supply creation, unique identifiers, signed metadata, validator
+rewards/fees, transfers/change, separate POVIX balances, pending reservations,
+double spends, inflation, asset substitution, ordinary-payment isolation,
+multiple assets, ledger queries and serialized chain replay/synchronization.

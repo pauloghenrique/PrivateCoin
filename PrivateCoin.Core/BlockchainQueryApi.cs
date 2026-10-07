@@ -29,7 +29,7 @@ namespace PrivateCoin.Core
         public long MaximumTokenAmount => checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply);
     }
 
-    public enum LedgerEntryType { InitialDistribution, ValidatorReward, Transfer }
+    public enum LedgerEntryType { InitialDistribution, ValidatorReward, Transfer, TokenCreation, TokenTransfer }
 
     /// <summary>A transaction entry in the public cash book.</summary>
     public sealed class LedgerEntry
@@ -46,7 +46,7 @@ namespace PrivateCoin.Core
             OutputAmount = outputAmount;
             Fee = transaction.Fee;
             IssuedAmount = issuedAmount;
-            Outputs = transaction.Outputs.Select(output => new LedgerOutput(output.OneTimeAddress, output.Amount)).ToArray();
+            Outputs = transaction.Outputs.Select(output => new LedgerOutput(output.OneTimeAddress, output.Amount, output.AssetId)).ToArray();
         }
 
         public int BlockHeight { get; }
@@ -63,14 +63,16 @@ namespace PrivateCoin.Core
 
     public sealed class LedgerOutput
     {
-        internal LedgerOutput(string oneTimeAddress, long amount)
+        internal LedgerOutput(string oneTimeAddress, long amount, string assetId)
         {
             OneTimeAddress = oneTimeAddress;
             Amount = amount;
+            AssetId = assetId;
         }
 
         public string OneTimeAddress { get; }
         public long Amount { get; }
+        public string AssetId { get; }
     }
 
     /// <summary>Read-only, snapshot-based queries for explorers and wallets.</summary>
@@ -114,7 +116,7 @@ namespace PrivateCoin.Core
                             throw new InvalidOperationException("The blockchain cash book contains an unknown input.");
                         return checked(total + amount);
                     });
-                    long outputAmount = transaction.Outputs.Aggregate(0L,
+                    long outputAmount = transaction.Outputs.Where(output => output.AssetId == null).Aggregate(0L,
                         (total, output) => checked(total + output.Amount));
                     LedgerEntryType type = LedgerEntryType.Transfer;
                     long issuedAmount = 0;
@@ -128,10 +130,12 @@ namespace PrivateCoin.Core
                         type = LedgerEntryType.InitialDistribution;
                         issuedAmount = Blockchain.WalletCreationReward;
                     }
+                    if (transaction.Kind == TransactionKind.TokenCreate) type = LedgerEntryType.TokenCreation;
+                    else if (transaction.Kind == TransactionKind.TokenTransfer) type = LedgerEntryType.TokenTransfer;
                     entries.Add(new LedgerEntry(block.Height, block.Hash, transaction, type,
                         inputAmount, outputAmount, issuedAmount));
                     for (int outputIndex = 0; outputIndex < transaction.Outputs.Count; outputIndex++)
-                        knownOutputs.Add(OutputKey(transaction.Id, outputIndex), transaction.Outputs[outputIndex].Amount);
+                        knownOutputs.Add(OutputKey(transaction.Id, outputIndex), transaction.Outputs[outputIndex].AssetId == null ? transaction.Outputs[outputIndex].Amount : 0);
                 }
             }
             return entries.AsEnumerable().Reverse().Skip(offset).Take(limit).ToArray();

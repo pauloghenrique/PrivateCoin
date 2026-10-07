@@ -17,7 +17,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 2;
+        public const int ConsensusVersion = 3;
         public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
         public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
@@ -245,7 +245,7 @@ namespace PrivateCoin.Core
                 var reserved = new HashSet<string>(pending.SelectMany(transaction => transaction.Inputs)
                     .Select(input => Key(input.TransactionId, input.OutputIndex)), StringComparer.Ordinal);
                 return BuildUtxo().Values.Where(item => wanted.Contains(item.Output.OneTimeAddress) &&
-                    item.TransactionKind != TransactionKind.StakeLock &&
+                    item.TransactionKind != TransactionKind.StakeLock && item.Output.AssetId == null &&
                     !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
             }
         }
@@ -258,7 +258,7 @@ namespace PrivateCoin.Core
 
         public long GetBalance(IEnumerable<string> addresses)
         {
-            return GetUnspentOutputs(addresses).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
+            return GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == null).Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
         /// <summary>Calculates all confirmed address balances from a single chain snapshot.</summary>
@@ -276,7 +276,7 @@ namespace PrivateCoin.Core
                 var utxo = BuildUtxo();
                 foreach (Transaction transaction in pendingTransactions) Apply(transaction, utxo, false);
                 var balances = new Dictionary<string, long>(StringComparer.Ordinal);
-                foreach (UnspentOutput item in utxo.Values)
+                foreach (UnspentOutput item in utxo.Values.Where(item => item.Output.AssetId == null))
                 {
                     long balance;
                     balances.TryGetValue(item.Output.OneTimeAddress, out balance);
@@ -301,7 +301,7 @@ namespace PrivateCoin.Core
         /// </summary>
         public long GetBalance(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
         {
-            return GetUnspentOutputs(addresses, pendingTransactions)
+            return GetUnspentOutputs(addresses, pendingTransactions).Where(item => item.Output.AssetId == null)
                 .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
@@ -463,6 +463,19 @@ namespace PrivateCoin.Core
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
             if (transaction.Inputs.Count == 0 && !allowMint) throw new InvalidOperationException("Minting is only allowed for genesis and mining rewards.");
+            if (!Enum.IsDefined(typeof(TransactionKind), transaction.Kind)) throw new InvalidOperationException("Unknown transaction kind.");
+            bool tokenOperation = transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer;
+            if (allowMint && (transaction.Kind != TransactionKind.Transfer || transaction.Token != null || transaction.Outputs.Any(o => o.AssetId != null)))
+                throw new InvalidOperationException("Rewards must contain only POVIX.");
+            if (transaction.Kind == TransactionKind.TokenCreate)
+            {
+                if (transaction.Token == null || transaction.Inputs.Count == 0) throw new InvalidOperationException("Missing token definition.");
+                transaction.Token.Validate();
+                if (transaction.Token.Id != TokenDefinition.IdFor(transaction.Inputs[0])) throw new InvalidOperationException("Invalid token identifier.");
+            }
+            else if (transaction.Token != null) throw new InvalidOperationException("Only token creation may declare metadata.");
+            var tokenInputs = new Dictionary<string, long>(StringComparer.Ordinal);
+            var tokenOutputs = new Dictionary<string, long>(StringComparer.Ordinal);
             long inputTotal = 0;
             var used = new HashSet<string>();
             byte[] payload = Encoding.UTF8.GetBytes(transaction.SigningPayload());
@@ -482,14 +495,34 @@ namespace PrivateCoin.Core
                     rsa.FromXmlString(input.PublicKey);
                     if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
                 }
-                inputTotal = checked(inputTotal + source.Output.Amount);
+                if (source.Output.AssetId == null) inputTotal = checked(inputTotal + source.Output.Amount);
+                else
+                {
+                    if (transaction.Kind != TransactionKind.TokenTransfer) throw new InvalidOperationException("Token inputs require a token transfer.");
+                    AddAssetAmount(tokenInputs, source.Output.AssetId, source.Output.Amount);
+                }
             }
             long outputTotal = 0;
             foreach (var output in transaction.Outputs)
             {
                 if (output.Amount <= 0 || string.IsNullOrWhiteSpace(output.OneTimeAddress)) throw new InvalidOperationException("Invalid output.");
-                outputTotal = checked(outputTotal + output.Amount);
+                if (output.AssetId == null) outputTotal = checked(outputTotal + output.Amount);
+                else
+                {
+                    if (!tokenOperation || output.AssetId.Length != 64 || output.AssetId.Any(c => !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f')))
+                        throw new InvalidOperationException("Invalid asset output.");
+                    AddAssetAmount(tokenOutputs, output.AssetId, output.Amount);
+                }
             }
+            if (transaction.Kind == TransactionKind.TokenCreate)
+            {
+                if (tokenOutputs.Count != 1 || !tokenOutputs.ContainsKey(transaction.Token.Id) || tokenOutputs[transaction.Token.Id] != transaction.Token.Supply)
+                    throw new InvalidOperationException("Token creation must issue exactly the declared supply.");
+            }
+            if (transaction.Kind == TransactionKind.TokenTransfer &&
+                (tokenInputs.Count == 0 || tokenInputs.Count != tokenOutputs.Count ||
+                 tokenInputs.Any(pair => !tokenOutputs.ContainsKey(pair.Key) || tokenOutputs[pair.Key] != pair.Value)))
+                throw new InvalidOperationException("Token transfers must conserve each asset independently.");
             if (transaction.Fee < 0) throw new InvalidOperationException("A transaction fee cannot be negative.");
             if (transaction.Kind == TransactionKind.StakeLock)
             {
@@ -512,6 +545,43 @@ namespace PrivateCoin.Core
             if (allowMint && transaction.Fee != 0) throw new InvalidOperationException("A reward transaction cannot declare a fee.");
             foreach (string id in used) utxo.Remove(id);
             AddOutputs(transaction, utxo);
+        }
+
+        private static void AddAssetAmount(IDictionary<string, long> amounts, string assetId, long amount)
+        {
+            long previous;
+            amounts.TryGetValue(assetId, out previous);
+            amounts[assetId] = checked(previous + amount);
+        }
+
+        public IReadOnlyList<TokenDefinition> GetTokens()
+        {
+            lock (sync) return blocks.SelectMany(block => block.Transactions)
+                .Where(tx => tx.Kind == TransactionKind.TokenCreate).Select(tx => new TokenDefinition {
+                    Id = tx.Token.Id, Name = tx.Token.Name, Symbol = tx.Token.Symbol,
+                    Decimals = tx.Token.Decimals, Supply = tx.Token.Supply }).ToArray();
+        }
+
+        public long GetTokenBalance(IEnumerable<string> addresses, string tokenId)
+        {
+            if (string.IsNullOrEmpty(tokenId)) throw new ArgumentException("Token identifier is required.", nameof(tokenId));
+            return GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == tokenId)
+                .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
+        }
+
+        public IReadOnlyList<UnspentOutput> GetSpendableTokenOutputs(IEnumerable<string> addresses,
+            IEnumerable<Transaction> pendingTransactions, string tokenId)
+        {
+            if (string.IsNullOrEmpty(tokenId)) throw new ArgumentException("Token identifier is required.", nameof(tokenId));
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            var pending = pendingTransactions.ToList();
+            lock (sync)
+            {
+                ValidateTransactions(pending);
+                var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(i => Key(i.TransactionId, i.OutputIndex)), StringComparer.Ordinal);
+                return GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == tokenId &&
+                    !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
+            }
         }
 
         private static void AddOutputs(Transaction transaction, IDictionary<string, UnspentOutput> utxo)

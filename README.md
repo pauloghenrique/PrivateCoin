@@ -33,6 +33,59 @@ O endereço retornado por `CreateReceiveAddress` deve ser entregue diretamente a
 
 Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, chame `Start()` e conecte aos pares conhecidos com `ConnectAsync`. Uma aplicação deve validar transações recebidas e adotar somente cadeias aceitas por `Blockchain.TryReplaceChain`.
 
+## Tokens nativos de quantidade fixa
+
+O Core oferece `TokenCreate` e `TokenTransfer` na versão **3** do consenso.
+São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
+permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
+maiúsculas A–Z, de 0 a 8 casas decimais e quantidade positiva em unidades
+atômicas (`long`). A quantidade é fixa: não há emissão adicional nem queima.
+Símbolos podem se repetir; use sempre o identificador do token para distingui-los.
+O identificador deriva da primeira entrada POVIX consumida na criação, que não
+pode ser reutilizada. Nome, símbolo, quantidade e ativos das saídas são assinados.
+
+Criação e transferência pagam uma taxa em POVIX. A validação conserva POVIX e
+cada token separadamente, rejeita gasto duplo e impede que tokens paguem taxas,
+se tornem POVIX ou sejam usados como garantia de validador. Saídas pendentes
+não ficam disponíveis para gasto antes da confirmação. `GetBalance`,
+`GetSpendableBalance` e os totais do livro-caixa continuam expressos em POVIX;
+`GetTokenBalance` consulta o saldo de um token e `GetTokens` lista as definições
+confirmadas. `GetUnspentOutputs` inclui todos os ativos; consumidores devem
+consultar `Output.AssetId` (`null` significa POVIX). As saídas do livro-caixa
+expõem também `AssetId`.
+
+Exemplo com uma carteira que já tenha POVIX confirmado:
+
+```csharp
+var pending = new Transaction[0];
+// 100.000 unidades com 2 casas decimais = 1.000,00 MTK.
+var creation = wallet.CreateTokenTransaction(chain, pending,
+    "Meu Token", "MTK", 2, 100000, wallet.CreateReceiveAddress(),
+    Blockchain.CalculateAutomaticFee(pending.Length, 1));
+chain.ValidatePendingTransactions(new[] { creation });
+// Envie a transação pela rede e aguarde sua inclusão em bloco validado.
+string tokenId = creation.Token.Id;
+
+// Depois da confirmação: 2.500 unidades = 25,00 MTK.
+var transfer = wallet.CreateTokenTransferTransaction(chain, pending,
+    tokenId, recipientOneTimeAddress, 2500,
+    Blockchain.CalculateAutomaticFee(pending.Length, 1));
+chain.ValidatePendingTransactions(new[] { transfer });
+// Envie também esta transação e aguarde a confirmação.
+long confirmedBalance = chain.GetTokenBalance(wallet.OwnedOneTimeAddresses, tokenId);
+```
+
+O suporte inicial é pela API do Core; o Desktop ainda não tem formulário de
+criação, transferência ou exibição dos saldos de tokens. Nenhum token é criado
+apenas ao compilar o projeto ou executar os testes.
+
+**Ativação:** clientes de consenso 3 aceitam as novas operações a partir do
+primeiro bloco após o gênese e preservam a validação de cadeias antigas sem
+tokens. O handshake desconecta clientes de consenso 2. A publicação exige uma
+atualização coordenada dos nós antes da primeira transação com tokens; esta
+alteração não agenda nem executa atualização de uma rede em funcionamento.
+Veja `Tests/README.md` para executar a regressão de tokens.
+
 ## Povix Swap no site
 
 `PrivateCoin.Site` inclui o **Povix Swap** em `/swap` (também disponível em
