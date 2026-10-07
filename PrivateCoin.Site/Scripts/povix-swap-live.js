@@ -1,7 +1,7 @@
 (function () {
     "use strict";
     if (!document.getElementById("povix-live-swap")) return;
-    var quote = null, credentials = null, pending = null, busy = false;
+    var quote = null, credentials = null, pending = null, busy = false, assets = [];
     var storageKey = "povix-swap-pending-v1";
     function el(id) { return document.getElementById("live-" + id); }
     function error(message) { el("error").textContent = message || ""; el("error").hidden = !message; }
@@ -44,6 +44,13 @@
         try { await action(); } catch (failure) { error(failure.message || "Consulta indisponível."); }
         finally { busy = false; buttons.forEach(function (button) { button.disabled = false; }); }
     }
+    function networkHelp() {
+        var target = assets.find(function (asset) { return asset.symbol !== el("source").value; });
+        if (!target) return;
+        el("network-help").textContent = "Recebimento: " + target.symbol + " em " + target.network + (target.symbol === "POVIX" ? ". Use o endereço POVIX descartável de 64 caracteres hexadecimais." : ". Use uma carteira EVM 0x de 42 caracteres." + (target.symbol === "BNB" ? " BNB nativo; não envie WBNB ou tokens BEP-20. Carteiras de contrato não são aceitas." : ""));
+        el("amount").maxLength = 13 + assets.find(function (asset) { return asset.symbol === el("source").value; }).decimals;
+    }
+    el("source").addEventListener("change", networkHelp);
     function invalidate() { if (!pending) { quote = null; el("quote").hidden = true; } }
     ["source", "amount", "destination"].forEach(function (id) { el(id).addEventListener("input", invalidate); });
     el("form").addEventListener("submit", function (event) {
@@ -101,6 +108,19 @@
         if (!response.ok) throw new Error(); return response.json();
     }).then(function (status) {
         el("availability").textContent = status.message;
-        el("fields").disabled = !status.ready || !!pending;
+        assets = status.assets || [];
+        if (assets.length === 2) {
+            var selected = pending ? pending.quote.source : el("source").value;
+            el("source").textContent = "";
+            assets.forEach(function (asset) {
+                var option = document.createElement("option");
+                option.value = asset.symbol;
+                option.textContent = asset.symbol + " → " + assets.find(function (other) { return other.symbol !== asset.symbol; }).symbol;
+                el("source").appendChild(option);
+            });
+            if (assets.some(function (asset) { return asset.symbol === selected; })) el("source").value = selected;
+            networkHelp();
+        }
+        el("fields").disabled = !status.ready || assets.length !== 2 || !!pending;
     }).catch(function () { el("availability").textContent = "Trocas indisponíveis. A tesouraria ainda não está conectada ao serviço."; });
 }());

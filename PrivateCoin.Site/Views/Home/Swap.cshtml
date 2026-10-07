@@ -7,7 +7,7 @@
 <main class="povix-swap" id="povix-live-swap">
     <div class="container swap-shell">
         <header class="swap-heading">
-            <div><p class="swap-eyebrow">POVIX ECOSYSTEM</p><h1>Povix <em>Swap</em></h1><p>Troque POVIX e USDT com a liquidez da tesouraria.</p></div>
+            <div><p class="swap-eyebrow">POVIX ECOSYSTEM</p><h1>Povix <em>Swap</em></h1><p>Troque POVIX nativo entre redes com a liquidez da tesouraria.</p></div>
             <a class="swap-explorer-link" href="@Url.Action("Explorer", "Home")">Explorador da rede ↗</a>
         </header>
         <div class="swap-workspace">
@@ -19,16 +19,16 @@
                     <fieldset id="live-fields" disabled>
                         <div class="swap-amount-box">
                             <label for="live-source">Você paga</label>
-                            <div class="swap-amount-row"><input id="live-amount" inputmode="decimal" placeholder="Quantidade" required maxlength="24" aria-label="Quantidade a trocar" /><select id="live-source"><option value="POVIX">POVIX → USDT</option><option value="USDT">USDT → POVIX</option></select></div>
+                            <div class="swap-amount-row"><input id="live-amount" inputmode="decimal" placeholder="Quantidade" required maxlength="24" aria-label="Quantidade a trocar" /><select id="live-source"><option value="POVIX">Aguardando configuração do par…</option></select></div>
                         </div>
-                        <div class="swap-amount-box"><label for="live-destination">Endereço da sua carteira para receber</label><input id="live-destination" type="text" required maxlength="66" autocomplete="off" style="width:100%" /><p class="swap-input-help">Confira o endereço e a rede de destino. Nunca informe chaves privadas ou palavras de recuperação.</p></div>
+                        <div class="swap-amount-box"><label for="live-destination">Endereço da sua carteira para receber</label><input id="live-destination" type="text" required maxlength="66" autocomplete="off" style="width:100%" /><p class="swap-input-help"><span id="live-network-help">Confira o endereço e a rede de destino.</span> Nunca informe chaves privadas ou palavras de recuperação.</p></div>
                         <button class="swap-primary-button" id="live-quote-button" type="submit">Consultar cotação</button>
                     </fieldset>
                 </form>
                 <div id="live-quote" hidden><h3>Revise sua troca</h3><dl id="live-details" class="swap-quote-details"></dl><p class="swap-input-help">A cotação vale por 120 segundos. A taxa é descontada do valor enviado. O custo para enviar o depósito é pago separadamente pela sua carteira.</p><button id="live-create" class="swap-primary-button" type="button">Confirmar e reservar liquidez</button></div>
                 <p id="live-error" class="swap-error" role="alert" hidden></p>
             </section>
-            <aside class="swap-sidebar"><section class="swap-about-card"><p class="swap-eyebrow">LIQUIDEZ PRÓPRIA</p><h2>Pagamento verificado na rede.</h2><p>A tesouraria recebe seu depósito, verifica as confirmações e realiza o pagamento pela carteira do operador. A conclusão depende de uma transação confirmada na blockchain.</p><p>O atendimento de pagamentos é manual. Depósitos com valor ou rede incorretos precisam de análise da tesouraria.</p><a href="@Url.Action("SwapDemo", "Home")">Experimentar a demonstração ↗</a></section></aside>
+            <aside class="swap-sidebar"><section class="swap-about-card"><p class="swap-eyebrow">LIQUIDEZ PRÓPRIA</p><h2>Pagamento verificado na rede.</h2><p>A tesouraria recebe seu depósito, verifica as confirmações e realiza o pagamento pela carteira do operador. A conclusão depende de uma transação confirmada na blockchain.</p><p>Na rota POVIX ↔ BNB, o POVIX permanece na blockchain Povix e o BNB é enviado como moeda nativa na BNB Smart Chain. Não há emissão de POVIX BEP-20; WBNB e outros tokens não são aceitos como BNB. O atendimento de pagamentos é manual. Depósitos com valor ou rede incorretos precisam de análise da tesouraria.</p><a href="@Url.Action("SwapDemo", "Home")">Experimentar a demonstração ↗</a></section></aside>
         </div>
         <section id="live-order" class="swap-activity" hidden>
             <h2>Sua ordem</h2><dl id="live-order-details" class="swap-quote-details"></dl>

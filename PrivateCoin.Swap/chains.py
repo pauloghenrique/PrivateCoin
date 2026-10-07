@@ -1,10 +1,10 @@
-"""Read-only chain verification. USDT is pinned to a configured chain and contract."""
+"""Read-only chain verification. USDT is contract-pinned; BNB accepts direct native transfers only."""
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-from engine import SwapError, address
+from engine import SwapError, address, evm_symbol
 
 TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
@@ -30,18 +30,18 @@ class Chains:
             raise SwapError("Não foi possível consultar a blockchain. Nenhuma operação foi confirmada.")
 
     def rpc(self, method, params):
-        rpc_url = self.config["assets"]["USDT"]["rpc_url"]
+        rpc_url = self.config["assets"][evm_symbol(self.config)]["rpc_url"]
         result = self.request(rpc_url, dict(jsonrpc="2.0", id=1, method=method, params=params))
         if not isinstance(result, dict) or result.get("error") or "result" not in result:
             raise SwapError("A consulta RPC falhou.")
         return result["result"]
 
     def evm_context(self):
-        asset = self.config["assets"]["USDT"]
-        contract = address(asset["contract"], "USDT")
+        asset = self.config["assets"][evm_symbol(self.config)]
+        contract = address(asset["contract"], "USDT") if evm_symbol(self.config) == "USDT" else None
         if int(self.rpc("eth_chainId", []), 16) != asset["chain_id"]:
             raise SwapError("O RPC está conectado a outra rede.")
-        if int(self.rpc("eth_call", [{"to": contract, "data": "0x313ce567"}, "latest"]), 16) != 6:
+        if contract and int(self.rpc("eth_call", [{"to": contract, "data": "0x313ce567"}, "latest"]), 16) != 6:
             raise SwapError("O contrato configurado não usa 6 casas decimais.")
         head = int(self.rpc("eth_blockNumber", []), 16)
         safe = head - asset["confirmations"] + 1
@@ -50,7 +50,14 @@ class Chains:
         return asset, contract, head, safe
 
     def evm_balance(self, address_value, block, contract):
+        if contract is None:
+            return int(self.rpc("eth_getBalance", [address_value, block]), 16)
         return int(self.rpc("eth_call", [{"to": contract, "data": "0x70a08231" + address_value[2:].zfill(64)}, block]), 16)
+
+    def bnb_wallet(self, destination):
+        self.evm_context()
+        if self.rpc("eth_getCode", [destination, "latest"]) != "0x":
+            raise SwapError("Use uma carteira BNB sem contrato para receber a troca.")
 
     def native(self, action, body):
         asset = self.config["assets"]["POVIX"]
@@ -65,17 +72,20 @@ class Chains:
             result = self.native("Balance", dict(addresses=sorted({address(a, symbol) for a in asset["treasury_addresses"]}), confirmations=asset["confirmations"]))
             return int(result["amount_atomic"])
         _, contract, _, safe = self.evm_context()
-        return sum(self.evm_balance(address(a, symbol), hex(safe), contract) for a in {address(a, symbol) for a in asset["treasury_addresses"]})
+        # Recent outgoing payments already consume liquidity even before finality.
+        return sum(min(self.evm_balance(a, hex(safe), contract), self.evm_balance(a, "latest", contract)) for a in {address(a, symbol) for a in asset["treasury_addresses"]})
 
     def address_balance(self, symbol, destination):
         if symbol == "POVIX":
             # Includes the current tip; an allocated address must be empty now too.
             return int(self.native("Balance", dict(addresses=[destination], confirmations=1))["amount_atomic"])
         _, contract, _, _ = self.evm_context()
+        if symbol == "BNB":
+            self.bnb_wallet(destination)
         return self.evm_balance(destination, "latest", contract)
 
     def verify(self, symbol, tx, destination, amount, purpose, created):
-        pattern = r"0x[0-9a-fA-F]{64}" if symbol == "USDT" else r"[0-9a-fA-F]{64}"
+        pattern = r"0x[0-9a-fA-F]{64}" if symbol in ("USDT", "BNB") else r"[0-9a-fA-F]{64}"
         if not isinstance(tx, str) or not re.fullmatch(pattern, tx):
             raise SwapError("Identificador de transação inválido.")
         tx = tx.lower()
@@ -95,6 +105,8 @@ class Chains:
             if purpose == "deposit" and any(a.lower() in treasury for a in inputs):
                 raise SwapError("Uma movimentação interna não pode ser usada como depósito.")
             return tx
+        if symbol != evm_symbol(self.config):
+            raise SwapError("Ativo não configurado nesta instalação.")
         _, contract, head, safe = self.evm_context()
         receipt = self.rpc("eth_getTransactionReceipt", [tx])
         if not receipt or receipt.get("transactionHash", "").lower() != tx or receipt.get("status") != "0x1":
@@ -103,6 +115,21 @@ class Chains:
         block = self.rpc("eth_getBlockByNumber", [receipt["blockNumber"], False])
         if height > safe or not block or block["hash"].lower() != receipt["blockHash"].lower() or int(block["timestamp"], 16) < created:
             raise SwapError("Transação anterior à ordem ou sem confirmações canônicas suficientes.")
+        if symbol == "BNB":
+            transfer = self.rpc("eth_getTransactionByHash", [tx])
+            if not transfer or transfer.get("hash", "").lower() != tx or transfer.get("blockHash", "").lower() != receipt["blockHash"].lower() or transfer.get("blockNumber") != receipt["blockNumber"]:
+                raise SwapError("Transferência BNB ausente ou fora do bloco confirmado.")
+            sender = address(transfer.get("from"), "BNB")
+            receiver = address(transfer.get("to"), "BNB")
+            if receiver != destination or int(transfer["value"], 16) != amount or transfer.get("input") != "0x":
+                raise SwapError("Envie BNB nativo diretamente, com quantidade e destino exatos, sem chamada de contrato.")
+            if self.rpc("eth_getCode", [sender, receipt["blockNumber"]]) != "0x" or self.rpc("eth_getCode", [receiver, receipt["blockNumber"]]) != "0x":
+                raise SwapError("Transferências BNB devem ocorrer entre carteiras sem contrato.")
+            if purpose == "payout" and sender not in treasury:
+                raise SwapError("O pagamento não saiu da tesouraria configurada.")
+            if purpose == "deposit" and sender in treasury:
+                raise SwapError("Uma movimentação interna não pode ser usada como depósito.")
+            return tx
         received = 0
         for log in receipt.get("logs", []):
             topics = log.get("topics", [])

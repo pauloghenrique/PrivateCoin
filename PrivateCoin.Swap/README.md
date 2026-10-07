@@ -1,8 +1,8 @@
 # Tesouraria Povix Swap
 
-Este serviço implementa ordens de troca **POVIX nativo ↔ USDT EVM com 6 casas decimais**, lastreadas nas carteiras próprias da tesouraria. O preço é definido pelo operador (`povix_usdt`); não é apresentado como cotação de mercado. O serviço está **desativado por padrão**, sem carteiras, contrato ou preço reais configurados.
+Este serviço implementa ordens de troca **POVIX nativo ↔ BNB nativo na BNB Smart Chain**, ou **POVIX nativo ↔ USDT EVM com 6 casas decimais**, lastreadas nas carteiras próprias da tesouraria. Cada instalação atende um par. O preço é definido pelo operador (`povix_bnb` ou `povix_usdt`); não é apresentado como cotação de mercado. O serviço está **desativado por padrão**, sem carteiras, contrato ou preço reais configurados.
 
-A implementação é uma primeira versão com **pagamento manual verificado**: o operador envia a moeda pela carteira externa e informa o identificador da transação. O serviço não assina transações, guarda chaves ou promete liquidação automática. Não há bridge ou token POVIX ERC-20 implícito.
+A implementação é uma primeira versão com **pagamento manual verificado**: o operador envia a moeda pela carteira externa e informa o identificador da transação. O serviço não assina transações, guarda chaves ou promete liquidação automática. A troca entre redes usa as reservas do operador; não emite um token POVIX BEP-20/ERC-20 e não é uma bridge automática de lock/mint/burn. Para esse modelo automático, seria necessário desenvolver e operar contratos e validadores adicionais.
 
 ## Fluxo
 
@@ -18,18 +18,21 @@ As reservas vêm de consultas às blockchains; não existe endpoint para fabrica
 
 Requisitos: Python 3.10+, ASP.NET MVC/.NET Framework 4.8 no IIS, nó POVIX sincronizado com peers, RPC confiável da rede EVM e carteira externa de cada ativo. O Python usa somente a biblioteca padrão.
 
-Copie `config.example.json` para um arquivo de configuração privado do operador. Mantenha `enabled: false` durante a configuração. Não coloque arquivos SQLite, backups, configurações reais ou tokens na raiz pública do IIS.
+Para POVIX/BNB, copie `config.bnb.example.json`. Para POVIX/USDT, copie `config.example.json` para um arquivo de configuração privado do operador. Mantenha `enabled: false` durante a configuração. Não coloque arquivos SQLite, backups, configurações reais ou tokens na raiz pública do IIS.
 
 Configure:
 
 - `public_origin`: origem HTTPS exata do site.
+- `evm_asset`: `BNB` ou `USDT` (configurações antigas sem esse campo continuam em USDT).
+- `povix_bnb`: quantidade de BNB por 1 POVIX, em string decimal com até 18 casas. Não há preço de mercado inferido.
 - `povix_usdt`: preço próprio em string decimal, com até oito casas. O preço não pode ser zero e não é inferido do simulador.
 - `fee_bps`: taxa em pontos base. O exemplo usa 30 (= 0,30%); confirme a taxa operacional antes de ativar.
 - `minimum`, `maximum`: limites por moeda; `reserve_buffer_atomic`: reserva para despesas/margem. Taxas do envio do depósito ficam por conta do cliente; a tesouraria deve pagar o gás de saída adicionalmente ao valor cotado.
 - `assets.POVIX`: API interna `/SwapNetwork`, identidade de rede e gênese existentes, confirmações e listas de endereços.
+- `assets.BNB`: RPC confiável que ofereça saldo e código históricos, `chain_id: 56` para mainnet ou `97` para testnet, confirmações e endereços EVM controlados pela tesouraria. Não configure `contract`: BNB é a moeda nativa, com 18 casas decimais. O exemplo usa 64 confirmações, mas a quantidade deve ser avaliada pelo operador para a rede escolhida.
 - `assets.USDT`: nome da rede, `chain_id`, RPC, **contrato oficial do USDT nessa rede**, confirmações e endereços. O serviço recusa contrato cujo `decimals()` não seja 6. Contratos com 18 casas, incluindo algumas implementações na BNB Chain, não são suportados por esta versão.
 
-Financie as carteiras de saída com POVIX e USDT reais, além da moeda nativa para pagar gás. Os endereços do pool de depósito devem permanecer vazios. Não envie fundos ao endereço de recebimento de um cliente para financiar a tesouraria.
+Financie as carteiras de saída com POVIX e o ativo selecionado. Para BNB, mantenha um buffer de gás separado do valor reservado para pagamentos; o exemplo reserva 0,01 BNB. Para USDT, financie também a moeda nativa para pagar gás. Os endereços do pool de depósito devem permanecer vazios. Não envie fundos ao endereço de recebimento de um cliente para financiar a tesouraria.
 
 Defina `POVIX_SWAP_NETWORK_TOKEN`, com pelo menos 32 caracteres aleatórios, no ambiente do processo Python e do application pool do IIS; ele protege a API de leitura do nó. Defina outro segredo independente `POVIX_SWAP_ADMIN_TOKEN` para a API administrativa e a ferramenta local do operador. Nunca envie chaves privadas ou frases de recuperação a este serviço. Tokens são fornecidos pelo ambiente, não por argumentos de comando nem por arquivos versionados.
 
@@ -49,6 +52,16 @@ Bloqueie `/swap-api/admin/*` na entrada pública; o operador usa loopback. Sobre
 
 `/swap` passa a usar a API real; `/Home/SwapDemo` mantém a demonstração identificada. Sem serviço ou sem ativação, a página real informa indisponibilidade e não fornece endereço para depósito.
 
+### POVIX ↔ BNB entre redes
+
+O usuário envia POVIX na blockchain Povix e recebe BNB nativo na BSC, ou envia BNB nativo na BSC e recebe POVIX na rede Povix. A página `/swap` obtém o par e a rede da API; a cotação não emite moedas nem apresenta o saldo do simulador como reserva real.
+
+A verificação do BNB usa `eth_chainId`, `eth_getBalance`, recibo, transação e bloco canônico. Verifica valor em wei, destinatário, remetente, sucesso, horário e confirmações. Aceita somente transferências diretas entre carteiras sem código de contrato e sem calldata. **Não envie WBNB, tokens BEP-20, transferências internas de contratos ou depósitos de carteiras de contrato.** O destino BNB é verificado antes da cotação e novamente antes de reservar uma ordem. O saldo disponível é o menor entre o saldo confirmado e o saldo atual, descontadas as reservas abertas e o buffer; assim, pagamentos recentes não reaparecem como liquidez apenas por ainda constarem no saldo histórico.
+
+Quantidades e preços BNB usam inteiros, sem `float`, e até 18 casas decimais. O SQLite limita o valor atômico de cada entrada/saída a `2^63 - 1` wei (= 9,223372036854775807 BNB); o exemplo limita entradas a 5 BNB. Reservas agregadas que excedam esse limite também não podem ser aceitas. Use limites menores conforme a liquidez e a capacidade operacional.
+
+Use um **banco de ordens novo e separado** ao escolher BNB em uma instalação que já opera USDT; o vínculo de ativo/rede do banco é imutável. Não altere uma instalação com ordens pendentes para outro par, nem mude mainnet para testnet no mesmo banco. A primeira operação integrada deve usar uma rede Povix de teste e BSC testnet (97), com identidades/endpoints corretos e fundos de teste; somente depois configure uma instalação mainnet separada. Não há contratos ou fundos publicados por este código.
+
 ### Operação
 
 ```sh
@@ -66,15 +79,16 @@ Acompanhe a ordem com o identificador e seu código de acesso. O código é arma
 - Depósitos parciais, em excesso ou na rede errada e solicitações de cancelamento/reembolso exigem atendimento manual. Esta versão não inclui reembolsos nem fechamento dessas ordens. Defina o procedimento operacional e implemente o fluxo de exceções antes de oferecer operação pública em escala.
 - O serviço verifica provas quando o depósito é informado e novamente na liquidação; não executa monitoramento contínuo de reorgs nem recupera automaticamente depósitos sem hash informado. Confirmações reduzem, mas não eliminam, risco de reorganização. Use nó/RPC confiável; peers conectados e gênese correto não provam que o nó está na ponta global.
 - A identidade das redes fica vinculada ao banco de ordens, evitando que uma troca de rede/contrato reaproveite provas antigas. Para outra rede, use uma instalação/banco separados. Atualizações de preço invalidam cotações ainda não confirmadas; ordens existentes conservam seus valores.
-- Não há painel administrativo web, autenticação de clientes, assinatura automatizada, integração de preço externo ou suporte a BNB/ETH/BTC. O atendimento manual permite manter as chaves fora do servidor, mas limita a capacidade operacional.
+- Não há painel administrativo web, autenticação de clientes, assinatura automatizada, integração de preço externo ou suporte a ETH/BTC. O atendimento manual permite manter as chaves fora do servidor, mas limita a capacidade operacional.
 - Faça backup consistente do SQLite (API de backup ou snapshot coordenado, incluindo WAL); não copie somente o arquivo principal enquanto o serviço grava. Proteja também a carteira externa e seus endereços futuros.
 
 ## Verificação
 
 ```sh
 python3 Tests/PovixLiquidityRegression.py
+node Tests/PovixSwapLiveRegression.js
 node Tests/PovixSwapRegression.js
 node --check PrivateCoin.Site/Scripts/povix-swap-live.js
 ```
 
-Os testes usam fixtures locais, sem movimentar fundos. Exercitam concorrência, reservas, precisão, persistência, idempotência, endereço exclusivo, reutilização de provas, contrato/rede incorretos e confirmações/reorgs. Eles não substituem compilação do projeto ASP.NET, validação no IIS e uma operação controlada nas redes selecionadas, com carteiras da tesouraria financiadas e supervisão do operador.
+Os testes usam fixtures locais, sem movimentar fundos. Exercitam concorrência, reservas, precisão, persistência, idempotência, endereço exclusivo, reutilização de provas, contrato/rede incorretos e confirmações/reorgs. Incluem a precisão de 18 casas do BNB, as duas direções do par, confirmação canônica de transferências nativas e rejeição de WBNB/chamadas de contrato. Eles não substituem compilação do projeto ASP.NET, validação no IIS e uma operação controlada nas redes selecionadas, com carteiras da tesouraria financiadas e supervisão do operador.

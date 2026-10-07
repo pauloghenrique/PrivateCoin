@@ -50,3 +50,17 @@ Covers fixed-supply creation, unique identifiers, signed metadata, validator
 rewards/fees, transfers/change, separate POVIX balances, pending reservations,
 double spends, inflation, asset substitution, ordinary-payment isolation,
 multiple assets, ledger queries and serialized chain replay/synchronization.
+
+## Tesouraria de liquidez própria
+
+```sh
+python3 Tests/PovixLiquidityRegression.py
+node Tests/PovixSwapLiveRegression.js
+```
+
+Usa apenas a biblioteca padrão do Python e fixtures locais. Confere reservas
+concorrentes, precisão, persistência, idempotência, proteção de códigos, alocação
+exclusiva de endereços, provas não reutilizáveis, depósito/pagamento verificados,
+contrato/rede incorretos, reorgs, confirmações, autenticação administrativa e
+origem HTTP. Inclui POVIX/BNB em ambas as direções, precisão em wei, limite SQLite, buffer de gás, saldo confirmado/atual, proteção de carteiras de contrato e rejeição de WBNB/transações revertidas. Não move fundos nem substitui validação integrada no IIS e nas
+redes de produção. Veja `PrivateCoin.Swap/README.md`.

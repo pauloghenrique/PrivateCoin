@@ -1,12 +1,19 @@
 {
   "enabled": false,
-  "evm_asset": "USDT",
   "public_origin": "https://privatecoin.site",
-  "povix_usdt": null,
   "fee_bps": 30,
-  "minimum": {"POVIX": "1", "USDT": "1"},
-  "maximum": {"POVIX": "100", "USDT": "100"},
-  "reserve_buffer_atomic": {"POVIX": 100000000, "USDT": 1000000},
+  "minimum": {
+    "POVIX": "1",
+    "BNB": "0.001"
+  },
+  "maximum": {
+    "POVIX": "100",
+    "BNB": "5"
+  },
+  "reserve_buffer_atomic": {
+    "POVIX": 100000000,
+    "BNB": 10000000000000000
+  },
   "max_open_orders": 100,
   "assets": {
     "POVIX": {
@@ -18,14 +25,15 @@
       "treasury_addresses": [],
       "deposit_addresses": []
     },
-    "USDT": {
-      "network": null,
+    "BNB": {
+      "network": "BNB Smart Chain mainnet — BNB nativo",
       "rpc_url": null,
-      "chain_id": null,
-      "contract": null,
+      "chain_id": 56,
       "confirmations": 64,
       "treasury_addresses": [],
       "deposit_addresses": []
     }
-  }
+  },
+  "evm_asset": "BNB",
+  "povix_bnb": null
 }

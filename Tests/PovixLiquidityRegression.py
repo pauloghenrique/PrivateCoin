@@ -44,6 +44,10 @@ class FixtureChains:
     def balance(self, symbol):
         return self.balances[symbol]
 
+    def bnb_wallet(self, destination):
+        if not self.valid:
+            raise SwapError("Contract wallet rejected")
+
     def address_balance(self, symbol, destination):
         return 0
 
@@ -227,6 +231,185 @@ class ChainTests(unittest.TestCase):
                 self.chains.verify("POVIX", TX, POVIX_BANK, 100000000, "deposit", 1000)
             proof[field] = old
 
+def bnb_config():
+    cfg = config()
+    cfg["evm_asset"] = "BNB"
+    cfg.pop("povix_usdt")
+    cfg["povix_bnb"] = "0.00025"
+    cfg["minimum"] = {"POVIX": "0.01", "BNB": "0.000001"}
+    cfg["maximum"] = {"POVIX": "10000", "BNB": "5"}
+    evm = cfg["assets"].pop("USDT")
+    evm.pop("contract")
+    evm["chain_id"] = 56
+    evm["network"] = "BNB Smart Chain fixture"
+    cfg["assets"]["BNB"] = evm
+    return cfg
+
+
+class BnbEngineTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = self.directory.name + "/bnb.db"
+        self.config = bnb_config()
+        self.chains = FixtureChains()
+        self.chains.balances["BNB"] = 10**18
+        self.engine = Engine(self.path, self.config, self.chains, clock=lambda: 1000)
+
+    def tearDown(self):
+        self.directory.cleanup()
+
+    def quote(self, source="POVIX", amount="100"):
+        return self.engine.quote(dict(source=source, amount=amount, destination=EVM_DEST if source == "POVIX" else POVIX_DEST))
+
+    def order(self, quote=None, key="request_key_00001"):
+        return self.engine.order(dict(quote_id=(quote or self.quote())["quote_id"], token=TOKEN), key)
+
+    def test_native_bnb_precision_and_bidirectional_quote(self):
+        self.assertEqual(atomic("0,000000000000000001", "BNB"), 1)
+        self.assertEqual(atomic("9.223372036854775807", "BNB"), 2**63 - 1)
+        for bad in ("0.0000000000000000001", "9.223372036854775808", "10", "1e-18"):
+            with self.assertRaises(SwapError):
+                atomic(bad, "BNB")
+        q = self.quote()
+        self.assertEqual(q["target"], "BNB")
+        self.assertEqual(q["received"], "0.024925000000000000")
+        reverse = self.quote("BNB", "0.025")
+        self.assertEqual(reverse["received"], "99.70000000")
+        self.assertEqual(reverse["fee"], "0.000075000000000000")
+        with self.assertRaises(SwapError):
+            self.quote("USDT", "1")
+
+    def test_bnb_rounding_never_mints_value(self):
+        self.config["minimum"]["BNB"] = "0.000000000000000001"
+        with self.assertRaises(SwapError):
+            self.quote("BNB", "0.000000000000000001")
+        self.config["povix_bnb"] = "0.000000000000000001"
+        self.assertEqual(self.quote()["received"], "0.000000000000000099")
+
+    def test_bnb_orders_settle_and_remain_idempotent_after_restart(self):
+        for source, amount in (("POVIX", "100"), ("BNB", "0.025")):
+            q = self.quote(source, amount)
+            order = self.order(q, "request_key_" + source + "_00001")
+            incoming = TX if source == "POVIX" else "0x" + "d" * 64
+            outgoing = "0x" + TX if source == "POVIX" else "d" * 64
+            self.engine.deposit(dict(order_id=order["order_id"], token=TOKEN, tx=incoming))
+            completed = self.engine.settle(dict(order_id=order["order_id"], tx=outgoing))
+            self.assertEqual(completed["state"], "completed")
+            self.engine = Engine(self.path, self.config, self.chains, clock=lambda: 2000)
+            self.assertEqual(completed, self.order(q, "request_key_" + source + "_00001"))
+
+    def test_bnb_reserve_buffer_and_concurrent_orders(self):
+        output = 24925000000000000
+        self.config["reserve_buffer_atomic"] = {"BNB": 10**16}
+        self.chains.balances["BNB"] = output + 10**16
+        self.config["assets"]["POVIX"]["treasury_addresses"].append("e" * 64)
+        self.config["assets"]["POVIX"]["deposit_addresses"].append("e" * 64)
+        quotes = [self.quote(), self.quote()]
+        def attempt(index):
+            try:
+                return self.order(quotes[index], "request_key_0000" + str(index))
+            except SwapError:
+                return None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, [0, 1]))
+        self.assertEqual(sum(r is not None for r in results), 1)
+
+    def test_bnb_contract_destination_rejected_before_order(self):
+        self.chains.valid = False
+        with self.assertRaises(SwapError):
+            self.quote()
+        self.chains.valid = True
+        q = self.quote()
+        self.chains.valid = False
+        with self.assertRaises(SwapError):
+            self.order(q)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM orders").fetchone()[0], 0)
+
+    def test_bnb_database_cannot_switch_asset_or_chain(self):
+        self.order()
+        self.config["assets"]["BNB"]["chain_id"] = 97
+        with self.assertRaises(SwapError):
+            self.quote()
+        self.engine.config = config()
+        with self.assertRaises(SwapError):
+            self.engine.quote(dict(source="POVIX", amount="100", destination=EVM_DEST))
+
+    def test_bnb_rejects_token_config_wrong_chain_and_disabled_service(self):
+        for field, value in (("contract", "0x" + "d" * 40), ("chain_id", 1)):
+            self.config["assets"]["BNB"][field] = value
+            with self.assertRaises(SwapError):
+                self.quote()
+            self.config = bnb_config()
+            self.engine.config = self.config
+        self.config["enabled"] = False
+        with self.assertRaises(SwapError):
+            self.order()
+
+
+class BnbChainTests(unittest.TestCase):
+    def setUp(self):
+        self.config = bnb_config()
+        self.chains = Chains(self.config)
+        self.sender = "0x" + "e" * 40
+        self.tx = "0x" + TX
+        self.receipt = dict(transactionHash=self.tx, status="0x1", blockNumber="0x64", blockHash="0xabc", logs=[])
+        self.transfer = dict(hash=self.tx, blockNumber="0x64", blockHash="0xabc", to=EVM_BANK, value=hex(10**18), input="0x")
+        self.transfer["from"] = self.sender
+        self.responses = {"eth_chainId": "0x38", "eth_blockNumber": "0x66", "eth_getTransactionReceipt": self.receipt, "eth_getTransactionByHash": self.transfer, "eth_getBlockByNumber": dict(hash="0xabc", timestamp=hex(1000)), "eth_getCode": "0x"}
+        self.calls = []
+        def rpc(method, params):
+            self.calls.append((method, params))
+            if method == "eth_getBalance":
+                return hex(2 * 10**18 if params[1] == "latest" else 3 * 10**18)
+            return self.responses[method]
+        self.chains.rpc = rpc
+
+    def verify(self, purpose="deposit"):
+        return self.chains.verify("BNB", self.tx, EVM_BANK, 10**18, purpose, 1000)
+
+    def test_bnb_direct_native_transfer_and_balance_without_token_calls(self):
+        self.assertEqual(self.verify(), self.tx)
+        self.assertEqual(self.chains.balance("BNB"), 2 * 10**18)
+        self.assertEqual(self.chains.address_balance("BNB", EVM_BANK), 2 * 10**18)
+        self.assertFalse(any(method == "eth_call" for method, _ in self.calls))
+        self.assertIn(("eth_getBalance", [EVM_BANK, "0x64"]), self.calls)
+
+    def test_bnb_failed_pending_reorganized_old_and_wrong_chain_rejected(self):
+        for method, bad in (("eth_chainId", "0x61"), ("eth_blockNumber", "0x65"), ("eth_getTransactionReceipt", None), ("eth_getTransactionByHash", None), ("eth_getBlockByNumber", dict(hash="0xother", timestamp=hex(1000))), ("eth_getBlockByNumber", dict(hash="0xabc", timestamp=hex(999)))):
+            old = self.responses[method]
+            self.responses[method] = bad
+            with self.assertRaises(SwapError):
+                self.verify()
+            self.responses[method] = old
+        self.receipt["status"] = "0x0"
+        with self.assertRaises(SwapError):
+            self.verify()
+
+    def test_bnb_wrong_amount_destination_contract_calls_and_wrapped_tokens_rejected(self):
+        for field, bad in (("value", "0x0"), ("value", hex(10**18 - 1)), ("to", EVM_DEST), ("to", None), ("hash", "0x" + "d" * 64), ("blockHash", "0xother"), ("blockNumber", "0x63"), ("input", "0xa9059cbb"), ("input", None)):
+            old = self.transfer[field]
+            self.transfer[field] = bad
+            with self.assertRaises(SwapError):
+                self.verify()
+            self.transfer[field] = old
+        self.responses["eth_getCode"] = "0x6000"
+        with self.assertRaises(SwapError):
+            self.verify()
+        with self.assertRaises(SwapError):
+            self.chains.bnb_wallet(EVM_DEST)
+        with self.assertRaises(SwapError):
+            self.chains.address_balance("BNB", EVM_BANK)
+
+    def test_bnb_payout_origin_and_internal_deposits(self):
+        with self.assertRaises(SwapError):
+            self.verify("payout")
+        self.transfer["from"] = EVM_BANK
+        self.assertEqual(self.verify("payout"), self.tx)
+        with self.assertRaises(SwapError):
+            self.verify("deposit")
+
+
 class HttpTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -266,6 +449,20 @@ class HttpTests(unittest.TestCase):
         code, payload = self.post("/swap-api/quote")
         self.assertEqual(code, 409)
         self.assertNotIn("deposit_address", payload)
+
+    def test_bnb_status_reports_pair_and_precision_even_when_disabled(self):
+        cfg = bnb_config()
+        self.handler.engine.config = cfg
+        self.handler.engine.chains.balances["BNB"] = 10**18
+        for enabled in (False, True):
+            cfg["enabled"] = enabled
+            with urllib.request.urlopen(self.base + "/swap-api/status") as response:
+                status = json.load(response)
+            self.assertEqual(status["pair"], "POVIX/BNB")
+            self.assertEqual(status["ready"], enabled)
+            self.assertEqual(status["assets"][1]["decimals"], 18)
+            self.assertEqual(status["settlement"], "manual_verified")
+            self.assertNotIn("deposit_address", status)
 
     def test_admin_authentication_and_origin_enforcement(self):
         self.assertEqual(self.post("/swap-api/admin/queue")[0], 401)

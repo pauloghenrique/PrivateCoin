@@ -1,4 +1,4 @@
-"""Custodial POVIX/USDT broker. No private keys and no simulated funds."""
+"""Custodial cross-chain POVIX/USDT or POVIX/BNB broker. No private keys and no simulated funds."""
 import hashlib
 import json
 import re
@@ -8,17 +8,25 @@ import time
 from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 
-DECIMALS = {"POVIX": 8, "USDT": 6}
+DECIMALS = {"POVIX": 8, "USDT": 6, "BNB": 18}
+SQLITE_MAX = 2**63 - 1
+
+
+def evm_symbol(config):
+    symbol = config.get("evm_asset", "USDT")
+    if symbol not in ("USDT", "BNB"):
+        raise SwapError("Ativo EVM não suportado.")
+    return symbol
 
 class SwapError(Exception):
     pass
 
 
 def atomic(value, symbol):
-    if not isinstance(value, str) or not re.fullmatch(r"\d{1,12}(?:[.,]\d{1,8})?", value):
+    if not isinstance(value, str) or not re.fullmatch(r"\d{1,12}(?:[.,]\d{1," + str(max(8, DECIMALS[symbol])) + r"})?", value):
         raise SwapError("Quantidade inválida; use ponto ou vírgula decimal, sem milhares.")
     number = Decimal(value.replace(",", ".")) * 10 ** DECIMALS[symbol]
-    if number != number.to_integral_value() or not 0 < number <= 10**15:
+    if number != number.to_integral_value() or not 0 < number <= (SQLITE_MAX if symbol == "BNB" else 10**15):
         raise SwapError("Quantidade fora do limite ou com casas decimais excessivas.")
     return int(number)
 
@@ -29,7 +37,7 @@ def display(amount, symbol):
 
 
 def address(value, symbol):
-    pattern = r"0x[0-9a-fA-F]{40}" if symbol == "USDT" else r"[0-9a-fA-F]{64}"
+    pattern = r"0x[0-9a-fA-F]{40}" if symbol in ("USDT", "BNB") else r"[0-9a-fA-F]{64}"
     if not isinstance(value, str) or not re.fullmatch(pattern, value):
         raise SwapError("Endereço de destino inválido para a rede selecionada.")
     if int(value.removeprefix("0x"), 16) == 0:
@@ -89,11 +97,12 @@ class Engine:
         if self.config.get("enabled") is not True:
             raise SwapError("Operação indisponível: tesouraria ainda não ativada.")
         try:
-            price = atomic(self.config["povix_usdt"], "POVIX")
+            evm_asset = evm_symbol(self.config)
+            price = atomic(self.config["povix_" + evm_asset.lower()], "BNB" if evm_asset == "BNB" else "POVIX")
             fee = self.config["fee_bps"]
-            if not 0 < price <= 10**14 or type(fee) is not int or not 0 <= fee <= 1000:
+            if not 0 < price <= (SQLITE_MAX if evm_asset == "BNB" else 10**14) or type(fee) is not int or not 0 <= fee <= 1000:
                 raise ValueError()
-            for symbol in DECIMALS:
+            for symbol in ("POVIX", evm_asset):
                 data = self.config["assets"][symbol]
                 treasury = {address(a, symbol) for a in data["treasury_addresses"]}
                 deposits = {address(a, symbol) for a in data["deposit_addresses"]}
@@ -103,13 +112,16 @@ class Engine:
                     raise ValueError()
                 if len(deposits) != len(data["deposit_addresses"]):
                     raise ValueError()
-                if not isinstance(data["confirmations"], int) or data["confirmations"] < 1:
+                if type(data["confirmations"]) is not int or data["confirmations"] < 1:
                     raise ValueError()
                 atomic(self.config["minimum"][symbol], symbol)
                 atomic(self.config["maximum"][symbol], symbol)
-            evm = self.config["assets"]["USDT"]
-            address(evm["contract"], "USDT")
-            if not isinstance(evm["chain_id"], int) or evm["chain_id"] < 1 or not evm["rpc_url"]:
+            evm = self.config["assets"][evm_asset]
+            if evm_asset == "USDT":
+                address(evm["contract"], "USDT")
+            elif evm.get("contract") is not None or evm["chain_id"] not in (56, 97):
+                raise ValueError()
+            if type(evm["chain_id"]) is not int or evm["chain_id"] < 1 or not evm["rpc_url"]:
                 raise ValueError()
             if not self.config["assets"]["POVIX"]["api_url"]:
                 raise ValueError()
@@ -118,8 +130,10 @@ class Engine:
             raise SwapError("Configuração incompleta da tesouraria.")
 
     def bind_networks(self, db):
-        native, evm = self.config["assets"]["POVIX"], self.config["assets"]["USDT"]
-        binding = json.dumps([native["network_id"], native["genesis_hash"], evm["chain_id"], evm["contract"].lower()])
+        symbol = evm_symbol(self.config)
+        native, evm = self.config["assets"]["POVIX"], self.config["assets"][symbol]
+        # Keep the legacy USDT binding; native BNB has its own identity.
+        binding = json.dumps([native["network_id"], native["genesis_hash"], evm["chain_id"], evm["contract"].lower() if symbol == "USDT" else "native:BNB"])
         existing = db.execute("SELECT value FROM settings WHERE name='networks'").fetchone()
         if existing and existing[0] != binding:
             raise SwapError("A rede deste banco de ordens não pode ser alterada.")
@@ -139,18 +153,23 @@ class Engine:
     def quote(self, data):
         price, fee_bps = self.ready()
         source = data.get("source")
-        if source not in DECIMALS:
+        evm_asset = evm_symbol(self.config)
+        if source not in ("POVIX", evm_asset):
             raise SwapError("Par não suportado.")
-        target = "USDT" if source == "POVIX" else "POVIX"
+        target = evm_asset if source == "POVIX" else "POVIX"
         destination = address(data.get("destination"), target)
+        if target == "BNB":
+            self.chains.bnb_wallet(destination)
         amount = atomic(data.get("amount"), source)
         if not atomic(self.config["minimum"][source], source) <= amount <= atomic(self.config["maximum"][source], source):
             raise SwapError("Quantidade fora dos limites da operação.")
         fee = (amount * fee_bps + 9999) // 10000
         net = amount - fee
-        # Fixed-point price: 1 POVIX in USDT, scaled by 10**8. Round down once.
-        output = net * price * 10**6 // 10**16 if source == "POVIX" else net * 10**16 // (price * 10**6)
-        if output <= 0 or output > 10**15:
+        # Price is 1 POVIX in the selected EVM asset. Round down once.
+        price_scale = 10**(18 if evm_asset == "BNB" else 8)
+        evm_unit = 10**DECIMALS[evm_asset]
+        output = net * price * evm_unit // (10**8 * price_scale) if source == "POVIX" else net * 10**8 * price_scale // (price * evm_unit)
+        if output <= 0 or output > (SQLITE_MAX if target == "BNB" else 10**15):
             raise SwapError("Recebimento fora dos limites.")
         identity = secrets.token_urlsafe(32)
         expires = int(self.clock()) + 120
@@ -179,6 +198,8 @@ class Engine:
                 raise SwapError("Cotação já utilizada.")
             if db.execute("SELECT COUNT(*) FROM orders WHERE state!='completed'").fetchone()[0] >= self.config.get("max_open_orders", 100):
                 raise SwapError("Limite de ordens abertas atingido. Tente mais tarde.")
+            if quote["target"] == "BNB":
+                self.chains.bnb_wallet(quote["destination"])
             self.funds(db, quote["target"], quote["output"])
             used = {row[0] for row in db.execute("SELECT deposit_address FROM orders WHERE source=?", (quote["source"],))}
             available = [address(a, quote["source"]) for a in self.config["assets"][quote["source"]]["deposit_addresses"] if address(a, quote["source"]) not in used]

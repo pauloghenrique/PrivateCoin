@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from chains import Chains
-from engine import Engine, SwapError
+from engine import Engine, SwapError, DECIMALS, evm_symbol
 
 class Handler(BaseHTTPRequestHandler):
     engine = None
@@ -43,14 +43,20 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.engine.ready()
             # Both chains must be reachable and correctly configured.
-            for symbol in ("POVIX", "USDT"):
+            for symbol in ("POVIX", evm_symbol(self.engine.config)):
                 balance = self.engine.chains.balance(symbol)
                 if balance <= int(self.engine.config.get("reserve_buffer_atomic", {}).get(symbol, 0)):
                     raise SwapError("Reservas não financiadas.")
             ready, message = True, "Tesouraria configurada. Cada cotação depende da liquidez disponível."
         except (SwapError, KeyError, TypeError, ValueError):
             ready, message = False, "Trocas indisponíveis: configuração, rede ou reservas não verificadas."
-        self.reply(200, dict(ready=ready, message=message, pair="POVIX/USDT", settlement="manual_verified"))
+        # Return metadata even when disabled; never a deposit address.
+        try:
+            symbol = evm_symbol(self.engine.config)
+            assets = [dict(symbol=a, decimals=DECIMALS[a], network=self.engine.config.get("assets", {}).get(a, {}).get("network")) for a in ("POVIX", symbol)]
+        except SwapError:
+            symbol, assets = "unconfigured", []
+        self.reply(200, dict(ready=ready, message=message, pair="POVIX/" + symbol, assets=assets, settlement="manual_verified"))
 
     def limited(self):
         # TRUSTED proxy must overwrite client IP; public exposure is discouraged.
