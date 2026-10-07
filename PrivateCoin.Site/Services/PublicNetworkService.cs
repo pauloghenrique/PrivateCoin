@@ -52,6 +52,65 @@ namespace PrivateCoin.Site.Services
             }
         }
 
+        private static string HashPublicKey(string publicKey)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+                return string.Concat(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(publicKey ?? string.Empty))
+                    .Select(value => value.ToString("x2")));
+        }
+
+        // Read-only treasury queries, protected by SwapNetworkController's server token.
+        public object GetSwapBalance(string[] addresses, int confirmations)
+        {
+            lock (sync)
+            {
+                var blocks = blockchain.Blocks.ToArray();
+                int tip = blocks.Last().Height;
+                var heights = blocks.SelectMany(block => block.Transactions.Select(transaction =>
+                    new { transaction.Id, block.Height })).ToDictionary(item => item.Id, item => item.Height);
+                long amount = blockchain.GetSpendableOutputs(addresses, pending)
+                    .Where(output => tip - heights[output.TransactionId] + 1 >= confirmations)
+                    .Aggregate(0L, (total, output) => checked(total + output.Output.Amount));
+                return new
+                {
+                    network_id = Blockchain.NetworkId, genesis_hash = Blockchain.GenesisHash,
+                    connected_peers = node.ConnectedPeers.Length, height = tip,
+                    amount_atomic = amount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                };
+            }
+        }
+
+        public object GetSwapTransaction(string id)
+        {
+            lock (sync)
+            {
+                var blocks = blockchain.Blocks.ToArray();
+                int tip = blocks.Last().Height;
+                foreach (Block block in blocks)
+                {
+                    Transaction transaction = block.Transactions.FirstOrDefault(item => item.Id == id);
+                    if (transaction == null) continue;
+                    return new
+                    {
+                        network_id = Blockchain.NetworkId, genesis_hash = Blockchain.GenesisHash,
+                        connected_peers = node.ConnectedPeers.Length, height = block.Height,
+                        block_hash = block.Hash, confirmations = tip - block.Height + 1,
+                        timestamp = (long)(new DateTime(block.TimestampUtcTicks, DateTimeKind.Utc) -
+                            new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds,
+                        kind = transaction.Kind == TransactionKind.Transfer && transaction.Inputs.Count > 0
+                            ? "transfer" : "issuance_or_stake",
+                        input_addresses = transaction.Inputs.Select(input => HashPublicKey(input.PublicKey)).ToArray(),
+                        outputs = transaction.Outputs.Select(output => new
+                        {
+                            address = output.OneTimeAddress,
+                            amount_atomic = output.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        }).ToArray()
+                    };
+                }
+                return new { error = "Transação não encontrada na cadeia validada." };
+            }
+        }
+
         private void ReceiveChain(object sender, ChainReceivedEventArgs args)
         {
             lock (sync)

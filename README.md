@@ -35,17 +35,22 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Povix Swap no site
 
-`PrivateCoin.Site` inclui o **Povix Swap** em `/swap` (também disponível em
-`/Home/Swap`), com acesso pelo menu e pelo rodapé. O simulador oferece pares entre
-POVIX, USDT, BNB, ETH e BTC, taxa de exemplo de 0,30%, tolerância de variação,
-revisão antes da confirmação, saldos fictícios e histórico das últimas dez
-simulações. Os valores usam oito casas decimais e unidades inteiras.
+`PrivateCoin.Site` inclui o **Povix Swap** em `/swap`, integrado à API de
+ordens do serviço `PrivateCoin.Swap`. O par inicial é POVIX nativo ↔ USDT EVM
+com seis casas decimais, preço definido pela tesouraria e reservas verificadas
+nas blockchains. Ordens e reservas são persistidas em SQLite; depósitos e
+pagamentos precisam de provas de transação confirmadas.
 
-As conversões são exemplos fixos, não cotações de mercado. A carteira demo vive
-somente na página e reinicia ao recarregar; não solicita chaves e não transmite
-transações. A rede atual não inclui um serviço de liquidez ou execução de swaps
-entre blockchains. Execute `node Tests/PovixSwapRegression.js` para validar o
-simulador.
+O operador realiza o pagamento por sua carteira externa. O site não guarda
+chaves privadas, não assina transações e só confirma a liquidação depois de
+verificá-la na blockchain. A operação está desativada por padrão até que rede,
+contrato, preço, carteiras, fundos e proxy estejam configurados. Consulte
+[instalação e limites operacionais](PrivateCoin.Swap/README.md).
+
+A demonstração anterior continua em `/Home/SwapDemo`, identificada como
+simulação com valores fixos e saldos fictícios. Rode
+`python3 Tests/PovixLiquidityRegression.py` para validar o serviço e
+`node Tests/PovixSwapRegression.js` para validar a demonstração.
 
 ## Aplicação Desktop
 

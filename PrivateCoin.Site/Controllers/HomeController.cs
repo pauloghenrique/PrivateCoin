@@ -24,6 +24,11 @@ namespace PrivateCoin.Site.Controllers
             return View();
         }
 
+        public ActionResult SwapDemo()
+        {
+            return View();
+        }
+
         public ActionResult WhitePaper()
         {
             return View();
