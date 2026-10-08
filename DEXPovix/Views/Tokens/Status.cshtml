@@ -1,0 +1,24 @@
+@{ ViewBag.Title = "Acompanhar criação"; }
+<section class="py-5">
+    <h1>Acompanhar criação do token</h1>
+    <p>Transação: <code style="overflow-wrap:anywhere">@ViewBag.TransactionId</code></p>
+    <p id="transaction-state" role="status" aria-live="polite">Consultando a blockchain…</p>
+    <p>O token é registrado após a inclusão em um bloco validado. O envio à rede ainda não representa confirmação.</p>
+    @Html.ActionLink("Criar outro token", "Create", null, new { @class = "btn btn-outline-primary" })
+</section>
+@section scripts {
+<script>
+(function () {
+    var target = document.getElementById('transaction-state');
+    function refresh() {
+        fetch('@Url.Action("TransactionStatus", "Tokens", new { id = ViewBag.TransactionId })', { cache: 'no-store' })
+            .then(function (response) { if (!response.ok) throw new Error(); return response.json(); })
+            .then(function (data) {
+                target.textContent = data.State + (data.BlockHeight !== null ? ' · Bloco ' + data.BlockHeight : '') + ' · Nós conectados: ' + data.ConnectedPeers;
+                if (data.BlockHeight === null) window.setTimeout(refresh, 10000);
+            }).catch(function () { target.textContent = 'Consulta indisponível. Tentando novamente…'; window.setTimeout(refresh, 10000); });
+    }
+    refresh();
+}());
+</script>
+}

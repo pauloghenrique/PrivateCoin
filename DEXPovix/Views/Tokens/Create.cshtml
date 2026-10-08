@@ -1,0 +1,24 @@
+@model DEXPovix.Models.CreateTokenViewModel
+@{ ViewBag.Title = "Criar token"; }
+<div class="row py-5">
+    <div class="col-lg-8 mx-auto">
+        <p class="text-uppercase text-primary">Povix.Dex · Blockchain POVIX</p>
+        <h1>Criar token</h1>
+        <p class="lead">Cadastre um token de oferta fixa na rede existente.</p>
+        <div class="alert alert-info">Assine na sua carteira usando <code>Wallet.CreateTokenTransaction</code> do PrivateCoin.Core e cole o JSON público abaixo. A taxa é paga em POVIX. A confirmação depende dos validadores da rede.</div>
+        @using (Html.BeginForm("Create", "Tokens", FormMethod.Post))
+        {
+            @Html.AntiForgeryToken()
+            @Html.ValidationSummary(false, "Confira os dados:", new { @class = "text-danger", role = "alert" })
+            <div class="mb-3">@Html.LabelFor(m => m.Name, new { @class = "form-label" }) @Html.TextBoxFor(m => m.Name, new { @class = "form-control", maxlength = 64, required = "required" })</div>
+            <div class="mb-3">@Html.LabelFor(m => m.Symbol, new { @class = "form-label" }) @Html.TextBoxFor(m => m.Symbol, new { @class = "form-control", maxlength = 10, pattern = "[A-Z]{1,10}", required = "required" })</div>
+            <div class="row">
+                <div class="col-md-4 mb-3">@Html.LabelFor(m => m.Decimals, new { @class = "form-label" }) @Html.TextBoxFor(m => m.Decimals, new { @class = "form-control", type = "number", min = 0, max = 8, required = "required" })</div>
+                <div class="col-md-8 mb-3">@Html.LabelFor(m => m.Supply, new { @class = "form-label" }) @Html.TextBoxFor(m => m.Supply, new { @class = "form-control", type = "text", inputmode = "numeric", pattern = "[0-9]+", required = "required", aria_describedby = "supply-help" })<small id="supply-help">Exemplo: 100000 unidades com 2 casas decimais = 1000 tokens.</small></div>
+            </div>
+            <div class="mb-3">@Html.LabelFor(m => m.Destination, new { @class = "form-label" }) @Html.TextBoxFor(m => m.Destination, new { @class = "form-control font-monospace", maxlength = 64, pattern = "[0-9a-f]{64}", required = "required" })</div>
+            <div class="mb-3">@Html.LabelFor(m => m.SignedTransaction, new { @class = "form-label" }) @Html.TextAreaFor(m => m.SignedTransaction, new { @class = "form-control font-monospace", rows = 8, maxlength = 131072, required = "required", spellcheck = "false" })<small>Somente a transação assinada. Nunca informe chaves privadas ou frase de recuperação.</small></div>
+            <button type="submit" class="btn btn-primary btn-lg">Enviar criação para a blockchain</button>
+        }
+    </div>
+</div>
