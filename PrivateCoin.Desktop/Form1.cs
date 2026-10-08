@@ -300,6 +300,13 @@ namespace PrivateCoin.Desktop
             Log("Endereço de recebimento copiado para a área de transferência.", true);
         }
 
+        private void TokensButtonClick(object sender, EventArgs e)
+        {
+            using (var dialog = new TokenWalletDialog(() => blockchain, () => SelectedWallet,
+                () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s)."))
+                dialog.ShowDialog(this);
+        }
+
         private void StartNodeButtonClick(object sender, EventArgs e)
         {
             int port;

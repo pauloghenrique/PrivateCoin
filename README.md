@@ -50,9 +50,35 @@ se tornem POVIX ou sejam usados como garantia de validador. Saídas pendentes
 não ficam disponíveis para gasto antes da confirmação. `GetBalance`,
 `GetSpendableBalance` e os totais do livro-caixa continuam expressos em POVIX;
 `GetTokenBalance` consulta o saldo de um token e `GetTokens` lista as definições
-confirmadas. `GetUnspentOutputs` inclui todos os ativos; consumidores devem
+confirmadas. `GetTokenBalances` lista todos os tokens, com saldo confirmado dos
+endereços consultados, bloco de criação e confirmações, usando uma única visão
+da cadeia. `GetUnspentOutputs` inclui todos os ativos; consumidores devem
 consultar `Output.AssetId` (`null` significa POVIX). As saídas do livro-caixa
 expõem também `AssetId`.
+
+### Visualizar tokens no PrivateCoin.Desktop
+
+Selecione a carteira e clique em **Ver tokens**, no cartão **Carteira**. A tela
+lê os registros confirmados da blockchain local e mostra nome, símbolo,
+quantidade total, saldo da carteira selecionada, casas decimais, identificador,
+bloco de criação e confirmações. O identificador completo pode ser copiado.
+Todos os tokens da rede aparecem por padrão, incluindo os de saldo zero;
+**Somente tokens com saldo** restringe a lista à carteira selecionada.
+
+O `Povix.Dex` já envia uma operação nativa `TokenCreate` para a rede existente.
+Depois da confirmação pelos validadores, o nó do Desktop recebe o bloco pela
+sincronização P2P existente. A lista acompanha novos blocos e transferências
+automaticamente, verificando a cadeia a cada cinco segundos. O botão **Atualizar**
+relê imediatamente a blockchain local. Criações e transferências pendentes
+não alteram os dados confirmados, e uma troca de cadeia atualiza a lista.
+
+Para visualizar um token criado no DEX, mantenha o nó do Desktop conectado à
+mesma rede e aguarde o status **Confirmado** no comprovante do DEX. Para receber
+o saldo no Desktop, copie um endereço dessa carteira e use-o em **Destino dos
+tokens** antes de criar no DEX. O registro do token é público, mas o saldo
+pertence aos endereços de recebimento; o mesmo nome de carteira ou símbolo
+não concede controle do saldo. Endereços gerados no navegador usam chaves que
+estão no backup do DEX e não são acrescentadas ao `wallets.dat` do Desktop.
 
 Exemplo com uma carteira que já tenha POVIX confirmado:
 

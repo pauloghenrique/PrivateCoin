@@ -56,3 +56,22 @@ Este teste inicia o servidor real de loopback e exige a porta local 4781 livre.
 Ele exercita o fluxo de início diretamente; a proteção de plataforma do
 executável continua exigindo Windows. A depuração F5 no Visual Studio e a
 abertura DPAPI real precisam ser verificadas no Windows.
+
+Para verificar os tokens exibidos pelo Desktop, compile `PrivateCoin.Desktop`
+em Release e execute:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -out:work/PrivateCoinDesktopTokenRegression.exe \
+  Tests/PrivateCoinDesktopTokenRegression.cs PrivateCoin.Desktop/TokenAmount.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
+  work/PrivateCoinDesktopTokenRegression.exe work/desktop-tokens-regression
+```
+
+A regressão cria tokens com a mesma preparação/assinatura nativa usada pelo
+DEX, confirma blocos com validadores descartáveis e sincroniza dois nós reais
+de loopback. Confere metadados e saldo por carteira, precisão até `Int64.MaxValue`,
+distinção por identificador entre símbolos iguais, confirmação de transferências
+e atualização após troca de cadeia. Criações e transferências pendentes ficam
+fora dos registros/saldos confirmados. Os dados de produção não são acessados.
+A interface WinForms ainda deve ser verificada visualmente no Windows.

@@ -32,6 +32,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.ListView validationListView;
         private System.Windows.Forms.ToolTip toolTip;
         private System.Windows.Forms.Button updateButton;
+        private System.Windows.Forms.Button tokensButton;
 
         protected override void Dispose(bool disposing)
         {
@@ -71,6 +72,7 @@ namespace PrivateCoin.Desktop
             this.chainStatusLabel = CreateMutedLabel("");
             this.validationListView = new System.Windows.Forms.ListView();
             this.updateButton = CreateButton("Buscar atualização", false);
+            this.tokensButton = CreateButton("Ver tokens", false);
 
             var header = new HeroPanel();
             header.SetBounds(0, 0, 1040, 96);
@@ -87,6 +89,7 @@ namespace PrivateCoin.Desktop
             header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security, updateButton });
 
             var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
+            tokensButton.SetBounds(492, 14, 120, 28);
             AddFieldLabel(walletCard, "CARTEIRA ATIVA", 24, 72, 220);
             walletComboBox.SetBounds(24, 94, 292, 28);
             balanceLabel.Font = new System.Drawing.Font("Segoe UI", 16F, System.Drawing.FontStyle.Bold);
@@ -112,7 +115,8 @@ namespace PrivateCoin.Desktop
             createTransactionButton.SetBounds(438, 320, 174, 32);
             walletCard.Controls.AddRange(new System.Windows.Forms.Control[] { walletComboBox, balanceLabel, walletNameTextBox,
                 createWalletButton, recoverWalletButton, receiveAddressTextBox, copyAddressButton, newAddressButton,
-                destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton });
+                destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton, tokensButton });
+            tokensButton.BringToFront();
 
             var validatorCard = CreateCard(684, 112, 332, 122, "Validador", "Ajude a proteger a rede");
             stakeAmountTextBox.SetBounds(20, 75, 72, 27);
@@ -152,10 +156,12 @@ namespace PrivateCoin.Desktop
             activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
             unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
             updateButton.Click += new System.EventHandler(this.UpdateButtonClick);
+            tokensButton.Click += new System.EventHandler(this.TokensButtonClick);
             connectButton.Enabled = false;
             showPeersButton.Enabled = false;
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
             toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
+            toolTip.SetToolTip(tokensButton, "Ver os tokens confirmados da blockchain e o saldo da carteira selecionada");
 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.BackColor = UiTheme.Background;
