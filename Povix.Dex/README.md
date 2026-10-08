@@ -113,6 +113,26 @@ processo descarta preparações ainda não enviadas; as transações já aceitas
 permanecem no cache e são retransmitidas na sincronização. Repetir o envio da
 mesma preparação já aceita retorna o mesmo comprovante.
 
+O DEX mantém a sessão da preparação ativa para que o ASP.NET preserve seu
+cookie entre a revisão e o envio. Use a mesma janela e permita os cookies
+do site. As falhas de envio mostram uma mensagem específica e um código:
+
+| Código | Ação |
+| --- | --- |
+| `draft_session_changed` | A sessão mudou; permita os cookies e prepare novamente na mesma janela. |
+| `draft_missing` | A preparação não está mais em memória, por exemplo após reiniciar o servidor; prepare novamente. |
+| `draft_expired` | Passaram os 15 minutos de validade; prepare novamente. |
+| `funding_unavailable` | Os UTXOs escolhidos para a taxa foram usados, reservados ou bloqueados; atualize o saldo e prepare novamente. |
+| `signatures_invalid`, `signature_invalid` | O envio ou a assinatura não corresponde à preparação; atualize o DEX, abra a carteira novamente e prepare outra criação. |
+| `network_not_ready`, `network_unavailable`, `pending_limit` | Aguarde a rede ou a fila e tente enviar a mesma preparação enquanto ela for válida. |
+| `persistence_unavailable` | O servidor não conseguiu salvar; tente o mesmo envio novamente. |
+| `transaction_invalid`, `submission_invalid` | A validação falhou; confira as versões do DEX/Core e prepare novamente. |
+
+Falhas temporárias retornam HTTP 503 e mantêm a revisão para nova tentativa.
+Rejeições que exigem outra preparação retornam HTTP 400. Os erros não mostram
+os dados da transação nem o conteúdo das exceções do servidor. Uma falha no
+envio não equivale a uma confirmação; consulte sempre o comprovante.
+
 ## Verificação
 
 Veja `../Tests/README.md` para executar a regressão do DEX. Ela usa carteiras e

@@ -107,11 +107,27 @@ namespace Povix.Dex.Services
                 if (prior != null) return prior.Transaction.Id;
                 RequireReady();
                 PreparedToken draft;
-                if (!drafts.TryGetValue(draftId, out draft) || draft.Owner != owner || draft.ExpiresUtc < DateTime.UtcNow)
-                    throw new InvalidOperationException("A preparação expirou. Revise o formulário e prepare novamente.");
-                if (pending.Count >= MaximumPending) throw new InvalidOperationException("A fila está cheia. Tente novamente mais tarde.");
+                if (draftId == null || !drafts.TryGetValue(draftId, out draft))
+                    throw new TokenOperationException("draft_missing", "A preparação não está mais disponível no DEX. Se o servidor foi reiniciado, prepare novamente.");
+                if (draft.Owner != owner)
+                    throw new TokenOperationException("draft_session_changed", "A sessão do navegador mudou desde a preparação. Permita os cookies deste site e prepare novamente na mesma janela.");
+                if (draft.ExpiresUtc <= DateTime.UtcNow)
+                    throw new TokenOperationException("draft_expired", "A preparação expirou após 15 minutos. Revise o formulário e prepare novamente.");
+                if (pending.Count >= MaximumPending)
+                    throw new TokenOperationException("pending_limit", "A fila está cheia. Aguarde e tente enviar a mesma preparação novamente.", true);
+                if (signatures == null || signatures.Length != draft.Creation.Inputs.Count || signatures.Any(string.IsNullOrWhiteSpace))
+                    throw new TokenOperationException("signatures_invalid", "O envio não contém uma assinatura para cada entrada da transação. Recarregue o DEX e prepare novamente.");
                 transaction = draft.Creation.Complete(signatures);
-                blockchain.ValidatePendingTransactions(pending.Concat(new[] { transaction }));
+                try { blockchain.ValidatePendingTransactions(pending.Concat(new[] { transaction })); }
+                catch (Exception error) when (IsInvalidData(error))
+                {
+                    // Return fixed diagnostics, never exception text supplied by transaction data.
+                    if (error.Message == "Missing or already spent input." || error.Message == "Locked validator collateral requires an unlock transaction.")
+                        throw new TokenOperationException("funding_unavailable", "O saldo escolhido para pagar a taxa foi usado, reservado ou bloqueado desde a preparação. Atualize o saldo e prepare novamente.");
+                    if (error.Message == "Invalid signature." || error is CryptographicException || error is FormatException)
+                        throw new TokenOperationException("signature_invalid", "A assinatura não corresponde à transação preparada. Recarregue o DEX, abra a carteira novamente e prepare outra criação.");
+                    throw new TokenOperationException("transaction_invalid", "A blockchain rejeitou a validação da transação. Atualize o DEX e o PrivateCoin.Core e prepare novamente.");
+                }
                 var nextPending = pending.Concat(new[] { transaction }).ToList();
                 var nextSubmitted = submitted.Concat(new[] { new SubmittedToken { DraftId = draftId, Transaction = transaction } }).ToList();
                 Save(blockchain, nextPending, nextSubmitted);
@@ -143,7 +159,7 @@ namespace Povix.Dex.Services
         private void RequireReady()
         {
             if (node.ConnectedPeerCount == 0 || !synchronized)
-                throw new InvalidOperationException("Aguarde a conexão e a sincronização com a rede POVIX.");
+                throw new TokenOperationException("network_not_ready", "Aguarde a conexão e a sincronização com a rede POVIX e tente novamente.", true);
         }
 
         private void ReceiveChain(object sender, ChainReceivedEventArgs args)
@@ -261,5 +277,13 @@ namespace Povix.Dex.Services
             [DataMember] public List<Transaction> Pending { get; set; }
             [DataMember] public List<SubmittedToken> Submitted { get; set; }
         }
+    }
+
+    public sealed class TokenOperationException : InvalidOperationException
+    {
+        public TokenOperationException(string code, string message, bool retryable = false) : base(message)
+        { Code = code; Retryable = retryable; }
+        public string Code { get; }
+        public bool Retryable { get; }
     }
 }

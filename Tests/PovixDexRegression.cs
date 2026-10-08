@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Collections;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -9,7 +11,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
+using System.Web.Mvc;
+using System.Web.Routing;
+using System.Web.SessionState;
 using System.Web.Script.Serialization;
+using Povix.Dex.Controllers;
 using Povix.Dex.Models;
 using Povix.Dex.Services;
 using PrivateCoin.Core;
@@ -94,7 +101,12 @@ internal static class PovixDexRegression
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "DEX synchronizes through an existing peer");
-                    object prepared = service.Prepare(model, PublicKeys(issuer), change, "regression");
+                    var sessionItems = new SessionStateItemCollection();
+                    var controller = ControllerFor(service, "regression", sessionItems);
+                    object prepared = ((JsonResult)controller.Prepare(model, PublicKeys(issuer).Select(key =>
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(key))).ToArray(), change)).Data;
+                    Check(sessionItems.Dirty && sessionItems.Count > 0,
+                        "MVC preparation persists session state so ASP.NET retains the owner cookie");
                     var draft = Json.DeserializeObject(Json.Serialize(prepared)) as Dictionary<string, object>;
                     File.WriteAllText(Path.Combine(directory, "fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = prepared,
                         expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination },
@@ -104,27 +116,45 @@ internal static class PovixDexRegression
                     using (var process = Process.Start(start)) { process.WaitForExit(); Check(process.ExitCode == 0, "browser review and signing regression"); }
                     var result = Json.DeserializeObject(File.ReadAllText(Path.Combine(directory, "browser-result.json"))) as Dictionary<string, object>;
                     string[] signatures = ((object[])result["signatures"]).Cast<string>().ToArray();
-                    bool wrongOwner = false;
-                    try { service.SubmitAsync((string)draft["draftId"], signatures, "another-session").GetAwaiter().GetResult(); }
-                    catch (InvalidOperationException) { wrongOwner = true; }
-                    Check(wrongOwner, "draft belongs to its original session");
-                    bool badSignature = false;
-                    try { service.SubmitAsync((string)draft["draftId"], new[] { Convert.ToBase64String(new byte[256]) }, "regression").GetAwaiter().GetResult(); }
-                    catch (Exception error) when (error is InvalidOperationException || error is CryptographicException) { badSignature = true; }
-                    Check(badSignature, "invalid signature rejected before persistence");
-                    string id = service.SubmitAsync((string)draft["draftId"], signatures, "regression").GetAwaiter().GetResult();
+                    CheckRejection(ControllerFor(service, "another-session", new SessionStateItemCollection()),
+                        (string)draft["draftId"], signatures, "draft_session_changed");
+                    controller = ControllerFor(service, "regression", sessionItems);
+                    CheckRejection(controller, Guid.NewGuid().ToString("N"), signatures, "draft_missing");
+                    CheckRejection(controller, (string)draft["draftId"], signatures.Concat(signatures).ToArray(), "signatures_invalid");
+                    CheckRejection(controller, (string)draft["draftId"], new[] { Convert.ToBase64String(new byte[256]) }, "signature_invalid");
+                    IDictionary savedDrafts = (IDictionary)typeof(TokenNetworkService).GetField("drafts",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(service);
+                    object expiringDraft = savedDrafts[(string)draft["draftId"]];
+                    var expiry = expiringDraft.GetType().GetProperty("ExpiresUtc");
+                    DateTime originalExpiry = (DateTime)expiry.GetValue(expiringDraft, null);
+                    expiry.SetValue(expiringDraft, DateTime.UtcNow.AddSeconds(-1), null);
+                    CheckRejection(controller, (string)draft["draftId"], signatures, "draft_expired");
+                    expiry.SetValue(expiringDraft, originalExpiry, null);
+                    var conflictingDraft = Json.DeserializeObject(Json.Serialize(service.Prepare(model, PublicKeys(issuer), change, "regression"))) as Dictionary<string, object>;
+                    string[] conflictingSignatures = SignPrepared(conflictingDraft, issuer);
+                    controller = ControllerFor(service, "regression", sessionItems);
+                    var accepted = SubmitResult(controller, (string)draft["draftId"], signatures);
+                    string id = (string)accepted["transactionId"];
+                    Check(controller.Response.StatusCode == 200 && ((string)accepted["receiptUrl"]).EndsWith(id),
+                        "a second MVC request in the saved session submits the browser signature and returns its receipt");
                     Wait(() => received != null && received.Id == id, "locally signed token creation propagates over P2P");
                     Check(service.GetRegistration(id).Status == "pending" && chain.GetTokens().Count == 0, "pending receipt does not claim blockchain confirmation");
                     Check(service.GetBalance(issuer.OwnedOneTimeAddresses.ToArray()) == 0, "pending funding output is reserved");
                     Check(service.SubmitAsync((string)draft["draftId"], signatures, "regression").GetAwaiter().GetResult() == id, "submission retry is idempotent");
+                    CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "funding_unavailable");
                     string state = File.ReadAllText(Path.Combine(directory, "dex-network.json"));
                     Check(!state.Contains("RSAKeyValue") || (!state.Contains("<D>") && !state.Contains("<P>")), "persisted network state contains no private keys");
                     service.Dispose();
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "pending creation restored while synchronization is required again");
+                    controller = ControllerFor(service, "regression", sessionItems);
+                    CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
+                    Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
+                        "an accepted submission can recover its receipt after restart while the network reconnects");
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "restarted DEX resynchronizes");
+                    CheckRejection(ControllerFor(service, "regression", sessionItems), (string)conflictingDraft["draftId"], conflictingSignatures, "draft_missing");
                     chain.ValidatePendingTransactions(new[] { received });
                     var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
                     Block confirmed = chain.AddProofOfStakeBlock(new[] { received }, validators);
@@ -138,5 +168,83 @@ internal static class PovixDexRegression
                 finally { service.Dispose(); }
             }
         }
+    }
+
+    private static Dictionary<string, object> SubmitResult(TokensController controller, string draftId, string[] signatures)
+        => Json.DeserializeObject(Json.Serialize(((JsonResult)controller.Submit(draftId, signatures).GetAwaiter().GetResult()).Data)) as Dictionary<string, object>;
+
+    private static void CheckRejection(TokensController controller, string draftId, string[] signatures, string code, int status = 400)
+    {
+        var result = SubmitResult(controller, draftId, signatures);
+        Check(controller.Response.StatusCode == status && (string)result["code"] == code && !result.ContainsKey("transactionId"),
+            "MVC rejection identifies " + code + " without claiming acceptance");
+    }
+
+    private static string[] SignPrepared(Dictionary<string, object> draft, Wallet wallet)
+    {
+        var keys = wallet.ExportPrivateKeys().ToDictionary(xml => {
+            using (var rsa = new RSACryptoServiceProvider()) {
+                rsa.PersistKeyInCsp = false; rsa.FromXmlString(xml);
+                using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(rsa.ToXmlString(false)))).Replace("-", "").ToLowerInvariant();
+            }
+        }, xml => xml);
+        byte[] payload = Convert.FromBase64String((string)draft["signingPayload"]);
+        return ((object[])draft["inputAddresses"]).Cast<string>().Select(address => {
+            using (var rsa = new RSACryptoServiceProvider()) {
+                rsa.PersistKeyInCsp = false; rsa.FromXmlString(keys[address]);
+                return Convert.ToBase64String(rsa.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+            }
+        }).ToArray();
+    }
+
+    private static TokensController ControllerFor(TokenNetworkService service, string sessionId, SessionStateItemCollection items)
+    {
+        typeof(Povix.Dex.MvcApplication).GetProperty("TokenNetwork").SetValue(null, service, null);
+        var context = new HttpContext(new HttpRequest("", "http://localhost/", ""), new HttpResponse(new StringWriter()));
+        SessionStateUtility.AddHttpSessionStateToContext(context, new HttpSessionStateContainer(sessionId,
+            items, new HttpStaticObjectsCollection(), 20, true, HttpCookieMode.UseCookies, SessionStateMode.InProc, false));
+        var testContext = new TestContext(new HttpSessionStateWrapper(context.Session));
+        var controller = new TokensController();
+        var request = new RequestContext(testContext, new RouteData());
+        controller.ControllerContext = new ControllerContext(request, controller);
+        var routes = new RouteCollection();
+        Povix.Dex.RouteConfig.RegisterRoutes(routes);
+        controller.Url = new UrlHelper(request, routes);
+        return controller;
+    }
+
+    private sealed class TestContext : HttpContextBase
+    {
+        private readonly HttpSessionStateBase session;
+        private readonly IDictionary items = new Hashtable();
+        private readonly HttpResponseBase response = new TestResponse();
+        private readonly HttpRequestBase request = new TestRequest();
+        public TestContext(HttpSessionStateBase session) { this.session = session; }
+        public override HttpSessionStateBase Session => session;
+        public override HttpResponseBase Response => response;
+        public override HttpRequestBase Request => request;
+        public override IDictionary Items => items;
+        public override object GetService(Type serviceType) => null;
+    }
+    private sealed class TestRequest : HttpRequestBase
+    {
+        public override string ApplicationPath => "/";
+        public override string AppRelativeCurrentExecutionFilePath => "~/";
+        public override string PathInfo => "";
+        public override string RawUrl => "/";
+        public override Uri Url => new Uri("http://localhost/");
+        public override NameValueCollection ServerVariables => new NameValueCollection();
+    }
+    private sealed class TestResponse : HttpResponseBase
+    {
+        public override int StatusCode { get; set; } = 200;
+        public override bool TrySkipIisCustomErrors { get; set; }
+        public override HttpCachePolicyBase Cache { get; } = new TestCache();
+        public override string ApplyAppPathModifier(string path) => path;
+    }
+    private sealed class TestCache : HttpCachePolicyBase
+    {
+        public override void SetCacheability(HttpCacheability cacheability) { }
+        public override void SetNoStore() { }
     }
 }
