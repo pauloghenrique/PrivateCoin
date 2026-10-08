@@ -71,6 +71,13 @@ namespace PrivateCoin.Desktop
 
         internal string FinalityJournalPath => Path.Combine(Path.GetDirectoryName(networkFilePath), "finality-votes.journal");
 
+        internal bool IsManagedDataFile(string path)
+        {
+            string full = Path.GetFullPath(path);
+            return new[] { walletFilePath, networkFilePath, recoveryFilePath, FinalityJournalPath }
+                .Any(managed => string.Equals(Path.GetFullPath(managed), full, StringComparison.OrdinalIgnoreCase));
+        }
+
         public WalletStore() : this(FindDataDirectory()) { }
 
         internal WalletStore(string directory)

@@ -112,3 +112,23 @@ para testar o utilitário de checkpoint; não é um checkpoint de produção.
 
 Esses testes não demonstram disponibilidade sob partições, rodadas BFT ou
 segurança de produção. As limitações do protocolo estão no README principal.
+
+### Geração e conferência de checkpoint candidato
+
+Depois de executar a regressão de finalização em um diretório descartável,
+use sua fixture pública para verificar geração, importação e validação:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll \
+  -r:System.Core -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinCheckpointRegression.exe Tests/PrivateCoinCheckpointRegression.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
+  work/PrivateCoinCheckpointRegression.exe work/finality-regression/bootstrap-public.json
+```
+
+O teste verifica 17 casos: bloco e roster reais, JSON determinístico, campos
+públicos, estabilidade após novos blocos, seleção histórica, checkpoint ativo
+fixo, altura ausente/gênese, falta de validadores, adulteração de stake/rede/hash,
+fork na mesma altura, cadeia de origem inválida e limite de tamanho.
+A janela WinForms de geração, importação, exportação e cópia de configuração
+ainda deve ser verificada visualmente no Windows. Nenhuma ação ativa a votação.

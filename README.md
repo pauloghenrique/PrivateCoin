@@ -294,6 +294,35 @@ MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
   work/PrivateCoinFinalityCheckpoint.exe /caminho/para/Blockchain.json
 ```
 
+No Desktop, abra **Atividade da rede → Checkpoint** após sincronizar.
+Escolha a altura de um bloco existente e clique em **Gerar candidato**.
+A janela exibe o hash, a identidade da política e os stakes daquela altura.
+**Salvar candidato** exporta um JSON com dados públicos. Outro operador pode
+usar **Conferir arquivo recebido** para comparar o bloco e todos os registros
+de validadores com sua própria cadeia. **Copiar configuração** apenas copia
+os valores: nenhuma dessas ações altera App.config nem ativa a votação.
+A mineração local de novas pendências fica pausada enquanto a janela está
+aberta; os outros nós da rede continuam operando.
+
+Se a votação já estiver configurada, a janela exporta o checkpoint fixo
+da política existente, nunca a altura variável da ponta. Avançar a cadeia
+não altera a referência. Importar um arquivo apenas confirma correspondência
+com a cadeia local, não o acordo ou a assinatura dos demais operadores.
+
+O utilitário também pode exportar e conferir o mesmo formato público:
+
+```sh
+mono work/PrivateCoinFinalityCheckpoint.exe Blockchain.json --export checkpoint.json
+mono work/PrivateCoinFinalityCheckpoint.exe Blockchain.json --verify checkpoint.json
+mono work/PrivateCoinFinalityCheckpoint.exe Blockchain.json --export checkpoint-altura.json --height 100
+```
+
+Substitua `100` por uma altura existente com ao menos dois validadores distintos.
+A opção `--export` recusa sobrescrever arquivos existentes. Para usar o
+utilitário depois da ativação, copie a configuração de finalização do nó
+para `PrivateCoinFinalityCheckpoint.exe.config`, especialmente ao exportar
+a política já ativa.
+
 Depois do acordo, copie os valores emitidos de `FinalityAnchorHeight`,
 `FinalityAnchorHash` e `RequireFinality=true` para o App.config do Desktop
 (executável: PrivateCoin.Desktop.exe.config), e para os Web.config do Explorer

@@ -25,6 +25,7 @@ namespace PrivateCoin.Desktop
         private readonly Timer finalityTimer = new Timer { Interval = 5000 };
         private bool persistenceAvailable = true;
         private bool miningInProgress;
+        private bool checkpointReviewInProgress;
         private bool updateCheckInProgress;
 
         private sealed class FeeChoice
@@ -323,6 +324,32 @@ namespace PrivateCoin.Desktop
             using (var dialog = new TokenWalletDialog(() => blockchain.GetConfirmedView(), () => SelectedWallet,
                 () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s)."))
                 dialog.ShowDialog(this);
+        }
+
+        private void CheckpointButtonClick(object sender, EventArgs e)
+        {
+            if (!networkReadiness.IsReady || !IsNetworkConnected())
+            {
+                Log("Aguarde a sincronização com a rede antes de gerar ou conferir um checkpoint.", false);
+                return;
+            }
+            if (miningInProgress)
+            {
+                Log("Aguarde a criação do bloco em andamento antes de abrir o checkpoint.", false);
+                return;
+            }
+            checkpointReviewInProgress = true;
+            try
+            {
+                using (var dialog = new CheckpointDialog(() => blockchain,
+                    () => networkReadiness.IsReady && IsNetworkConnected(), walletStore.IsManagedDataFile))
+                    dialog.ShowDialog(this);
+            }
+            finally
+            {
+                checkpointReviewInProgress = false;
+                if (SnapshotPending().Length > 0) BeginInvoke(new Action(StartAutomaticMining));
+            }
         }
 
         private void StartNodeButtonClick(object sender, EventArgs e)
@@ -672,7 +699,7 @@ namespace PrivateCoin.Desktop
 
         private async void StartAutomaticMining()
         {
-            if (miningInProgress || !CanPropose(SnapshotPending())) return;
+            if (checkpointReviewInProgress || miningInProgress || !CanPropose(SnapshotPending())) return;
             miningInProgress = true;
             try
             {
@@ -727,7 +754,7 @@ namespace PrivateCoin.Desktop
                     ? "Aguardando 2 validadores sem participação na transferência"
                     : "Aguardando uma transferência válida";
                 UpdateChainSummary();
-                if (!IsDisposed && remaining.Length > 0 && CanPropose(remaining))
+                if (!IsDisposed && !checkpointReviewInProgress && remaining.Length > 0 && CanPropose(remaining))
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }

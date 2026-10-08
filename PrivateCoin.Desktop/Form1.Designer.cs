@@ -33,6 +33,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.ToolTip toolTip;
         private System.Windows.Forms.Button updateButton;
         private System.Windows.Forms.Button tokensButton;
+        private System.Windows.Forms.Button checkpointButton;
 
         protected override void Dispose(bool disposing)
         {
@@ -73,6 +74,7 @@ namespace PrivateCoin.Desktop
             this.validationListView = new System.Windows.Forms.ListView();
             this.updateButton = CreateButton("Buscar atualização", false);
             this.tokensButton = CreateButton("Ver tokens", false);
+            this.checkpointButton = CreateButton("Checkpoint", false);
 
             var header = new HeroPanel();
             header.SetBounds(0, 0, 1040, 96);
@@ -128,6 +130,9 @@ namespace PrivateCoin.Desktop
                 activateValidatorButton, unlockStakeButton, validatorStatusLabel });
 
             var activityCard = CreateCard(24, 490, 992, 246, "Atividade da rede", "Acompanhe sincronização, mineração e validações");
+            checkpointButton.SetBounds(804, 14, 164, 30);
+            activityCard.Controls.Add(checkpointButton);
+            checkpointButton.BringToFront();
             miningStatusLabel.SetBounds(24, 67, 570, 24);
             chainStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             chainStatusLabel.SetBounds(600, 67, 368, 24);
@@ -157,10 +162,12 @@ namespace PrivateCoin.Desktop
             unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
             updateButton.Click += new System.EventHandler(this.UpdateButtonClick);
             tokensButton.Click += new System.EventHandler(this.TokensButtonClick);
+            checkpointButton.Click += new System.EventHandler(this.CheckpointButtonClick);
             connectButton.Enabled = false;
             showPeersButton.Enabled = false;
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
             toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
+            toolTip.SetToolTip(checkpointButton, "Gerar e conferir um checkpoint candidato sem ativar a votação");
             toolTip.SetToolTip(tokensButton, "Ver os tokens confirmados da blockchain e o saldo da carteira selecionada");
 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
