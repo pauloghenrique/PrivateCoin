@@ -41,3 +41,18 @@ carteiras no backup, a comunicação real com o auxiliar via loopback e a
 rejeição de origens/Host não autorizados. A abertura DPAPI é substituída somente
 nesse teste em Linux; a leitura real deve ser verificada no Windows, com o
 mesmo usuário que possui o arquivo.
+
+Para verificar o início do auxiliar sem argumentos (como F5 ou duplo clique),
+o início com `--origin` e os erros de endereço/porta, após compilar o auxiliar:
+
+```sh
+mcs -r:Povix.WalletBridge/bin/Release/Povix.WalletBridge.exe -r:System.Core \
+  -main:PovixWalletStartupRegression -out:work/PovixWalletStartupRegression.exe \
+  Tests/PovixWalletStartupRegression.cs Povix.WalletBridge/Program.cs
+MONO_PATH=Povix.WalletBridge/bin/Release mono work/PovixWalletStartupRegression.exe
+```
+
+Este teste inicia o servidor real de loopback e exige a porta local 4781 livre.
+Ele exercita o fluxo de início diretamente; a proteção de plataforma do
+executável continua exigindo Windows. A depuração F5 no Visual Studio e a
+abertura DPAPI real precisam ser verificadas no Windows.

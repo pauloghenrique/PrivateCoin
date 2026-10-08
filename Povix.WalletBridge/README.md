@@ -6,8 +6,31 @@ Desktop usa DPAPI `CurrentUser`, com a mesma entropia `PrivateCoin` de
 `PrivateCoin.Desktop/WalletStore.cs`. Essa proteção só pode ser aberta no
 ambiente do usuário Windows que possui a carteira, e não pelo site remoto.
 
-Compile este projeto em Release com .NET Framework 4.8. No computador Windows
-que possui o arquivo, execute o auxiliar informando a origem exata do DEX:
+## Iniciar no Visual Studio
+
+No Windows, instale a carga **Desenvolvimento para desktop com .NET** e o
+Developer Pack/Targeting Pack do **.NET Framework 4.8** no Visual Studio.
+Abra a solução ou diretamente `Povix.WalletBridge.csproj`.
+
+1. No Gerenciador de Soluções, clique com o botão direito em
+   **Povix.WalletBridge** e escolha **Definir como Projeto de Inicialização**.
+2. Selecione **Debug** e **Any CPU** na barra de ferramentas e compile o projeto.
+3. Pressione **F5** (com depuração) ou **Ctrl+F5** (sem depuração).
+4. Na janela, informe o endereço do DEX aberto no navegador, como
+   `https://localhost:44355`, e pressione Enter. Mantenha a janela aberta enquanto
+   usa o arquivo no DEX.
+
+O projeto declara as configurações **Debug** e **Release** e gera o executável
+em `bin\Debug\` ou `bin\Release\`. Após atualizar uma versão anterior,
+recarregue o projeto ou feche e reabra a solução para o Visual Studio reconhecer
+as configurações. Abrir o `.csproj` diretamente também permite iniciar o auxiliar
+sem depender da versão de Visual Studio necessária para abrir uma solução `.slnx`.
+
+## Iniciar o executável
+
+No computador Windows que possui o arquivo, abra o executável compilado. Sem
+argumentos, ele solicita o endereço do DEX na própria janela. Também é possível
+informar a origem exata na linha de comando:
 
 ```powershell
 .\Povix.WalletBridge\bin\Release\Povix.WalletBridge.exe --origin https://localhost:44355
@@ -16,6 +39,19 @@ que possui o arquivo, execute o auxiliar informando a origem exata do DEX:
 Para outra instalação, substitua o endereço pela origem HTTPS real do DEX.
 O processo usa somente `127.0.0.1:4781`; não requer uma porta pública nem
 alterações no roteador. Mantenha a janela aberta durante a leitura do arquivo.
+Se a porta 4781 estiver ocupada por outra instância, feche a janela anterior
+antes de iniciar novamente. Erros de endereço ou de porta são mostrados na
+janela, que aguarda Enter antes de fechar quando iniciada interativamente.
+
+No Developer Command Prompt do Visual Studio, o projeto pode ser compilado
+separadamente, sem restaurar pacotes dos outros projetos:
+
+```cmd
+msbuild Povix.WalletBridge\Povix.WalletBridge.csproj /t:Rebuild /p:Configuration=Debug /p:Platform=AnyCPU
+Povix.WalletBridge\bin\Debug\Povix.WalletBridge.exe
+```
+
+## Abrir a carteira no DEX
 
 Na página `/tokens/criar`:
 
