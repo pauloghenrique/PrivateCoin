@@ -1,5 +1,0 @@
-config.json
-*.sqlite*
-*.db*
-__pycache__/
-.env
