@@ -36,9 +36,12 @@ MONO_PATH=Povix.WalletBridge/bin/Release:Povix.Dex/bin mono \
   PrivateCoin.Desktop/bin/Release/PrivateCoin.Desktop.exe
 ```
 
-Essa regressão usa uma coleção descartável com duas carteiras. Verifica os
+Essa regressão usa uma coleção descartável com duas carteiras com chaves e
+uma carteira sem endereços, além de uma coleção contendo apenas essa carteira
+vazia. Verifica os
 nomes, a seleção explícita e o isolamento das chaves, a preservação das demais
-carteiras no backup, a comunicação real com o auxiliar via loopback e a
+carteiras no backup (inclusive a vazia), a rejeição da seleção sem endereços,
+a comunicação real com o auxiliar via loopback e a
 rejeição de origens/Host não autorizados. A abertura DPAPI é substituída somente
 nesse teste em Linux; a leitura real deve ser verificada no Windows, com o
 mesmo usuário que possui o arquivo.

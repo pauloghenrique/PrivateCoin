@@ -92,8 +92,10 @@ namespace Povix.WalletBridge
                     throw new WalletImportException("wallet_empty", "O arquivo aberto não contém uma coleção de carteiras. Escolha o wallets.dat em uso pelo Desktop.");
                 if (collection.Wallets.Count > 100)
                     throw new WalletImportException("wallet_limit", "O arquivo contém mais de 100 carteiras, acima do limite do DEX.");
-                if (collection.Wallets.Any(wallet => wallet == null || wallet.PrivateKeys == null || wallet.PrivateKeys.Count == 0))
-                    throw new WalletImportException("wallet_keys", "Há uma carteira sem chaves no arquivo. Abra a pasta pelo Desktop e escolha seu wallets.dat atualizado.");
+                // Desktop persists its initial wallet before it has a receive address.
+                // Keep that empty entry without rejecting the other wallets in the file.
+                if (collection.Wallets.Any(wallet => wallet == null || wallet.PrivateKeys == null))
+                    throw new WalletImportException("wallet_keys", "Há uma carteira inválida ou sem lista de chaves no arquivo. Abra a pasta pelo Desktop e escolha seu wallets.dat atualizado.");
                 if (collection.Wallets.Any(wallet => wallet.PrivateKeys.Count > 1000))
                     throw new WalletImportException("key_limit", "Uma carteira contém mais de 1.000 chaves, acima do limite do DEX.");
                 if (collection.Wallets.Any(wallet => wallet.PrivateKeys.Any(xml => string.IsNullOrEmpty(xml) || xml.Length > 5000)))
