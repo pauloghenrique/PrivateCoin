@@ -4,6 +4,25 @@ using System.Linq;
 
 namespace PrivateCoin.Core
 {
+    /// <summary>A confirmed token and a wallet balance from the same chain snapshot.</summary>
+    public sealed class TokenBalance
+    {
+        internal TokenBalance(TokenDefinition token, long amount, int height, int confirmations)
+        {
+            Id = token.Id; Name = token.Name; Symbol = token.Symbol;
+            Decimals = token.Decimals; Supply = token.Supply; Amount = amount;
+            CreationHeight = height; Confirmations = confirmations;
+        }
+        public string Id { get; }
+        public string Name { get; }
+        public string Symbol { get; }
+        public int Decimals { get; }
+        public long Supply { get; }
+        public long Amount { get; }
+        public int CreationHeight { get; }
+        public int Confirmations { get; }
+    }
+
     /// <summary>A point-in-time summary of the public blockchain and its emission.</summary>
     public sealed class BlockchainSummary
     {

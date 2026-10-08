@@ -569,6 +569,21 @@ namespace PrivateCoin.Core
                 .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
         }
 
+        /// <summary>Lists all registered tokens and confirmed balances under a single chain lock.</summary>
+        public IReadOnlyList<TokenBalance> GetTokenBalances(IEnumerable<string> addresses)
+        {
+            var owned = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+            lock (sync)
+            {
+                var amounts = new Dictionary<string, long>(StringComparer.Ordinal);
+                foreach (UnspentOutput output in BuildUtxo().Values.Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)))
+                    AddAssetAmount(amounts, output.Output.AssetId, output.Output.Amount);
+                return blocks.SelectMany(block => block.Transactions.Where(tx => tx.Kind == TransactionKind.TokenCreate)
+                    .Select(tx => new TokenBalance(tx.Token, amounts.ContainsKey(tx.Token.Id) ? amounts[tx.Token.Id] : 0,
+                        block.Height, blocks[blocks.Count - 1].Height - block.Height + 1))).ToArray();
+            }
+        }
+
         public IReadOnlyList<UnspentOutput> GetSpendableTokenOutputs(IEnumerable<string> addresses,
             IEnumerable<Transaction> pendingTransactions, string tokenId)
         {
