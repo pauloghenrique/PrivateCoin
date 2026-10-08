@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="DEXPovix/DEXPovix.csproj" Id="351050c1-e352-4b31-bdcc-f9a1c080cacb" />
+  <Project Path="Povix.Dex/Povix.Dex.csproj" Id="b1f9a0cb-b94b-4160-a1c2-9b5f4b376485" />
   <Project Path="PrivateCoin.Core/PrivateCoin.Core.csproj" Id="fae5cd1c-714d-4225-8bf2-b553b95bc35b" />
   <Project Path="PrivateCoin.Desktop/PrivateCoin.Desktop.csproj" Id="82cb7847-937b-47da-80ca-34d5993f91a1" />
   <Project Path="PrivateCoin.Site/PrivateCoin.Site.csproj" Id="c7f8b9da-d9e8-40d8-8040-14ceec4bce33" />
