@@ -25,14 +25,15 @@ repetição idempotente, reinício, confirmação proof-of-stake e preservação
 chaves de endereços gerados no navegador.
 
 Para verificar abertura do arquivo e seleção entre carteiras, compile também
-`Povix.WalletBridge` em Release e execute:
+`Povix.WalletBridge` e `PrivateCoin.Desktop` em Release e execute:
 
 ```sh
 mcs -r:Povix.WalletBridge/bin/Release/Povix.WalletBridge.exe \
   -r:Povix.Dex/bin/PrivateCoin.Core.dll -r:System.Web.Extensions -r:System.Core \
   -out:work/PovixWalletFileRegression.exe Tests/PovixWalletFileRegression.cs
 MONO_PATH=Povix.WalletBridge/bin/Release:Povix.Dex/bin mono \
-  work/PovixWalletFileRegression.exe work/wallet-files-regression "$(command -v node)"
+  work/PovixWalletFileRegression.exe work/wallet-files-regression "$(command -v node)" \
+  PrivateCoin.Desktop/bin/Release/PrivateCoin.Desktop.exe
 ```
 
 Essa regressão usa uma coleção descartável com duas carteiras. Verifica os
@@ -41,6 +42,13 @@ carteiras no backup, a comunicação real com o auxiliar via loopback e a
 rejeição de origens/Host não autorizados. A abertura DPAPI é substituída somente
 nesse teste em Linux; a leitura real deve ser verificada no Windows, com o
 mesmo usuário que possui o arquivo.
+
+A coleção do teste é serializada pelos tipos e pelo método reais do Desktop,
+incluindo os metadados privados e o formato legado. Também confere UTF-8 com
+BOM e códigos separados para senha da cópia, DPAPI e formato, sem expor dados
+da carteira nos erros HTTP. Os testes de início abaixo verificam ainda a leitura
+local `--check-wallet`, os contadores públicos, o arquivo original preservado e
+a ocultação do conteúdo das exceções.
 
 Para verificar o início do auxiliar sem argumentos (como F5 ou duplo clique),
 o início com `--origin` e os erros de endereço/porta, após compilar o auxiliar:

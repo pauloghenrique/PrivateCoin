@@ -36,6 +36,25 @@ const file = record => {
     assert.equal(response.status, 400);
     response = await realFetch(fixture.helperUrl, { method: 'POST', headers: { Origin: fixture.helperOrigin, 'Content-Type': 'application/json' }, body: 'null' });
     assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'import_request');
+    const nativeRequest = async (bytes, password) => realFetch(fixture.helperUrl, {
+        method: 'POST', headers: { Origin: fixture.helperOrigin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: Buffer.from(bytes).toString('base64'), password })
+    });
+    const desktopBytes = Buffer.from(fixture.desktopFile, 'base64');
+    response = await nativeRequest(desktopBytes, 'short');
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'copy_password');
+    response = await nativeRequest(Buffer.concat([desktopBytes, Buffer.from([1])]), 'local-test-password');
+    assert.equal(response.status, 400);
+    let failure = await response.json();
+    assert.equal(failure.code, 'windows_protection');
+    assert(!JSON.stringify(failure).includes('private-material'));
+    response = await nativeRequest(Buffer.concat([desktopBytes, Buffer.from([2])]), 'local-test-password');
+    assert.equal(response.status, 400);
+    failure = await response.json();
+    assert.equal(failure.code, 'wallet_format');
+    assert(!JSON.stringify(failure).includes('private-json'));
 
     const choices = await wallet.readFile(file(fixture.portable), 'local-test-password');
     assert.deepEqual(choices.map(item => item.name), ['Carteira principal', 'Carteira de tokens']);
@@ -76,9 +95,12 @@ const file = record => {
     await wallet.selectWallet('1');
     assert.deepEqual(wallet.addresses(), [fixture.secondAddress]);
     wallet.lock();
+    const protectedFailure = { size: nativeBytes.length + 1, arrayBuffer: async () => Uint8Array.from([...nativeBytes, 1]).buffer };
+    await assert.rejects(wallet.readFile(protectedFailure, 'local-test-password'), /código: windows_protection/);
+    assert.equal(wallet.isUnlocked(), false);
     global.fetch = async () => { throw new TypeError('connection refused'); };
     await assert.rejects(wallet.readFile(nativeFile, 'local-test-password'), /Inicie o Povix.WalletBridge/);
     assert.equal(wallet.isUnlocked(), false);
     await assert.rejects(wallet.readFile(file({ Wallets: [{ PrivateKeys: ['plaintext'] }] }), 'local-test-password'), /formato reconhecido/);
-    console.log('PASS wallet file selection: names, isolated keys, preserved collection, native loopback opening, CORS/Host checks and unavailable-helper error');
+    console.log('PASS wallet file selection: names, isolated keys, preserved collection, native loopback opening, CORS/Host, specific redacted diagnostics and unavailable-helper error');
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

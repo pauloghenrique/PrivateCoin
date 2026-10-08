@@ -130,6 +130,7 @@ namespace PrivateCoin.Desktop
         }
 
         public bool WalletExists => File.Exists(walletFilePath);
+        public string WalletFilePath => walletFilePath;
         public bool NetworkExists => File.Exists(networkFilePath);
         public bool NetworkNeedsUpgrade { get; private set; }
 

@@ -210,7 +210,10 @@
                         body: JSON.stringify({ file: toBase64(bytes), password })
                     });
                     const result = await response.json();
-                    if (!response.ok || result.error) throw new Error(result.error || 'Não foi possível abrir o arquivo no Windows.');
+                    if (!response.ok || result.error) {
+                        const code = typeof result.code === 'string' && /^[a-z_]{1,40}$/.test(result.code) ? ' (código: ' + result.code + ')' : '';
+                        throw new Error((result.error || 'Não foi possível abrir o arquivo no Windows.') + code);
+                    }
                     record = result.wallet;
                 } catch (error) {
                     if (error instanceof TypeError || error.name === 'AbortError')
