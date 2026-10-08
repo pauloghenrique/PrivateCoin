@@ -219,3 +219,23 @@ A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitár
 Ao existir uma transferência pendente e pelo menos dois validadores locais ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
 
 O bloqueio da garantia é publicado como uma transação `StakeLock`: ela consome UTXOs assinados, cria uma saída de garantia que não pode ser usada por uma transferência comum e vincula globalmente o valor, a chave pública do validador e o endereço de recompensa. Todo nó reconstrói o conjunto ativo a partir dessas saídas não gastas e rejeita blocos cuja garantia não exista na cadeia. Cada criador e confirmador também assina individualmente o mesmo payload determinístico do voto; as chaves, papéis e assinaturas integram a hash do bloco e são verificados novamente ao carregar ou sincronizar a cadeia.
+
+### Reconexão do Desktop
+
+O Desktop inicia aguardando sincronização. Criar carteiras com recompensa,
+enviar transferências, ativar/desativar stake e produzir blocos exige ao menos
+um par conectado e o recebimento de uma cadeia validada. Ao perder todos os
+pares, o estado de sincronização é invalidado imediatamente; respostas que já
+estavam na fila da interface não podem liberar uma sessão posterior. Uma
+cadeia idêntica validada também conclui a sincronização. Pendências válidas
+voltam a ser processadas depois da sincronização.
+
+A primeira abertura cria a carteira local, mas não emite uma recompensa nem
+cria um bloco. Para criar outra carteira com recompensa é necessário primeiro
+conectar a uma rede existente. Uma rede completamente nova precisa de um
+procedimento separado de inicialização; não existe exceção automática offline.
+
+A escolha da cadeia permanece determinística: mais blocos e, em empate, menor
+hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
+mas não estabelece finalização nem obriga nós antigos ou outros clientes a
+seguir a mesma política. Uma cadeia válida maior ainda pode substituir a local.

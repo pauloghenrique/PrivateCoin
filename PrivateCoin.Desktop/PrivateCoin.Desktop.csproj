@@ -58,6 +58,7 @@
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
     <Compile Include="DesktopUpdater.cs" />
+    <Compile Include="NetworkReadiness.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="RecoveryPhraseGenerator.cs" />
     <Compile Include="RecoveryWalletDialog.cs">
