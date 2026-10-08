@@ -53,6 +53,7 @@
     <Compile Include="Blockchain.cs" />
     <Compile Include="Finality.cs" />
     <Compile Include="FinalityCheckpoint.cs" />
+    <Compile Include="PublicBlockchainSnapshot.cs" />
     <Compile Include="FinalityCoordinator.cs" />
     <Compile Include="BlockchainQueryApi.cs" />
     <Compile Include="Crypto.cs" />

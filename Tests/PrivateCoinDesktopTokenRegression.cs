@@ -26,7 +26,7 @@ internal static class PrivateCoinDesktopTokenRegression
         using (var issuer = new Wallet()) using (var recipient = new Wallet())
         using (var first = new Wallet()) using (var second = new Wallet())
         {
-            var chain = new Blockchain();
+            var chain = new Blockchain((FinalityPolicy)null);
             Block reward;
             chain.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
@@ -35,7 +35,9 @@ internal static class PrivateCoinDesktopTokenRegression
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
-            var desktopChain = new Blockchain(chain.Blocks);
+            var policy = new FinalityPolicy(chain.Blocks.Count - 1, chain.Blocks.Last().Hash);
+            chain = new Blockchain(chain.Blocks, policy);
+            var desktopChain = new Blockchain(chain.Blocks, policy);
             var commonBlocks = chain.Blocks.ToArray();
             string destination = issuer.CreateReceiveAddress(), recipientAddress = recipient.CreateReceiveAddress();
             Transaction create = PrepareAndSign(chain, issuer, "Aurora 🌙", "AUR", 8, long.MaxValue, destination);
@@ -44,18 +46,23 @@ internal static class PrivateCoinDesktopTokenRegression
                 "a prepared or pending DEX creation is excluded from the Desktop list");
 
             int sourcePort = Port(), desktopPort = Port();
-            using (var source = new PeerNode(sourcePort, false, Path.Combine(directory, "source-peers.json")))
-            using (var desktop = new PeerNode(desktopPort, false, Path.Combine(directory, "desktop-peers.json")))
+            using (var journal = new FinalityVoteJournal(Path.Combine(directory, "source-votes.journal")))
+            using (var source = new PeerNode(sourcePort, false, Path.Combine(directory, "source-peers.json"), policy))
+            using (var desktop = new PeerNode(desktopPort, false, Path.Combine(directory, "desktop-peers.json"), policy))
             {
+                var coordinator = new FinalityCoordinator(policy, journal);
+                string lastReceivedHash = null;
                 Exception synchronizationError = null;
                 desktop.ChainReceived += (sender, data) => {
                     try { desktopChain.TryReplaceChain(data.Blocks); }
                     catch (Exception error) { synchronizationError = error; }
+                    finally { Interlocked.Exchange(ref lastReceivedHash, data.Blocks.Last().Hash); }
                 };
                 source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain.Blocks);
                 source.Start(new string[0]); desktop.Start(new string[0]);
                 desktop.ConnectAsync("127.0.0.1", sourcePort).GetAwaiter().GetResult();
                 Block creationBlock = chain.AddProofOfStakeBlock(new[] { create }, validators);
+                Finalize(chain, coordinator, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,
                     "a confirmed native DEX token appears after P2P blockchain synchronization");
@@ -76,6 +83,7 @@ internal static class PrivateCoinDesktopTokenRegression
 
                 Transaction another = PrepareAndSign(chain, issuer, "Outro Aurora", "AUR", 0, 123, recipientAddress);
                 chain.AddProofOfStakeBlock(new[] { another }, validators);
+                Finalize(chain, coordinator, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 2, "new confirmed creations refresh the list");
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Select(item => item.Id).Distinct().Count() == 2 &&
@@ -87,6 +95,7 @@ internal static class PrivateCoinDesktopTokenRegression
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue,
                     "a pending transfer does not alter the confirmed balance");
                 chain.AddProofOfStakeBlock(new[] { transfer }, validators);
+                Finalize(chain, coordinator, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,
                     "a confirmed token transfer refreshes the recipient balance");
@@ -94,14 +103,23 @@ internal static class PrivateCoinDesktopTokenRegression
                     desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Confirmations == 3,
                     "the sender balance and confirmation count follow the synchronized chain");
 
-                var fork = new Blockchain(commonBlocks);
+                var fork = new Blockchain(commonBlocks, null);
                 for (int i = 0; i < 4; i++) fork.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
-                chain = fork;
-                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
-                Wait(() => desktopChain.Blocks.Last().Hash == fork.Blocks.Last().Hash && desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,
-                    "a valid longer fork removes token records and balances absent from the adopted chain");
+                string finalizedHash = desktopChain.Blocks.Last().Hash;
+                source.BroadcastChainAsync(fork.Blocks).GetAwaiter().GetResult();
+                var deadline = Stopwatch.StartNew();
+                while (Volatile.Read(ref lastReceivedHash) != fork.Blocks.Last().Hash && deadline.ElapsedMilliseconds < 15000) Thread.Sleep(25);
+                Check(Volatile.Read(ref lastReceivedHash) == fork.Blocks.Last().Hash && desktopChain.Blocks.Last().Hash == finalizedHash &&
+                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 2,
+                    "a longer uncertified fork cannot erase finalized token records or balances");
             }
         }
+    }
+
+    private static void Finalize(Blockchain chain, FinalityCoordinator coordinator, ValidatorStake[] validators)
+    {
+        coordinator.Observe(chain, chain.Blocks, validators);
+        if (!coordinator.TryFinalize(chain)) throw new Exception("The proposal did not receive the required validator quorum.");
     }
 
     private static Transaction PrepareAndSign(Blockchain chain, Wallet wallet, string name, string symbol, int decimals, long supply, string destination)

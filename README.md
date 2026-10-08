@@ -241,14 +241,14 @@ pela cadeia mantida online. A migração para certificados está descrita abaixo
 
 ### Finalização por votos dos validadores (migração experimental)
 
-O consenso 4 permite ativar a finalização com um checkpoint comum. O conjunto
+O consenso 4 exige finalização por votos e um checkpoint comum para iniciar um nó. O conjunto
 de validadores de cada altura vem dos stakes confirmados **antes** do bloco,
 nunca de uma lista enviada pelo candidato. Um bloco só se torna finalizado
 com assinaturas RSA válidas de pelo menos duas chaves distintas representando
 **mais de dois terços** do stake total registrado. O payload vincula a assinatura
 ao hash completo do bloco e à identidade da política de ativação.
 
-Com finalização ativada, `TryReplaceChain` compara certificados, não comprimento:
+`TryReplaceChain` compara certificados, não comprimento:
 uma cadeia menor com novos blocos finalizados substitui uma cadeia local maior
 sem certificados, preservando todo o prefixo já finalizado. Certificados conflitantes
 são rejeitados; o nó não desfaz um bloco finalizado. Uma cadeia sem novos
@@ -331,11 +331,20 @@ consenso 4 e reinicie os nós de forma coordenada. Nós com versões ou polític
 diferentes são desconectados. O cache público do DEX aceita migração do
 consenso 3; blocos e transações continuam sendo verificados.
 
-Os arquivos de configuração do repositório deixam o checkpoint vazio e
-`RequireFinality=false` porque não existe um checkpoint da rede de produção
-acordado neste projeto. Nesse estado, a nova preferência **não está ativada**.
-Definir `RequireFinality=true` sem checkpoint válido causa erro e impede o
-início, em vez de aceitar automaticamente um checkpoint anunciado por um par.
+Os arquivos de configuração exigem `RequireFinality=true`; desativá-lo é
+rejeitado. Não existe mais adoção de cadeia pelo comprimento. O checkpoint
+continua vazio porque não foi fornecida uma referência acordada de produção:
+a rede real **ainda não foi ativada**. Sem essa referência o nó não inicia.
+O Desktop abre uma janela de preparação que permite selecionar somente um
+arquivo público `Blockchain.json` e gerar/conferir um candidato, sem abrir
+carteiras, iniciar pares ou editar a configuração. DEX e Explorer também
+exigem a referência. Os utilitários podem inspecionar arquivos históricos sem
+política, mas essas cadeias de inspeção não podem adotar cadeias de pares.
+
+Ao reconectar, o nó obtém e verifica os certificados mais recentes da rede;
+ao desconectar, conserva o último prefixo finalizado e seu diário. Eventos de
+conexão/desconexão não aprovam checkpoints e não alteram a raiz de confiança.
+Estar online não substitui o quórum dos validadores.
 
 #### Limites deste protocolo
 

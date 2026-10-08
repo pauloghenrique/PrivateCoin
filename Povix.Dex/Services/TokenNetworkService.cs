@@ -27,7 +27,11 @@ namespace Povix.Dex.Services
         private bool synchronized;
 
         public TokenNetworkService(string dataDirectory, int port, IEnumerable<string> seeds)
+            : this(dataDirectory, port, seeds, FinalityPolicy.FromConfiguration()) { }
+
+        public TokenNetworkService(string dataDirectory, int port, IEnumerable<string> seeds, FinalityPolicy policy)
         {
+            if (policy == null) throw new ArgumentNullException(nameof(policy));
             Directory.CreateDirectory(dataDirectory);
             statePath = Path.Combine(dataDirectory, "dex-network.json");
             if (File.Exists(statePath))
@@ -35,18 +39,18 @@ namespace Povix.Dex.Services
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId || (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
-                blockchain = new Blockchain(state.Blocks);
+                blockchain = new Blockchain(state.Blocks, policy);
                 pending = state.Pending ?? new List<Transaction>();
                 submitted = state.Submitted ?? new List<SubmittedToken>();
                 blockchain.ValidatePendingTransactions(pending);
             }
             else
             {
-                blockchain = new Blockchain();
+                blockchain = new Blockchain(policy);
                 pending = new List<Transaction>();
                 submitted = new List<SubmittedToken>();
             }
-            node = new PeerNode(port, false, Path.Combine(dataDirectory, "dex-peers.dat"));
+            node = new PeerNode(port, false, Path.Combine(dataDirectory, "dex-peers.dat"), policy);
             node.ChainReceived += ReceiveChain;
             node.TransactionReceived += ReceiveTransaction;
             node.SynchronizationRequested += (sender, args) => RelayChain();

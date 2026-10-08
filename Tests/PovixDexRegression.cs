@@ -68,7 +68,7 @@ internal static class PovixDexRegression
             !CreateTokenViewModel.TryParseSupply("0", 8, out atomic), "overflow, extra precision and zero rejected");
         using (var issuer = new Wallet()) using (var first = new Wallet()) using (var second = new Wallet())
         {
-            var chain = new Blockchain();
+            var chain = new Blockchain((FinalityPolicy)null);
             Block reward;
             chain.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
             string destination = issuer.CreateReceiveAddress(), change = issuer.CreateReceiveAddress();
@@ -76,16 +76,19 @@ internal static class PovixDexRegression
             chain.TryAddWalletCreationReward(firstAddress, out reward); chain.TryAddWalletCreationReward(secondAddress, out reward);
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
+            var policy = new FinalityPolicy(chain.Blocks.Count - 1, chain.Blocks.Last().Hash);
+            chain = new Blockchain(chain.Blocks, policy);
             Check(chain.IsValid(), "existing test chain contains confirmed funds and validator collateral");
             var model = new CreateTokenViewModel { Name = "Aurora | edição 🌙", Symbol = "AUR", Decimals = 8, Supply = "92233720368,54775807", DestinationAddress = destination, FeePriority = 2 };
             int peerPort = Port(), dexPort = Port();
-            using (var peer = new PeerNode(peerPort))
+            using (var journal = new FinalityVoteJournal(Path.Combine(directory, "dex-validator-votes.journal")))
+            using (var peer = new PeerNode(peerPort, false, null, policy))
             {
                 Transaction received = null;
                 peer.SynchronizationRequested += (s, e) => peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 peer.TransactionReceived += (s, e) => { if (e.Transaction.Kind == TransactionKind.TokenCreate) Interlocked.Exchange(ref received, e.Transaction); };
                 peer.Start();
-                var service = new TokenNetworkService(directory, dexPort, new string[0]);
+                var service = new TokenNetworkService(directory, dexPort, new string[0], policy);
                 try
                 {
                     bool blocked = false;
@@ -120,7 +123,7 @@ internal static class PovixDexRegression
                     string state = File.ReadAllText(Path.Combine(directory, "dex-network.json"));
                     Check(!state.Contains("RSAKeyValue") || (!state.Contains("<D>") && !state.Contains("<P>")), "persisted network state contains no private keys");
                     service.Dispose();
-                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    service = new TokenNetworkService(directory, dexPort, new string[0], policy);
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "pending creation restored while synchronization is required again");
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
@@ -128,6 +131,9 @@ internal static class PovixDexRegression
                     chain.ValidatePendingTransactions(new[] { received });
                     var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
                     Block confirmed = chain.AddProofOfStakeBlock(new[] { received }, validators);
+                    var coordinator = new FinalityCoordinator(policy, journal);
+                    coordinator.Observe(chain, chain.Blocks, validators);
+                    if (!coordinator.TryFinalize(chain)) throw new Exception("Validator quorum did not finalize the token block.");
                     Check(chain.IsValid() && chain.GetTokenBalance(new[] { destination }, (string)draft["tokenId"]) == long.MaxValue, "validators confirm exact token supply in a valid block");
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "confirmed", "receipt confirms only after receiving a validated block");

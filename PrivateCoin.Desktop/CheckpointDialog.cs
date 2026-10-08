@@ -19,7 +19,7 @@ namespace PrivateCoin.Desktop
         private readonly Button copy;
         private FinalityCheckpoint candidate;
 
-        internal CheckpointDialog(Func<Blockchain> currentChain, Func<bool> ready, Func<string, bool> protectedPath)
+        internal CheckpointDialog(Func<Blockchain> currentChain, Func<bool> ready, Func<string, bool> protectedPath, bool onlineSource = true)
         {
             this.currentChain = currentChain; this.ready = ready; this.protectedPath = protectedPath;
             Text = "Checkpoint de ativação"; StartPosition = FormStartPosition.CenterParent;
@@ -27,7 +27,8 @@ namespace PrivateCoin.Desktop
             Font = new System.Drawing.Font("Segoe UI", 9F);
             FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false;
             var explanation = new Label { Left = 20, Top = 18, Width = 720, Height = 54,
-                Text = "Escolha um bloco existente e compartilhe o candidato para conferência.\nTodos os operadores devem acordar a mesma altura e o mesmo hash antes de ativar a votação." };
+                Text = (onlineSource ? "Cadeia do nó sincronizado." : "Snapshot local: a atualidade e o acordo da rede não foram comprovados.") +
+                    "\nTodos os operadores devem acordar a mesma altura e o mesmo hash antes de ativar a votação." };
             var caption = new Label { Left = 20, Top = 81, Width = 240, Height = 24, Text = "Altura do bloco de referência:" };
             Blockchain chain = currentChain();
             height = new NumericUpDown { Left = 265, Top = 78, Width = 100, Minimum = 1,

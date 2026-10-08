@@ -1,4 +1,5 @@
 ﻿using System;
+using PrivateCoin.Core;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -16,6 +17,12 @@ namespace PrivateCoin.Desktop
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            try { FinalityPolicy.FromConfiguration(); }
+            catch (Exception error)
+            {
+                Application.Run(new CheckpointSetupForm(error.Message));
+                return;
+            }
             Application.Run(new Form1());
         }
     }

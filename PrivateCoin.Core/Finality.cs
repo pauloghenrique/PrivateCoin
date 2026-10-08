@@ -36,14 +36,21 @@ namespace PrivateCoin.Core
 
         public static FinalityPolicy FromConfiguration()
         {
+            if (string.Equals(ConfigurationManager.AppSettings["RequireFinality"], "false", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("A votação dos validadores é obrigatória. RequireFinality=false não é suportado para iniciar a rede.");
+            FinalityPolicy policy = ReadCheckpointConfigurationForInspection();
+            if (policy == null)
+                throw new InvalidOperationException("Configure FinalityAnchorHeight e FinalityAnchorHash com o checkpoint de produção acordado pelos validadores. A rede não será iniciada sem votação.");
+            return policy;
+        }
+
+        // Read-only migration tools may inspect a public chain before the agreed
+        // checkpoint is configured. This method never permits a P2P node to start.
+        public static FinalityPolicy ReadCheckpointConfigurationForInspection()
+        {
             string height = ConfigurationManager.AppSettings["FinalityAnchorHeight"];
             string hash = ConfigurationManager.AppSettings["FinalityAnchorHash"];
-            if (string.IsNullOrWhiteSpace(height) && string.IsNullOrWhiteSpace(hash))
-            {
-                if (string.Equals(ConfigurationManager.AppSettings["RequireFinality"], "true", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Configure FinalityAnchorHeight e FinalityAnchorHash com o checkpoint acordado pelos validadores antes de iniciar a rede.");
-                return null;
-            }
+            if (string.IsNullOrWhiteSpace(height) && string.IsNullOrWhiteSpace(hash)) return null;
             int parsed;
             if (!int.TryParse(height, NumberStyles.None, CultureInfo.InvariantCulture, out parsed))
                 throw new InvalidOperationException("Invalid FinalityAnchorHeight.");

@@ -185,7 +185,8 @@ internal static class PrivateCoinFinalityRegression
             }
             lock (gate) Check(errors.Count == 0 && left.FinalizedHeight == proposal.Blocks.Last().Height && right.Blocks.Last().Hash == left.Blocks.Last().Hash,
                 "separate TCP nodes exchange validator votes and converge on one quorum certificate");
-            using (var incompatible = new PeerNode(Port(), false, null))
+            var incompatiblePolicy = new FinalityPolicy(policy.AnchorHeight, new string('f', 64));
+            using (var incompatible = new PeerNode(Port(), false, null, incompatiblePolicy))
             {
                 incompatible.Start();
                 incompatible.ConnectAsync("127.0.0.1", leftPort).GetAwaiter().GetResult();

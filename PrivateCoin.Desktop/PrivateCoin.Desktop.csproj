@@ -59,6 +59,9 @@
     </Compile>
     <Compile Include="DesktopUpdater.cs" />
     <Compile Include="NetworkReadiness.cs" />
+    <Compile Include="CheckpointSetupForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="CheckpointDialog.cs">
       <SubType>Form</SubType>
     </Compile>

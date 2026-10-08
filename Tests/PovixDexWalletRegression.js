@@ -17,6 +17,7 @@ const wallet = global.PovixTokenWallet;
     await wallet.importFile(file(fixture.wallet), 'dex-test-password-only');
     assert(wallet.addresses().includes(fixture.changeAddress));
     await wallet.verifyDraft(fixture.draft, fixture.expected, fixture.networkId, fixture.changeAddress);
+    await assert.rejects(wallet.verifyDraft({ ...fixture.draft, consensusVersion: 3 }, fixture.expected, fixture.networkId, fixture.changeAddress));
     assert.equal(wallet.parseSupply('92233720368,54775807', 8), '9223372036854775807');
     assert.equal(wallet.formatAtomic('9223372036854775807', 8), '92.233.720.368,54775807');
     for (const [text, decimals] of [['92233720368,54775808', 8], ['1,001', 2], ['0', 8], ['1e8', 8], ['1.000.000', 8]])

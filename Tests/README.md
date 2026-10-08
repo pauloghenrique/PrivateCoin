@@ -10,7 +10,7 @@ Exemplo com Mono instalado:
 ```sh
 mkdir -p work/dex-regression
 mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
-  -r:System.Web.Extensions -r:System.Web -r:System.Core \
+  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Configuration \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
   Tests/PovixDexRegression.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
@@ -132,3 +132,15 @@ fixo, altura ausente/gênese, falta de validadores, adulteração de stake/rede/
 fork na mesma altura, cadeia de origem inválida e limite de tamanho.
 A janela WinForms de geração, importação, exportação e cópia de configuração
 ainda deve ser verificada visualmente no Windows. Nenhuma ação ativa a votação.
+
+## Finalização obrigatória
+
+`PrivateCoinMandatoryFinalityRegression.cs` verifica que configuração ausente
+ou `RequireFinality=false` impede iniciar a blockchain padrão e um PeerNode;
+uma cadeia de inspeção não pode adotar cadeias da rede. Também verifica que
+a preparação offline continua disponível e que uma política configurada
+exige sincronização com a referência antes de produzir blocos. Execute com
+um snapshot público de teste; acrescente `configured` para o cenário com
+checkpoint na configuração do executável. As regressões de tokens e DEX
+constroem uma referência descartável e finalizam seus blocos com votos.
+Nunca use essas referências de teste na configuração de produção.

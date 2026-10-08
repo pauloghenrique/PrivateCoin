@@ -10,14 +10,14 @@ internal static class PrivateCoinReconnectRegression
         {
             var readiness = new NetworkReadiness();
             bool connected = false;
-            var local = new Blockchain();
-            var remote = new Blockchain();
+            var local = new Blockchain((FinalityPolicy)null);
+            var remote = new Blockchain((FinalityPolicy)null);
             Check(!readiness.IsReady, "startup requires synchronization");
             Reject(() => readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0])));
             connected = true;
             Reject(() => readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0])));
             long staleEpoch = readiness.Epoch;
-            Check(readiness.Accept(staleEpoch, () => connected, () => local.TryReplaceChain(remote.Blocks)),
+            Check(readiness.Accept(staleEpoch, () => connected, () => new Blockchain(remote.Blocks, null)),
                 "an identical validated chain releases the node");
             readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0]));
             connected = false;
@@ -29,13 +29,12 @@ internal static class PrivateCoinReconnectRegression
             Reject(() => readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0])));
             remote.AddBlock(new Transaction[0]);
             remote.AddBlock(new Transaction[0]);
-            Check(readiness.Accept(readiness.Epoch, () => connected, () => local.TryReplaceChain(remote.Blocks)) &&
-                local.Blocks[local.Blocks.Count - 1].Hash == remote.Blocks[remote.Blocks.Count - 1].Hash,
-                "reconnection adopts the valid longer network chain");
+            Check(readiness.Accept(readiness.Epoch, () => connected, () => new Blockchain(remote.Blocks, null)),
+                "reconnection requires a freshly validated response before releasing operations");
             readiness.Disconnect();
-            var invalid = new Blockchain().Blocks;
+            var invalid = new Blockchain((FinalityPolicy)null).Blocks;
             invalid[invalid.Count - 1].Hash = "invalid";
-            Reject(() => readiness.Accept(readiness.Epoch, () => connected, () => local.TryReplaceChain(invalid)));
+            Reject(() => readiness.Accept(readiness.Epoch, () => connected, () => new Blockchain(invalid, null)));
             Check(!readiness.IsReady, "invalid chain cannot release synchronization");
             return 0;
         }

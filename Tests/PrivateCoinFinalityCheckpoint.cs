@@ -10,15 +10,6 @@ using PrivateCoin.Core;
 // Read-only migration helper. Reads PUBLIC network data, never wallets.dat.
 internal static class PrivateCoinFinalityCheckpoint
 {
-    [DataContract] private sealed class Envelope
-    {
-        [DataMember] public string Data { get; set; }
-        [DataMember] public string Sha256 { get; set; }
-        [DataMember] public List<Block> Blocks { get; set; }
-    }
-    [DataContract] private sealed class Ledger
-    { [DataMember] public List<Block> Blocks { get; set; } }
-
     public static int Main(string[] args)
     {
         try
@@ -44,22 +35,10 @@ internal static class PrivateCoinFinalityCheckpoint
                 if (new FileInfo(args[2]).Length > 1024 * 1024) throw new InvalidDataException("Checkpoint exceeds 1 MiB.");
                 received = FinalityCheckpoint.FromJson(File.ReadAllBytes(args[2]));
             }
-            byte[] input = File.ReadAllBytes(args[0]);
-            Envelope envelope = System.Text.Encoding.UTF8.GetString(input).TrimStart().StartsWith("[", StringComparison.Ordinal)
-                ? new Envelope { Blocks = Read<List<Block>>(input) } : Read<Envelope>(input);
-            List<Block> blocks = envelope.Blocks;
-            if (envelope.Data != null)
-            {
-                byte[] data = Convert.FromBase64String(envelope.Data);
-                using (var sha = SHA256.Create())
-                    if (string.Concat(sha.ComputeHash(data).Select(b => b.ToString("x2"))) != envelope.Sha256?.ToLowerInvariant())
-                        throw new InvalidDataException("Public network file checksum mismatch.");
-                blocks = Read<Ledger>(data).Blocks;
-            }
-            FinalityPolicy configured = FinalityPolicy.FromConfiguration();
+            FinalityPolicy configured = FinalityPolicy.ReadCheckpointConfigurationForInspection();
             if (received != null && configured != null && configured.Id != received.PolicyId)
                 throw new InvalidOperationException("The candidate differs from the configured activation policy.");
-            var chain = new Blockchain(blocks, configured ?? received?.ToPolicy());
+            var chain = PublicBlockchainSnapshot.Read(args[0], configured ?? received?.ToPolicy());
             FinalityCheckpoint checkpoint = received ?? FinalityCheckpoint.Create(chain, height);
             checkpoint.ValidateAgainst(chain);
             if (exporting)
@@ -87,6 +66,4 @@ internal static class PrivateCoinFinalityCheckpoint
         }
         catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
     }
-    private static T Read<T>(byte[] bytes)
-    { using (var stream = new MemoryStream(bytes)) return (T)new DataContractJsonSerializer(typeof(T)).ReadObject(stream); }
 }

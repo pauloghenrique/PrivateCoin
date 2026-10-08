@@ -182,37 +182,28 @@ namespace PrivateCoin.Core
         }
 
         /// <summary>
-        /// With an activation policy, adopts a chain with newer quorum-finalized
-        /// blocks while preserving the finalized prefix. Without one, uses the
-        /// legacy longest-chain rule with a deterministic tip-hash tie break.
+        /// Adopts a chain only with newer quorum-finalized blocks, preserving
+        /// the finalized prefix. Inspection-only chains cannot adopt peer data.
         /// </summary>
         public bool TryReplaceChain(IEnumerable<Block> candidateBlocks)
         {
             if (candidateBlocks == null) throw new ArgumentNullException(nameof(candidateBlocks));
+            if (Finality == null)
+                throw new InvalidOperationException("Uma cadeia de inspeção sem checkpoint não pode escolher ou adotar cadeias da rede.");
             var candidate = new Blockchain(candidateBlocks, Finality);
             Block[] replacement = candidate.Blocks.ToArray();
 
             lock (sync)
             {
-                if (Finality != null)
-                {
-                    int currentFinalized = Finality.FinalizedHeight(blocks);
-                    int incomingFinalized = Finality.FinalizedHeight(replacement);
-                    if (incomingFinalized < Finality.AnchorHeight) return false;
-                    int commonFinalized = Math.Min(currentFinalized, incomingFinalized);
-                    if (commonFinalized >= Finality.AnchorHeight && blocks[commonFinalized].Hash != replacement[commonFinalized].Hash)
-                        throw new InvalidOperationException("Conflicting finalized chains: stop and investigate validator equivocation.");
-                    if (incomingFinalized <= currentFinalized) return false;
-                    // Discard an uncertified local suffix, even if it was longer.
-                    replacement = replacement.Take(incomingFinalized + 1).ToArray();
-                }
-                else
-                {
-                    bool isBetter = replacement.Length > blocks.Count ||
-                        (replacement.Length == blocks.Count &&
-                         string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
-                    if (!isBetter) return false;
-                }
+                int currentFinalized = Finality.FinalizedHeight(blocks);
+                int incomingFinalized = Finality.FinalizedHeight(replacement);
+                if (incomingFinalized < Finality.AnchorHeight) return false;
+                int commonFinalized = Math.Min(currentFinalized, incomingFinalized);
+                if (commonFinalized >= Finality.AnchorHeight && blocks[commonFinalized].Hash != replacement[commonFinalized].Hash)
+                    throw new InvalidOperationException("Conflicting finalized chains: stop and investigate validator equivocation.");
+                if (incomingFinalized <= currentFinalized) return false;
+                // Discard an uncertified local suffix, even if it was longer.
+                replacement = replacement.Take(incomingFinalized + 1).ToArray();
 
                 blocks.Clear();
                 blocks.AddRange(replacement);
