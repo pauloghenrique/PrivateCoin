@@ -10,6 +10,7 @@ Exemplo com Mono instalado:
 ```sh
 mkdir -p work/dex-regression
 mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
+  -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
   Tests/PovixDexRegression.cs
@@ -23,6 +24,14 @@ backup alterado, revisão do payload completo, assinatura Web Crypto aceita pelo
 Core, sessão, rejeição de assinatura inválida, reserva de UTXOs, propagação P2P,
 repetição idempotente, reinício, confirmação proof-of-stake e preservação das
 chaves de endereços gerados no navegador.
+
+A preparação e o envio passam também pelas ações MVC reais, usando contextos
+HTTP de teste e a coleção de sessão do ASP.NET. Confere que a preparação grava
+a sessão (necessário para conservar seu cookie), que outra requisição com a
+mesma sessão envia a assinatura do navegador e que os erros diferenciam sessão,
+expiração, assinaturas, conflito de UTXOs, rede indisponível e preparação perdida
+após reinício. Também verifica recuperação do comprovante já aceito durante a
+reconexão. O ciclo HTTP completo de cookies no IIS deve ser verificado no Windows.
 
 Para verificar abertura do arquivo e seleção entre carteiras, compile também
 `Povix.WalletBridge` e `PrivateCoin.Desktop` em Release e execute:

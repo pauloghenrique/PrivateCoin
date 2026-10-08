@@ -46,8 +46,13 @@ namespace Povix.Dex.Controllers
             try
             {
                 string[] keys = DecodePublicKeys(publicKeys);
+                // ASP.NET discards a new session/cookie when no session item is stored.
+                // Keep the draft's owner stable between preparation and submission.
+                Session["Povix.Dex.TokenDraftSession"] = true;
                 return Json(MvcApplication.TokenNetwork.Prepare(model, keys, changeAddress, Session.SessionID));
             }
+            catch (Services.TokenOperationException error)
+            { return Error(error.Message, error.Retryable ? 503 : 400, error.Code); }
             catch (Exception error) when (Services.TokenNetworkService.IsInvalidData(error))
             { return Error(error.Message == "Insufficient POVIX for the transaction fee." ? "A carteira não tem POVIX confirmado disponível para pagar a taxa." : "Não foi possível preparar a criação. Confira a carteira, os campos e a conexão com a rede.", 400); }
         }
@@ -59,17 +64,19 @@ namespace Povix.Dex.Controllers
             if (draftId == null || !Regex.IsMatch(draftId, @"\A[0-9a-f]{32}\z") || signatures == null ||
                 signatures.Length == 0 || signatures.Length > 1000 || signatures.Any(value => value == null ||
                     value.Length != 344 || !Regex.IsMatch(value, @"\A[A-Za-z0-9+/]+={0,2}\z")))
-                return Error("Assinaturas inválidas.", 400);
-            if (MvcApplication.TokenNetwork == null) return Error("A conexão com a rede está indisponível.", 503);
+                return Error("Assinaturas inválidas.", 400, "signatures_invalid");
+            if (MvcApplication.TokenNetwork == null) return Error("A conexão com a rede está indisponível.", 503, "network_unavailable");
             try
             {
                 string id = await MvcApplication.TokenNetwork.SubmitAsync(draftId, signatures, Session.SessionID);
                 return Json(new { transactionId = id, receiptUrl = Url.Action("Details", new { id }) });
             }
+            catch (Services.TokenOperationException error)
+            { return Error(error.Message, error.Retryable ? 503 : 400, error.Code); }
             catch (Exception error) when (Services.TokenNetworkService.IsInvalidData(error))
-            { return Error("A transação não foi aceita. A preparação pode ter expirado ou o saldo foi usado. Prepare novamente; nenhuma confirmação foi registrada.", 400); }
+            { return Error("Não foi possível validar o envio da criação. Prepare novamente.", 400, "submission_invalid"); }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
-            { return Error("Não foi possível salvar a transação. Tente novamente.", 503); }
+            { return Error("Não foi possível salvar a transação. Tente novamente.", 503, "persistence_unavailable"); }
         }
 
         [HttpGet]
@@ -94,11 +101,11 @@ namespace Povix.Dex.Controllers
         private TokenNetworkViewModel Network() => MvcApplication.TokenNetwork?.GetNetwork() ??
             new TokenNetworkViewModel { Error = "A conexão com a blockchain está indisponível. Verifique a configuração do nó." };
 
-        private ActionResult Error(string message, int status)
+        private ActionResult Error(string message, int status, string code = null)
         {
             Response.StatusCode = status;
             Response.TrySkipIisCustomErrors = true;
-            return Json(new { error = message });
+            return Json(new { error = message, code });
         }
 
         private void NoCache() { Response.Cache.SetCacheability(HttpCacheability.NoCache); Response.Cache.SetNoStore(); }

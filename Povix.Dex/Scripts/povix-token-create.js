@@ -23,7 +23,8 @@
         try { result = await response.json(); }
         catch (_) { throw new Error('O servidor não respondeu como esperado. Recarregue a página se a sessão expirou.'); }
         if (!response.ok || result.error) {
-            const error = new Error(result.error || 'Não foi possível concluir a operação.');
+            const code = typeof result.code === 'string' && /^[a-z_]{1,40}$/.test(result.code) ? ' (código: ' + result.code + ')' : '';
+            const error = new Error((result.error || 'Não foi possível concluir a operação.') + code);
             error.rejected = response.status >= 400 && response.status < 500;
             throw error;
         }
