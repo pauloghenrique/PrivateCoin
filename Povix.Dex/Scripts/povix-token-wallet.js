@@ -80,7 +80,7 @@
         const legacy = Boolean(data && Array.isArray(data.PrivateKeys));
         const wallets = legacy ? [data] : data && data.Wallets;
         if (!Array.isArray(wallets) || wallets.length < 1 || wallets.length > 100 || wallets.some(item =>
-            !item || !Array.isArray(item.PrivateKeys) || item.PrivateKeys.length < 1 || item.PrivateKeys.length > 1000))
+            !item || !Array.isArray(item.PrivateKeys) || item.PrivateKeys.length > 1000))
             throw new Error('O arquivo não contém uma coleção válida de carteiras.');
         staged = { wallets, legacy, salt, protection, record };
         return wallets.map((item, index) => ({ id: String(index), name: typeof item.Name === 'string' ? item.Name.slice(0, 64) : 'Carteira ' + (index + 1), addressCount: item.PrivateKeys.length }));
@@ -90,6 +90,8 @@
             throw new Error('Selecione uma carteira salva no arquivo.');
         active = null;
         const selectedIndex = Number(id), data = staged.wallets[selectedIndex];
+        if (data.PrivateKeys.length === 0)
+            throw new Error('Esta carteira ainda não tem endereços. Selecione outra carteira ou gere um endereço no PrivateCoin.Desktop e leia o arquivo novamente.');
         const keys = new Map();
         for (const xml of data.PrivateKeys) {
             const item = await importKey(xml);

@@ -120,13 +120,22 @@
                 walletChoices = file ? await wallet.readFile(file, password) : await wallet.readSaved(password);
                 const select = byId('wallet-choice');
                 select.replaceChildren(new Option('Selecione uma carteira', ''));
-                walletChoices.forEach((item, index) => select.add(new Option((index + 1) + ' · ' + item.name + ' (' + item.addressCount + ' endereços)', item.id)));
+                walletChoices.forEach((item, index) => {
+                    const option = new Option((index + 1) + ' · ' + item.name +
+                        (item.addressCount === 0 ? ' (sem endereços)' : ' (' + item.addressCount + ' endereços)'), item.id);
+                    option.disabled = item.addressCount === 0;
+                    select.add(option);
+                });
                 select.required = true;
                 byId('wallet-selection').hidden = false;
                 byId('wallet-password-field').hidden = true;
                 byId('wallet-password').required = false;
                 byId('wallet-connect').textContent = 'Abrir carteira selecionada';
                 byId('wallet-choice-help').textContent = walletChoices.length + (walletChoices.length === 1 ? ' carteira encontrada neste arquivo.' : ' carteiras encontradas neste arquivo.');
+                const emptyCount = walletChoices.filter(item => item.addressCount === 0).length;
+                if (emptyCount > 0) byId('wallet-choice-help').textContent += ' ' + emptyCount +
+                    (emptyCount === 1 ? ' carteira sem endereços.' : ' carteiras sem endereços.') +
+                    ' Gere um endereço no Desktop e leia o arquivo novamente para habilitar a seleção.';
                 return;
             }
             const info = await wallet.selectWallet(byId('wallet-choice').value);

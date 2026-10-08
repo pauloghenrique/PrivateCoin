@@ -43,6 +43,12 @@ selecionada**. A seleção é explícita, mesmo quando o arquivo contém uma ún
 carteira. Somente a carteira escolhida fornece as chaves e os endereços para
 consultar o saldo e assinar.
 
+Carteiras sem endereços, como a carteira inicial do Desktop, são preservadas
+no arquivo e no backup. Elas aparecem como **sem endereços**, com a seleção
+desabilitada, sem impedir a abertura das outras carteiras. Para usar uma delas,
+selecione-a no Desktop, clique em **Novo endereço** e leia novamente o arquivo
+no DEX. A carteira escolhida precisa ter POVIX disponível para pagar a taxa.
+
 O arquivo original do Desktop é protegido pelo usuário do Windows. Para abri-lo
 diretamente, execute o [Povix.WalletBridge](../Povix.WalletBridge/README.md) no
 seu Windows com a origem HTTPS do DEX autorizada. A leitura passa exclusivamente

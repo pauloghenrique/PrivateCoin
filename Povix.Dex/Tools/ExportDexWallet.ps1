@@ -33,7 +33,7 @@ try {
     if ($WalletName) { $wallets = @($wallets | Where-Object { $_.Name -eq $WalletName }) }
     if ($wallets.Count -eq 0 -or $wallets.Count -gt 100 -or ($WalletName -and $wallets.Count -ne 1)) { throw 'O arquivo deve conter entre 1 e 100 carteiras; -WalletName precisa identificar uma única carteira.' }
     foreach ($wallet in $wallets) {
-        if (@($wallet.PrivateKeys).Count -eq 0 -or @($wallet.PrivateKeys).Count -gt 1000) { throw 'Cada carteira deve conter entre 1 e 1000 chaves.' }
+        if ($null -eq $wallet -or $null -eq $wallet.PrivateKeys -or @($wallet.PrivateKeys).Count -gt 1000) { throw 'Cada carteira deve conter uma lista de até 1000 chaves, que pode estar vazia.' }
     }
     $securePassword = Read-Host 'Senha do backup (mínimo de 10 caracteres)' -AsSecureString
     $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)

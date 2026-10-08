@@ -84,6 +84,12 @@ carteira. Somente as chaves da carteira selecionada são usadas para assinar.
 O backup atualizado preserva as demais carteiras da coleção e acrescenta os
 novos endereços da carteira selecionada.
 
+Uma carteira com a lista de chaves vazia é um estado válido do Desktop e não
+bloqueia a leitura das outras carteiras. Ela é preservada na cópia cifrada,
+mas aparece no DEX como **sem endereços**, com a seleção desabilitada. Para
+usá-la, gere um endereço no Desktop com **Novo endereço** e leia o arquivo
+novamente. A carteira escolhida também precisa ter POVIX para pagar a taxa.
+
 Sem o auxiliar, também é possível exportar uma coleção cifrada localmente com
 `Povix.Dex/Tools/ExportDexWallet.ps1` e abri-la no mesmo seletor. Backups antigos
 do DEX contendo uma única carteira continuam aceitos.
@@ -115,7 +121,8 @@ arquivo, não altera o original e não faz chamadas de rede.
 | `wallet_file` | O arquivo está vazio ou incompleto; escolha o `wallets.dat` em uso no Desktop. |
 | `windows_protection` | A abertura DPAPI falhou; escolha o arquivo em uso no Desktop e execute o auxiliar com o mesmo usuário Windows. A senha da cópia do DEX não abre essa proteção. |
 | `wallet_format` | A abertura DPAPI funcionou, mas o conteúdo não foi reconhecido como JSON de carteiras do Desktop. |
-| `wallet_empty`, `wallet_keys` | A coleção está vazia ou contém uma carteira sem chaves válidas. |
+| `wallet_empty` | O arquivo não contém uma coleção de carteiras. |
+| `wallet_keys` | Há uma entrada inválida, sem lista de chaves ou com uma chave vazia/inválida. Uma lista de chaves vazia é aceita. |
 | `file_size`, `wallet_limit`, `key_limit` | O arquivo ou a coleção excede um dos limites documentados. |
 | `copy_password` | A senha da cópia local deve conter entre 10 e 1024 caracteres. |
 | `copy_encryption` | O arquivo foi lido, mas a criptografia da cópia falhou; confira o .NET Framework 4.8 e a versão do auxiliar. |
