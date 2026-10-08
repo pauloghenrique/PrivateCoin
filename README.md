@@ -12,7 +12,7 @@
 - fila de validação ordenada pela opção de taxa escolhida pelo usuário entre valores calculados conforme o congestionamento, paga integralmente ao criador do bloco;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
-- sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
+- sincronização ao conectar: certificados de quórum têm prioridade quando a finalização está ativada; o modo legado usa comprimento e desempate por hash.
 - identidade de rede vinculada a uma versão de consenso e a um bloco gênese canônico; pares incompatíveis são desconectados antes de seus dados serem propagados.
 
 ## Uso básico
@@ -35,7 +35,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer` na versão **3** do consenso.
+O Core oferece `TokenCreate` e `TokenTransfer` desde a versão **3** do consenso. O protocolo atual é a versão **4**, com mensagens de finalização por quórum.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
 permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
 maiúsculas A–Z, de 0 a 8 casas decimais e quantidade positiva em unidades
@@ -235,7 +235,92 @@ cria um bloco. Para criar outra carteira com recompensa é necessário primeiro
 conectar a uma rede existente. Uma rede completamente nova precisa de um
 procedimento separado de inicialização; não existe exceção automática offline.
 
-A escolha da cadeia permanece determinística: mais blocos e, em empate, menor
-hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
-mas não estabelece finalização nem obriga nós antigos ou outros clientes a
-seguir a mesma política. Uma cadeia válida maior ainda pode substituir a local.
+Sem checkpoint de finalização configurado, a escolha permanece no modo legado:
+mais blocos e, em empate, menor hash da ponta. Esse modo não garante preferência
+pela cadeia mantida online. A migração para certificados está descrita abaixo.
+
+### Finalização por votos dos validadores (migração experimental)
+
+O consenso 4 permite ativar a finalização com um checkpoint comum. O conjunto
+de validadores de cada altura vem dos stakes confirmados **antes** do bloco,
+nunca de uma lista enviada pelo candidato. Um bloco só se torna finalizado
+com assinaturas RSA válidas de pelo menos duas chaves distintas representando
+**mais de dois terços** do stake total registrado. O payload vincula a assinatura
+ao hash completo do bloco e à identidade da política de ativação.
+
+Com finalização ativada, `TryReplaceChain` compara certificados, não comprimento:
+uma cadeia menor com novos blocos finalizados substitui uma cadeia local maior
+sem certificados, preservando todo o prefixo já finalizado. Certificados conflitantes
+são rejeitados; o nó não desfaz um bloco finalizado. Uma cadeia sem novos
+certificados não substitui a local. Propostas sem certificado podem ser votadas,
+mas não autorizam a produção do bloco seguinte nem aparecem no painel de tokens
+como confirmadas. `GetConfirmedView()` fornece a visão dos blocos finalizados.
+
+O Desktop troca propostas e mensagens `finality-vote`, salva os certificados
+junto aos blocos e persiste a decisão de voto **antes** de assinar em
+`finality-votes.journal`. O mesmo validador não assina hashes conflitantes na
+mesma altura, inclusive após reinício. Preserve esse diário junto ao backup
+do nó: recuperar somente as chaves da carteira não recupera o histórico de
+votos. Uma chave validadora não pode operar simultaneamente em instalações
+com diários independentes. Erros de gravação ou diário corrompido bloqueiam
+a votação.
+
+A proposta PoS usa o criador selecionado pelo conjunto global de stakes
+elegíveis. Só esse criador precisa ter a chave local para propor; os votos
+de finalização são coletados de outros nós, sem reunir suas chaves privadas.
+A seleção e a distribuição monetária do roster PoS permanecem determinísticas.
+Os votos de finalização são distintos dos registros de recompensa desse roster.
+Explorer e DEX validam certificados e seguem a mesma regra de cadeia, sem
+possuir chaves de validadores.
+
+#### Ativação na rede existente
+
+Não é necessário prever alturas futuras. Escolha **uma única vez** um bloco
+já existente, cuja cadeia válida contenha ao menos dois stakes de chaves distintas.
+Todos os operadores precisam concordar no mesmo hash e altura desse bloco.
+Não derive um checkpoint diferente em cada nó e não troque o checkpoint a cada
+novo bloco. O checkpoint é a raiz de confiança da migração; novos nós obtêm
+essa referência acordada antes de verificar os certificados posteriores.
+
+O utilitário somente de leitura extrai uma sugestão do arquivo público
+`Blockchain.json` (ou de um JSON público com `Blocks`). Ele não lê `wallets.dat`,
+não altera arquivos e não ativa a rede:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll \
+  -r:System.Core -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinFinalityCheckpoint.exe Tests/PrivateCoinFinalityCheckpoint.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
+  work/PrivateCoinFinalityCheckpoint.exe /caminho/para/Blockchain.json
+```
+
+Depois do acordo, copie os valores emitidos de `FinalityAnchorHeight`,
+`FinalityAnchorHash` e `RequireFinality=true` para o App.config do Desktop
+(executável: PrivateCoin.Desktop.exe.config), e para os Web.config do Explorer
+e do DEX. Preserve o backup da rede e do diário, distribua os binários de
+consenso 4 e reinicie os nós de forma coordenada. Nós com versões ou políticas
+diferentes são desconectados. O cache público do DEX aceita migração do
+consenso 3; blocos e transações continuam sendo verificados.
+
+Os arquivos de configuração do repositório deixam o checkpoint vazio e
+`RequireFinality=false` porque não existe um checkpoint da rede de produção
+acordado neste projeto. Nesse estado, a nova preferência **não está ativada**.
+Definir `RequireFinality=true` sem checkpoint válido causa erro e impede o
+início, em vez de aceitar automaticamente um checkpoint anunciado por um par.
+
+#### Limites deste protocolo
+
+Esta implementação oferece certificados sequenciais e bloqueio persistente
+de voto, mas **não** implementa um protocolo BFT completo com prevote/precommit,
+rodadas, troca de líder e recuperação de disponibilidade. Votos honestos
+divididos entre propostas diferentes podem paralisar a altura; o criador
+selecionado indisponível também pode impedir propostas PoS. Não há desbloqueio
+por timeout, porque isso permitiria dupla assinatura e finalizações conflitantes.
+Uma minoria não ganha autoridade apenas por permanecer online. Sem quórum,
+a rede aguarda. Mesmo com quórum, a segurança exige menos de um terço do stake
+com comportamento bizantino e preservação do histórico de votos dos validadores.
+
+É uma migração experimental para revisão e testes, não uma substituição
+auditada de Tendermint/CometBFT ou de outro motor BFT de produção. Não deve
+ser ativada em uma rede financeira de produção antes de resolver as rodadas
+e a recuperação de disponibilidade e revisar a segurança do protocolo.

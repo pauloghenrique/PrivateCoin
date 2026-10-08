@@ -89,3 +89,26 @@ Verifica o bloqueio inicial e offline, a sincronização com cadeia idêntica,
 a invalidação de respostas antigas, a adoção de uma cadeia maior após
 reconexão e a rejeição de cadeia inválida. Não depende de WinForms nem de
 carteiras de produção.
+
+### Certificados de finalização
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll \
+  -r:System.Core -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinFinalityRegression.exe Tests/PrivateCoinFinalityRegression.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
+  work/PrivateCoinFinalityRegression.exe work/finality-regression --p2p
+```
+
+Use um diretório vazio. O teste cobre quórum estritamente superior a 2/3,
+stakes ponderados, mínimo de duas chaves, rejeição de duplicação, falsificação
+e replay, certificados conflitantes, persistência após reinício, corrupção
+do diário, proposta de um criador com validadores distribuídos, preferência
+pela cadeia menor finalizada e rejeição da cadeia maior não certificada.
+`--p2p` acrescenta troca de votos entre nós TCP locais, incompatibilidade da
+política no handshake e reconexão de um terceiro nó com uma cadeia isolada maior.
+O arquivo `bootstrap-public.json` gerado serve apenas como fixture descartável
+para testar o utilitário de checkpoint; não é um checkpoint de produção.
+
+Esses testes não demonstram disponibilidade sob partições, rodadas BFT ou
+segurança de produção. As limitações do protocolo estão no README principal.

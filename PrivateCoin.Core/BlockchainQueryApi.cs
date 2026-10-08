@@ -106,7 +106,7 @@ namespace PrivateCoin.Core
 
         public BlockchainSummary GetSummary()
         {
-            Block[] snapshot = blockchain.Blocks.ToArray();
+            Block[] snapshot = blockchain.GetConfirmedView().Blocks.ToArray();
             int initialBlocks = snapshot.Skip(1).Count(IsInitialDistributionBlock);
             long validatorIssuance = snapshot.Skip(1).Where(IsProofOfStakeBlock)
                 .Aggregate(0L, (total, block) => checked(total + ProofOfStake.GetBlockReward(block.Height)));
@@ -119,7 +119,7 @@ namespace PrivateCoin.Core
         {
             if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
             if (limit <= 0) throw new ArgumentOutOfRangeException(nameof(limit));
-            Block[] snapshot = blockchain.Blocks.ToArray();
+            Block[] snapshot = blockchain.GetConfirmedView().Blocks.ToArray();
             var knownOutputs = new Dictionary<string, long>(StringComparer.Ordinal);
             var entries = new List<LedgerEntry>();
 

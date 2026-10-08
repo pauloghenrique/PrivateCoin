@@ -33,7 +33,7 @@ namespace Povix.Dex.Services
             if (File.Exists(statePath))
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
-                if (state.NetworkId != Blockchain.NetworkId || state.ConsensusVersion != Blockchain.ConsensusVersion)
+                if (state.NetworkId != Blockchain.NetworkId || (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -65,7 +65,7 @@ namespace Povix.Dex.Services
 
         public long GetBalance(string[] addresses)
         {
-            lock (sync) return blockchain.GetSpendableBalance(addresses, pending);
+            lock (sync) return blockchain.GetConfirmedView().GetSpendableBalance(addresses, pending);
         }
 
         public object Prepare(CreateTokenViewModel model, string[] publicKeys, string changeAddress, string owner)
@@ -152,7 +152,7 @@ namespace Povix.Dex.Services
             {
                 lock (sync)
                 {
-                    var candidate = new Blockchain(blockchain.Blocks);
+                    var candidate = new Blockchain(blockchain.Blocks, blockchain.Finality);
                     if (candidate.TryReplaceChain(args.Blocks))
                     {
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
@@ -166,7 +166,7 @@ namespace Povix.Dex.Services
                         blockchain = candidate;
                         pending = valid;
                     }
-                    synchronized = true; // Also accepts an identical, validated chain after reconnect.
+                    synchronized = blockchain.Finality == null || blockchain.FinalizedHeight >= blockchain.Finality.AnchorHeight;
                 }
                 RelayPending();
             }

@@ -25,6 +25,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 6)] public string[] Peers { get; set; }
         [DataMember(Order = 7)] public string NetworkId { get; set; }
         [DataMember(Order = 8)] public int ConsensusVersion { get; set; }
+        [DataMember(Order = 9, EmitDefaultValue = false)] public string FinalityPolicyId { get; set; }
+        [DataMember(Order = 10, EmitDefaultValue = false)] public FinalityVote FinalityVote { get; set; }
     }
 
     /// <summary>A TCP gossip node with Bitcoin-style bootstrap seeds and peer address exchange.</summary>
@@ -32,6 +34,7 @@ namespace PrivateCoin.Core
     {
         private const int MaximumConnections = 8;
         private readonly int listeningPort;
+        private readonly string finalityPolicyId;
         private readonly TcpListener listener;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private readonly ConcurrentDictionary<TcpClient, SemaphoreSlim> peers = new ConcurrentDictionary<TcpClient, SemaphoreSlim>();
@@ -57,9 +60,10 @@ namespace PrivateCoin.Core
         {
         }
 
-        public PeerNode(int port, bool enableNatTraversal, string peerCachePath)
+        public PeerNode(int port, bool enableNatTraversal, string peerCachePath, FinalityPolicy finality = null)
         {
             if (port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort) throw new ArgumentOutOfRangeException(nameof(port));
+            finalityPolicyId = (finality ?? FinalityPolicy.FromConfiguration())?.Id;
             listeningPort = port;
             listener = CreateListener(port);
             if (enableNatTraversal) portMapper = new UpnpPortMapper(port);
@@ -69,6 +73,7 @@ namespace PrivateCoin.Core
         public event EventHandler<TransactionReceivedEventArgs> TransactionReceived;
         public event EventHandler<ChainReceivedEventArgs> ChainReceived;
         public event EventHandler SynchronizationRequested;
+        public event EventHandler<FinalityVoteReceivedEventArgs> FinalityVoteReceived;
         public event EventHandler PeerCountChanged;
         public event EventHandler NatTraversalStatusChanged;
 
@@ -141,6 +146,14 @@ namespace PrivateCoin.Core
         {
             if (blocks == null) throw new ArgumentNullException(nameof(blocks));
             return Broadcast(CreateMessage("chain", blocks: blocks.ToArray()));
+        }
+
+        public Task BroadcastFinalityVoteAsync(FinalityVote vote)
+        {
+            if (vote == null) throw new ArgumentNullException(nameof(vote));
+            PeerMessage message = CreateMessage("finality-vote");
+            message.FinalityVote = vote;
+            return Broadcast(message);
         }
 
         public Task RequestSynchronizationAsync()
@@ -262,7 +275,7 @@ namespace PrivateCoin.Core
             return message;
         }
 
-        private static PeerMessage CreateMessage(string type, Transaction transaction = null, Block[] blocks = null)
+        private PeerMessage CreateMessage(string type, Transaction transaction = null, Block[] blocks = null)
         {
             return new PeerMessage
             {
@@ -271,7 +284,8 @@ namespace PrivateCoin.Core
                 Transaction = transaction,
                 Blocks = blocks,
                 NetworkId = Blockchain.NetworkId,
-                ConsensusVersion = Blockchain.ConsensusVersion
+                ConsensusVersion = Blockchain.ConsensusVersion,
+                FinalityPolicyId = finalityPolicyId
             };
         }
 
@@ -290,7 +304,7 @@ namespace PrivateCoin.Core
                     using (var memory = new MemoryStream(body))
                         message = (PeerMessage)new DataContractJsonSerializer(typeof(PeerMessage)).ReadObject(memory);
                     if (message == null || message.NetworkId != Blockchain.NetworkId ||
-                        message.ConsensusVersion != Blockchain.ConsensusVersion)
+                        message.ConsensusVersion != Blockchain.ConsensusVersion || message.FinalityPolicyId != finalityPolicyId)
                         throw new InvalidDataException("Peer belongs to an incompatible network or consensus version.");
                     if (message == null || string.IsNullOrEmpty(message.MessageId) || !seen.TryAdd(message.MessageId, 0)) continue;
 
@@ -300,6 +314,8 @@ namespace PrivateCoin.Core
                         TransactionReceived?.Invoke(this, new TransactionReceivedEventArgs(message.Transaction));
                     else if (message.Type == "chain" && message.Blocks != null && message.Blocks.Length > 0)
                         ChainReceived?.Invoke(this, new ChainReceivedEventArgs(message.Blocks));
+                    else if (message.Type == "finality-vote" && message.FinalityVote != null)
+                        FinalityVoteReceived?.Invoke(this, new FinalityVoteReceivedEventArgs(message.FinalityVote));
                     else if (message.Type == "sync-request")
                         SynchronizationRequested?.Invoke(this, EventArgs.Empty);
 
@@ -550,6 +566,12 @@ namespace PrivateCoin.Core
             if (portMapper != null) portMapper.Dispose();
             cancellation.Dispose();
         }
+    }
+
+    public sealed class FinalityVoteReceivedEventArgs : EventArgs
+    {
+        public FinalityVoteReceivedEventArgs(FinalityVote vote) { Vote = vote; }
+        public FinalityVote Vote { get; }
     }
 
     public sealed class TransactionReceivedEventArgs : EventArgs

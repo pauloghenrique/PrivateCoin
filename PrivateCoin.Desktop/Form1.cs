@@ -20,6 +20,9 @@ namespace PrivateCoin.Desktop
         private readonly WalletStore walletStore = new WalletStore();
         private Blockchain blockchain;
         private PeerNode peerNode;
+        private FinalityCoordinator finalityCoordinator;
+        private FinalityVoteJournal finalityJournal;
+        private readonly Timer finalityTimer = new Timer { Interval = 5000 };
         private bool persistenceAvailable = true;
         private bool miningInProgress;
         private bool updateCheckInProgress;
@@ -37,6 +40,13 @@ namespace PrivateCoin.Desktop
         public Form1()
         {
             InitializeComponent();
+            finalityTimer.Tick += (sender, args) =>
+            {
+                ProcessFinality(blockchain.Blocks, true);
+                if (finalityCoordinator != null)
+                    foreach (Block[] proposal in finalityCoordinator.PendingProposals) ProcessFinality(proposal, true);
+            };
+            finalityTimer.Start();
             try
             {
                 List<NamedWallet> legacyWallets;
@@ -85,6 +95,7 @@ namespace PrivateCoin.Desktop
                 wallets.Add(recoveryWallet);
                 blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
             }
+            ReconcileValidatorState();
             RefreshWalletList(0);
             UpdateChainSummary();
         }
@@ -95,11 +106,16 @@ namespace PrivateCoin.Desktop
             return new Blockchain();
         }
 
-        private bool IsNetworkConnected() => peerNode != null && peerNode.ConnectedPeerCount > 0;
+        private bool IsNetworkConnected() => peerNode != null && peerNode.ConnectedPeerCount > 0 && (blockchain.Finality == null || persistenceAvailable);
 
         private T ExecuteNetworkOperation<T>(Func<T> operation)
         {
-            return networkReadiness.Execute(IsNetworkConnected, operation);
+            return networkReadiness.Execute(IsNetworkConnected, () =>
+            {
+                if (blockchain.Finality != null && blockchain.FinalizedHeight != blockchain.Blocks.Count - 1)
+                    throw new InvalidOperationException("Aguarde a finalização por quórum antes de criar outra operação.");
+                return operation();
+            });
         }
 
         protected override void OnShown(EventArgs e)
@@ -218,6 +234,7 @@ namespace PrivateCoin.Desktop
                         reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX no bloco #" +
                         rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
+                    ProcessFinality(blockchain.Blocks);
                 }
                 else
                     Log("Carteira “" + name + "” criada e salva. Os 180.000 POVIX reservados para novas carteiras já foram distribuídos.", true);
@@ -303,7 +320,7 @@ namespace PrivateCoin.Desktop
 
         private void TokensButtonClick(object sender, EventArgs e)
         {
-            using (var dialog = new TokenWalletDialog(() => blockchain, () => SelectedWallet,
+            using (var dialog = new TokenWalletDialog(() => blockchain.GetConfirmedView(), () => SelectedWallet,
                 () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s)."))
                 dialog.ShowDialog(this);
         }
@@ -321,6 +338,12 @@ namespace PrivateCoin.Desktop
                 string peerCachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "peers.dat");
                 networkReadiness.Disconnect();
                 peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
+                if (blockchain.Finality != null)
+                {
+                    finalityJournal = new FinalityVoteJournal(walletStore.FinalityJournalPath);
+                    finalityCoordinator = new FinalityCoordinator(blockchain.Finality, finalityJournal);
+                    peerNode.FinalityVoteReceived += PeerNodeFinalityVoteReceived;
+                }
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
@@ -340,6 +363,9 @@ namespace PrivateCoin.Desktop
             {
                 if (peerNode != null) peerNode.Dispose();
                 peerNode = null;
+                finalityCoordinator = null;
+                finalityJournal?.Dispose();
+                finalityJournal = null;
                 Log("Não foi possível iniciar o nó: " + error.Message, false);
             }
         }
@@ -369,6 +395,8 @@ namespace PrivateCoin.Desktop
             nodeStatusLabel.Text = "Nó ativo na porta " + listenPortTextBox.Text.Trim() +
                 "   |   Pares: " + node.ConnectedPeerCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture);
+            if (blockchain.Finality != null)
+                nodeStatusLabel.Text += "   |   Finalizado: #" + blockchain.FinalizedHeight.ToString(CultureInfo.InvariantCulture);
             nodeStatusLabel.Text += "   |   " + (networkReadiness.IsReady && IsNetworkConnected() ? "Sincronizado" : "Aguardando sincronização") + "   |   NAT: " + node.NatTraversalStatus;
         }
 
@@ -468,14 +496,20 @@ namespace PrivateCoin.Desktop
                         {
                             // TryReplaceChain validates even when the chain is identical
                             // or loses the deterministic fork-choice comparison.
+                            Block[] oldBlocks = blockchain.Blocks.ToArray();
                             changed = blockchain.TryReplaceChain(e.Blocks);
+                            if (blockchain.Finality != null && blockchain.FinalizedHeight < blockchain.Finality.AnchorHeight)
+                                throw new InvalidOperationException("Aguardando a cadeia com o checkpoint de ativação acordado.");
                             if (changed)
                             {
+                                ReconcileValidatorState();
+                                RequeueOrphanedTransactions(oldBlocks);
                                 RemoveInvalidPendingTransactions();
                                 SaveState();
                             }
                         });
                     if (!accepted) return;
+                    ProcessFinality(e.Blocks);
                     UpdatePeerStatus();
                     UpdateChainSummary();
                     if (changed)
@@ -491,6 +525,96 @@ namespace PrivateCoin.Desktop
                     Log("Blockchain recebida foi rejeitada — " + error.Message, false);
                 }
             }));
+        }
+
+        private void RequeueOrphanedTransactions(IEnumerable<Block> previous)
+        {
+            var confirmed = new HashSet<string>(blockchain.Blocks.SelectMany(b => b.Transactions).Select(t => t.Id), StringComparer.Ordinal);
+            lock (pendingSync)
+                foreach (Transaction tx in previous.SelectMany(b => b.Transactions).Where(t => t.Inputs.Count > 0 && !confirmed.Contains(t.Id)))
+                    if (pendingIds.Add(tx.Id)) pendingTransactions.Add(tx);
+        }
+
+        private void PeerNodeFinalityVoteReceived(object sender, FinalityVoteReceivedEventArgs args)
+        {
+            long epoch = networkReadiness.Epoch;
+            BeginInvoke(new Action(() =>
+            {
+                if (!ReferenceEquals(sender, peerNode) || epoch != networkReadiness.Epoch || !IsNetworkConnected()) return;
+                try
+                {
+                    if (finalityCoordinator != null && finalityCoordinator.Receive(blockchain, args.Vote))
+                        CompleteFinality();
+                }
+                catch (Exception error) { Log("Voto de finalização rejeitado: " + error.Message, false); }
+            }));
+        }
+
+        private void ProcessFinality(IEnumerable<Block> proposal, bool resend = false)
+        {
+            if (finalityCoordinator == null || !networkReadiness.IsReady || !IsNetworkConnected()) return;
+            try
+            {
+                ValidatorStake[] signers = LocalFinalitySigners();
+                IReadOnlyList<FinalityVote> votes = finalityCoordinator.Observe(blockchain, proposal, signers, resend);
+                if (votes.Count > 0)
+                {
+                    // Publish the proposal before its votes; retries also repair
+                    // reordered gossip and votes received before a proposal.
+                    _ = peerNode.BroadcastChainAsync(proposal);
+                    foreach (FinalityVote vote in votes) _ = peerNode.BroadcastFinalityVoteAsync(vote);
+                }
+                CompleteFinality();
+            }
+            catch (Exception error)
+            { Log("Finalização aguardando: " + error.Message, false); }
+        }
+
+        private void CompleteFinality()
+        {
+            Block[] previous = blockchain.Blocks.ToArray();
+            if (!finalityCoordinator.TryFinalize(blockchain)) return;
+            ReconcileValidatorState();
+            RequeueOrphanedTransactions(previous);
+            RemoveInvalidPendingTransactions();
+            if (!SaveState()) return;
+            UpdatePeerStatus();
+            UpdateChainSummary();
+            Log("Bloco #" + blockchain.FinalizedHeight.ToString(CultureInfo.InvariantCulture) + " finalizado por quórum superior a 2/3 do stake.", true);
+            _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
+            if (SnapshotPending().Length > 0) BeginInvoke(new Action(StartAutomaticMining));
+        }
+
+        private ValidatorStake[] LocalFinalitySigners()
+        {
+            return blockchain.GetConfirmedView().GetActiveValidators()
+                .Select(stake => new { Stake = stake, Owner = wallets.FirstOrDefault(w => w.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress)) })
+                .Where(item => item.Owner != null)
+                .Select(item => item.Owner.Wallet.CreateValidatorStake(item.Stake.RewardAddress, item.Stake.LockedAmount)).ToArray();
+        }
+
+        private void ReconcileValidatorState()
+        {
+            if (blockchain.Finality == null) return;
+            ValidatorStake[] registered = blockchain.GetConfirmedView().GetActiveValidators().ToArray();
+            foreach (NamedWallet wallet in wallets)
+            {
+                ValidatorStake stake = registered.FirstOrDefault(v => wallet.Wallet.OwnedOneTimeAddresses.Contains(v.RewardAddress));
+                if (wallet.IsValidator && (stake == null || wallet.LockedStake != stake.LockedAmount || wallet.ValidatorRewardAddress != stake.RewardAddress))
+                    wallet.DeactivateValidator();
+                if (!wallet.IsValidator && stake != null) wallet.ActivateValidator(stake.LockedAmount, stake.RewardAddress);
+            }
+        }
+
+        private bool CanPropose(IEnumerable<Transaction> transactions)
+        {
+            if (!networkReadiness.IsReady || !IsNetworkConnected()) return false;
+            if (blockchain.Finality == null) return EligibleValidators(transactions).Length >= 2;
+            if (blockchain.FinalizedHeight != blockchain.Blocks.Count - 1) return false;
+            ValidatorStake[] eligible = blockchain.GetEligibleValidators(transactions).ToArray();
+            if (eligible.Length < 2) return false;
+            ValidatorStake creator = ProofOfStake.SelectCreator(eligible, blockchain.Blocks.Last().Hash, blockchain.Blocks.Count);
+            return EligibleValidators(transactions).Any(v => v.PublicKey == creator.PublicKey);
         }
 
         private void RemoveInvalidPendingTransactions()
@@ -548,7 +672,7 @@ namespace PrivateCoin.Desktop
 
         private async void StartAutomaticMining()
         {
-            if (miningInProgress || !networkReadiness.IsReady || !IsNetworkConnected()) return;
+            if (miningInProgress || !CanPropose(SnapshotPending())) return;
             miningInProgress = true;
             try
             {
@@ -558,7 +682,7 @@ namespace PrivateCoin.Desktop
                     if (batch.Length == 0) break;
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
-                    if (activeValidators.Length < 2)
+                    if (!CanPropose(batch))
                     {
                         miningStatusLabel.Text = "Aguardando 2 validadores sem participação na transferência";
                         Log("O bloco aguarda dois validadores elegíveis: remetentes e destinatários não podem criar nem confirmar o bloco.", false);
@@ -579,12 +703,15 @@ namespace PrivateCoin.Desktop
                     }
                     BlockValidator creator = block.Validators.Single(item => item.IsCreator);
                     decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
-                    Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
-                        "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
-                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
+                    Log((blockchain.Finality == null ? "Bloco #" : "Proposta de bloco #") + block.Height.ToString(CultureInfo.InvariantCulture) + " criada por “" + creator.ValidatorId +
+                        (blockchain.Finality == null
+                            ? "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) + " validador(es). Recompensa: " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX."
+                            : "”; aguardando certificado de quórum antes da finalização."), true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
+                    ProcessFinality(blockchain.Blocks);
                     UpdateChainSummary();
+                    if (blockchain.Finality != null && blockchain.FinalizedHeight != blockchain.Blocks.Count - 1) break;
                 }
             }
             catch (Exception error)
@@ -600,7 +727,7 @@ namespace PrivateCoin.Desktop
                     ? "Aguardando 2 validadores sem participação na transferência"
                     : "Aguardando uma transferência válida";
                 UpdateChainSummary();
-                if (!IsDisposed && remaining.Length > 0 && EligibleValidators(remaining).Length >= 2)
+                if (!IsDisposed && remaining.Length > 0 && CanPropose(remaining))
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }
@@ -608,6 +735,11 @@ namespace PrivateCoin.Desktop
         private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions)
         {
             Transaction[] batch = transactions.ToArray();
+            if (blockchain.Finality != null)
+            {
+                var eligible = new HashSet<string>(blockchain.GetEligibleValidators(batch).Select(v => v.PublicKey), StringComparer.Ordinal);
+                return LocalFinalitySigners().Where(v => eligible.Contains(v.PublicKey)).ToArray();
+            }
             return wallets.Where(item => item.IsValidator && !batch.Any(item.Wallet.IsParticipant))
                 .Select(item => item.Validator).ToArray();
         }
@@ -638,7 +770,7 @@ namespace PrivateCoin.Desktop
                 long fee = feeChoice.Amount;
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
-                long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                long balance = blockchain.GetConfirmedView().GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
                 if (checked(amount + fee) > balance)
                     throw new InvalidOperationException("Saldo disponível insuficiente. Os tokens bloqueados como garantia não podem ser transferidos.");
                 Transaction transaction = selected.Wallet.CreateTransaction(blockchain, pending, destinationTextBox.Text.Trim(), amount, fee);
@@ -675,7 +807,7 @@ namespace PrivateCoin.Desktop
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
                 if (selected.IsValidator) throw new InvalidOperationException("Esta carteira já está ativa como validadora.");
-                long balance = blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+                long balance = blockchain.GetConfirmedView().GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
                 long fee = Blockchain.CalculateAutomaticFee(SnapshotPending().Length, 1);
                 if (checked(amount + fee) > balance) throw new InvalidOperationException("Saldo insuficiente para bloquear essa garantia e pagar a taxa.");
 
@@ -685,10 +817,11 @@ namespace PrivateCoin.Desktop
                 selected.ActivateValidator(amount, rewardAddress);
                 SaveState();
                 if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
+                ProcessFinality(blockchain.Blocks);
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
                     " POVIX bloqueados globalmente no bloco #" + lockBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
-                if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
+                if (SnapshotPending().Length > 0 && CanPropose(SnapshotPending()))
                     BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
@@ -721,6 +854,7 @@ namespace PrivateCoin.Desktop
                 selected.DeactivateValidator();
                 SaveState();
                 if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
+                ProcessFinality(blockchain.Blocks);
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
                     " POVIX desbloqueados globalmente no bloco #" + unlockBlock.Height.ToString(CultureInfo.InvariantCulture) +
@@ -745,7 +879,7 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             NamedWallet selected = SelectedWallet;
-            long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
+            long totalBalance = selected == null ? 0 : blockchain.GetConfirmedView().GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             long availableBalance = Math.Max(0, totalBalance - lockedStake);
             balanceLabel.Text = ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
@@ -760,11 +894,20 @@ namespace PrivateCoin.Desktop
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
         }
 
-        private void SaveState()
+        private bool SaveState()
         {
-            if (!persistenceAvailable) return;
-            try { walletStore.Save(wallets, blockchain, SnapshotPending()); }
-            catch (Exception error) { Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false); }
+            if (!persistenceAvailable) return false;
+            try { walletStore.Save(wallets, blockchain, SnapshotPending()); return true; }
+            catch (Exception error)
+            {
+                if (blockchain.Finality != null)
+                {
+                    persistenceAvailable = false;
+                    networkReadiness.Disconnect();
+                }
+                Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false);
+                return false;
+            }
         }
 
         private Transaction[] SnapshotPending()
@@ -823,7 +966,10 @@ namespace PrivateCoin.Desktop
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            finalityTimer.Stop();
+            finalityTimer.Dispose();
             if (peerNode != null) peerNode.Dispose();
+            finalityJournal?.Dispose();
             SaveState();
             foreach (NamedWallet wallet in wallets) wallet.Dispose();
             base.OnFormClosed(e);

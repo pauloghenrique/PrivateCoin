@@ -69,6 +69,8 @@ namespace PrivateCoin.Desktop
         private readonly Dictionary<string, StoredNetworkWallet> knownNetworkWallets =
             new Dictionary<string, StoredNetworkWallet>(StringComparer.Ordinal);
 
+        internal string FinalityJournalPath => Path.Combine(Path.GetDirectoryName(networkFilePath), "finality-votes.journal");
+
         public WalletStore() : this(FindDataDirectory()) { }
 
         internal WalletStore(string directory)

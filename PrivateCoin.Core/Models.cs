@@ -135,6 +135,9 @@ namespace PrivateCoin.Core
         [DataMember(Order = 6)] public string Hash { get; set; }
         [DataMember(Order = 7, EmitDefaultValue = false)] public List<BlockValidator> Validators { get; set; }
 
+        // Certificates are signed over the block hash and are not part of that hash.
+        [DataMember(Order = 8, EmitDefaultValue = false)] public List<FinalityVote> FinalityVotes { get; set; }
+
         internal string CalculateHash()
         {
             string validatorProof = Validators == null ? string.Empty : string.Join("|", Validators.Select(v =>

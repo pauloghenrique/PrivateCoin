@@ -17,25 +17,45 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 3;
+        public const int ConsensusVersion = 4;
         public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
         public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
         private const long GenesisNonce = 4995L;
         private const string ProofPrefix = "000";
         private readonly object sync = new object();
+        internal bool AllowCreatorOnlyProof { get; set; }
         private readonly List<Block> blocks = new List<Block>();
 
-        public Blockchain()
+        public FinalityPolicy Finality { get; }
+        public int FinalizedHeight => Finality == null ? -1 : Finality.FinalizedHeight(Blocks);
+
+        public Blockchain GetConfirmedView()
         {
+            if (Finality == null) return this;
+            int height = FinalizedHeight;
+            return height < 0 ? new Blockchain(Finality) : new Blockchain(Blocks.Take(height + 1), Finality);
+        }
+
+        public Blockchain() : this(FinalityPolicy.FromConfiguration()) { }
+
+        public Blockchain(FinalityPolicy finality)
+        {
+            Finality = finality;
             blocks.Add(CreateGenesisBlock());
         }
 
         /// <summary>Restores and validates an existing chain.</summary>
-        public Blockchain(IEnumerable<Block> existingBlocks)
+        public Blockchain(IEnumerable<Block> existingBlocks) : this(existingBlocks, FinalityPolicy.FromConfiguration()) { }
+
+        public Blockchain(IEnumerable<Block> existingBlocks, FinalityPolicy finality) : this(existingBlocks, finality, false) { }
+
+        internal Blockchain(IEnumerable<Block> existingBlocks, FinalityPolicy finality, bool creatorOnly)
         {
+            AllowCreatorOnlyProof = creatorOnly;
+            Finality = finality;
             if (existingBlocks == null) throw new ArgumentNullException(nameof(existingBlocks));
-            blocks.AddRange(existingBlocks);
+            blocks.AddRange(finality == null ? existingBlocks : FinalityPolicy.CopyBlocks(existingBlocks));
             if (!IsValid()) throw new InvalidOperationException("The stored blockchain is invalid.");
         }
 
@@ -46,6 +66,7 @@ namespace PrivateCoin.Core
             if (transactions == null) throw new ArgumentNullException(nameof(transactions));
             lock (sync)
             {
+                RequireFinalizedTip();
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 var block = new Block { Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
@@ -61,16 +82,19 @@ namespace PrivateCoin.Core
             if (validators == null) throw new ArgumentNullException(nameof(validators));
             lock (sync)
             {
+                RequireFinalizedTip();
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
                 ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(BuildUtxo()), pending).ToArray();
-                if (!SameStakeSet(active, globallyEligible))
+                if (Finality == null && !SameStakeSet(active, globallyEligible))
                     throw new InvalidOperationException("The proposed validators do not match the globally locked collateral set.");
-                if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
+                if (globallyEligible.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
                 int height = blocks.Count;
-                ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
-                ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
+                ValidatorStake creator = ProofOfStake.SelectCreator(globallyEligible, blocks[blocks.Count - 1].Hash, height);
+                if (!active.Any(v => v.PublicKey == creator.PublicKey && v.LockedAmount == creator.LockedAmount))
+                    throw new InvalidOperationException("Only the selected creator can propose this block.");
+                ValidatorStake[] confirmers = globallyEligible.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
                 IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
                 long fees = pending.Aggregate(0L, (total, transaction) => checked(total + transaction.Fee));
                 var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
@@ -89,7 +113,7 @@ namespace PrivateCoin.Core
                     PreviousHash = blocks[blocks.Count - 1].Hash,
                     TimestampUtcTicks = reward.TimestampUtcTicks,
                     Transactions = new[] { reward }.Concat(pending).ToList(),
-                    Validators = active.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item => new BlockValidator
+                    Validators = globallyEligible.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item => new BlockValidator
                     {
                         ValidatorId = item.ValidatorId,
                         RewardAddress = item.RewardAddress,
@@ -101,9 +125,11 @@ namespace PrivateCoin.Core
                 string votePayload = CreateVotePayload(block);
                 foreach (BlockValidator record in block.Validators)
                 {
-                    ValidatorStake validator = active.Single(item => item.ValidatorId == record.ValidatorId);
-                    record.PublicKey = validator.PublicKey;
-                    record.VoteSignature = validator.CreateVote(votePayload);
+                    ValidatorStake registered = globallyEligible.Single(item => item.ValidatorId == record.ValidatorId);
+                    record.PublicKey = registered.PublicKey;
+                    ValidatorStake signer = active.SingleOrDefault(item => item.ValidatorId == record.ValidatorId);
+                    if (Finality == null || record.IsCreator)
+                        record.VoteSignature = signer.CreateVote(votePayload);
                 }
                 Mine(block);
                 blocks.Add(block);
@@ -120,6 +146,7 @@ namespace PrivateCoin.Core
             if (string.IsNullOrWhiteSpace(rewardAddress)) throw new ArgumentException("A wallet reward address is required.", nameof(rewardAddress));
             lock (sync)
             {
+                RequireFinalizedTip();
                 int rewardedWallets = CountWalletCreationRewards();
                 if (rewardedWallets >= RewardedWalletLimit)
                 {
@@ -143,28 +170,49 @@ namespace PrivateCoin.Core
             }
         }
 
+        private void RequireFinalizedTip()
+        {
+            if (Finality != null && Finality.FinalizedHeight(blocks) != blocks.Count - 1)
+                throw new InvalidOperationException("Aguarde a finalização por quórum dos validadores antes de propor outro bloco.");
+        }
+
         private int CountWalletCreationRewards()
         {
             return blocks.Skip(1).Count(block => block.Transactions.Count > 0 && IsWalletCreationReward(block.Transactions[0]));
         }
 
         /// <summary>
-        /// Adopts a valid chain selected by a deterministic longest-chain rule.
-        /// The tip hash breaks ties so two newly connected nodes also converge when
-        /// they were created independently at the same height.
+        /// With an activation policy, adopts a chain with newer quorum-finalized
+        /// blocks while preserving the finalized prefix. Without one, uses the
+        /// legacy longest-chain rule with a deterministic tip-hash tie break.
         /// </summary>
         public bool TryReplaceChain(IEnumerable<Block> candidateBlocks)
         {
             if (candidateBlocks == null) throw new ArgumentNullException(nameof(candidateBlocks));
-            var candidate = new Blockchain(candidateBlocks);
+            var candidate = new Blockchain(candidateBlocks, Finality);
             Block[] replacement = candidate.Blocks.ToArray();
 
             lock (sync)
             {
-                bool isBetter = replacement.Length > blocks.Count ||
-                    (replacement.Length == blocks.Count &&
-                     string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
-                if (!isBetter) return false;
+                if (Finality != null)
+                {
+                    int currentFinalized = Finality.FinalizedHeight(blocks);
+                    int incomingFinalized = Finality.FinalizedHeight(replacement);
+                    if (incomingFinalized < Finality.AnchorHeight) return false;
+                    int commonFinalized = Math.Min(currentFinalized, incomingFinalized);
+                    if (commonFinalized >= Finality.AnchorHeight && blocks[commonFinalized].Hash != replacement[commonFinalized].Hash)
+                        throw new InvalidOperationException("Conflicting finalized chains: stop and investigate validator equivocation.");
+                    if (incomingFinalized <= currentFinalized) return false;
+                    // Discard an uncertified local suffix, even if it was longer.
+                    replacement = replacement.Take(incomingFinalized + 1).ToArray();
+                }
+                else
+                {
+                    bool isBetter = replacement.Length > blocks.Count ||
+                        (replacement.Length == blocks.Count &&
+                         string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
+                    if (!isBetter) return false;
+                }
 
                 blocks.Clear();
                 blocks.AddRange(replacement);
@@ -286,6 +334,9 @@ namespace PrivateCoin.Core
             }
         }
 
+        public IReadOnlyList<ValidatorStake> GetEligibleValidators(IEnumerable<Transaction> transactions)
+        { return ExcludeTransactionParticipants(GetActiveValidators(), transactions).ToArray(); }
+
         public IReadOnlyList<ValidatorStake> GetActiveValidators()
         {
             lock (sync)
@@ -317,7 +368,7 @@ namespace PrivateCoin.Core
                     if (block.Height != i || block.Hash != block.CalculateHash() || !block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal)) return false;
                     if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
                 }
-                try { ValidateWholeChain(); return true; }
+                try { ValidateWholeChain(); if (Finality != null) Finality.FinalizedHeight(blocks); return true; }
                 catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
                     error is CryptographicException || error is OverflowException) { return false; }
             }
@@ -363,7 +414,7 @@ namespace PrivateCoin.Core
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
         }
 
-        private static void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo)
+        private void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo)
         {
             if (block.Transactions.Count == 0) throw new InvalidOperationException("A proof-of-stake block must contain its reward.");
             BlockValidator[] records = block.Validators.ToArray();
@@ -375,7 +426,8 @@ namespace PrivateCoin.Core
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
                     record.ValidatorId != Crypto.Sha256(record.PublicKey) ||
-                    !ProofOfStake.VerifyVote(record.PublicKey, CreateVotePayload(block), record.VoteSignature))
+                    (((!AllowCreatorOnlyProof && Finality == null) || record.IsCreator || !string.IsNullOrWhiteSpace(record.VoteSignature)) &&
+                     !ProofOfStake.VerifyVote(record.PublicKey, CreateVotePayload(block), record.VoteSignature)))
                     throw new InvalidOperationException("Invalid individual validator vote signature.");
                 bool collateralExists = utxo.Values.Any(item => item.TransactionKind == TransactionKind.StakeLock &&
                     item.ValidatorPublicKey == record.PublicKey && item.ValidatorRewardAddress == record.RewardAddress &&
