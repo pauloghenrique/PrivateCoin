@@ -7,6 +7,7 @@
     const decoder = new TextDecoder();
     const algorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
     let active = null;
+    let staged = null;
 
     function requireCrypto() {
         if (!global.crypto || !global.crypto.subtle) throw new Error('Abra o Povix.Dex em HTTPS para assinar com segurança.');
@@ -61,10 +62,12 @@
         bits.fill(0);
         return { aes, hmac };
     }
-    async function load(record, password) {
+    async function read(record, password) {
+        active = null;
+        staged = null;
         requireCrypto();
-        if (!record || record.format !== FORMAT || record.iterations !== ITERATIONS || typeof record.data !== 'string' || record.data.length > 6000000)
-            throw new Error('Use o arquivo .povixwallet exportado para o DEX.');
+        if (!record || record.format !== FORMAT || record.iterations !== ITERATIONS || typeof record.data !== 'string' || record.data.length > 9000000)
+            throw new Error('O arquivo de carteiras não está em um formato reconhecido.');
         const salt = fromBase64(record.salt), iv = fromBase64(record.iv), cipher = fromBase64(record.data);
         if (salt.length !== 16 || iv.length !== 16 || cipher.length === 0) throw new Error('Backup inválido.');
         const protection = await derive(password, salt);
@@ -74,15 +77,26 @@
         let data;
         try { data = JSON.parse(decoder.decode(clear)); }
         finally { clear.fill(0); }
-        if (!data || !Array.isArray(data.PrivateKeys) || data.PrivateKeys.length < 1 || data.PrivateKeys.length > 998)
-            throw new Error('A carteira deve conter entre 1 e 998 chaves.');
+        const legacy = Boolean(data && Array.isArray(data.PrivateKeys));
+        const wallets = legacy ? [data] : data && data.Wallets;
+        if (!Array.isArray(wallets) || wallets.length < 1 || wallets.length > 100 || wallets.some(item =>
+            !item || !Array.isArray(item.PrivateKeys) || item.PrivateKeys.length < 1 || item.PrivateKeys.length > 1000))
+            throw new Error('O arquivo não contém uma coleção válida de carteiras.');
+        staged = { wallets, legacy, salt, protection, record };
+        return wallets.map((item, index) => ({ id: String(index), name: typeof item.Name === 'string' ? item.Name.slice(0, 64) : 'Carteira ' + (index + 1), addressCount: item.PrivateKeys.length }));
+    }
+    async function selectWallet(id) {
+        if (!staged || typeof id !== 'string' || !/^(0|[1-9][0-9]*)$/.test(id) || Number(id) >= staged.wallets.length)
+            throw new Error('Selecione uma carteira salva no arquivo.');
+        active = null;
+        const selectedIndex = Number(id), data = staged.wallets[selectedIndex];
         const keys = new Map();
         for (const xml of data.PrivateKeys) {
             const item = await importKey(xml);
             if (keys.has(item.address)) throw new Error('O backup contém chaves duplicadas.');
             keys.set(item.address, item);
         }
-        active = { name: typeof data.Name === 'string' ? data.Name.slice(0, 64) : 'Minha carteira', keys, salt, protection, record };
+        active = { ...staged, name: typeof data.Name === 'string' ? data.Name.slice(0, 64) : 'Minha carteira', keys, selectedIndex };
         try { await save(); }
         catch (error) { active = null; throw error; }
         return { name: active.name, addressCount: keys.size };
@@ -90,7 +104,9 @@
     async function save() {
         const wallet = requireWallet();
         const iv = crypto.getRandomValues(new Uint8Array(16));
-        const clear = encoder.encode(JSON.stringify({ Name: wallet.name, PrivateKeys: Array.from(wallet.keys.values(), item => item.xml) }));
+        const wallets = wallet.wallets.slice();
+        wallets[wallet.selectedIndex] = { ...wallets[wallet.selectedIndex], Name: wallet.name, PrivateKeys: Array.from(wallet.keys.values(), item => item.xml) };
+        const clear = encoder.encode(JSON.stringify(wallet.legacy ? wallets[0] : { Wallets: wallets }));
         let cipher;
         try { cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, wallet.protection.aes, clear)); }
         finally { clear.fill(0); }
@@ -100,6 +116,8 @@
         try { global.localStorage.setItem(STORAGE, JSON.stringify(record)); }
         catch (_) { throw new Error('Não foi possível salvar a carteira cifrada neste navegador. Libere espaço ou permita o armazenamento local.'); }
         wallet.record = record;
+        wallet.wallets = wallets;
+        staged = { wallets, legacy: wallet.legacy, salt: wallet.salt, protection: wallet.protection, record };
     }
     function requireWallet() { if (!active) throw new Error('Desbloqueie sua carteira primeiro.'); return active; }
     function paddedJwk(value, width) {
@@ -172,17 +190,60 @@
         return whole + (decimals ? ',' + text.slice(-decimals) : '');
     }
     global.PovixTokenWallet = {
+        async readFile(file, password) {
+            active = null;
+            staged = null;
+            if (!file || file.size > 9000000) throw new Error('Escolha um arquivo de carteiras de até 9 MB.');
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            // DPAPI files are binary. They are opened only by the user's local Windows helper.
+            // Portable encrypted backups are parsed and decrypted entirely in this browser.
+            let record;
+            if (bytes.length >= 20 && bytes[0] === 1 && bytes[1] === 0 && bytes[2] === 0 && bytes[3] === 0 &&
+                toBase64(bytes.slice(4, 20)) === '0Iyd3wEV0RGMegDAT8KX6w==') {
+                if (password.length < 10) throw new Error('Defina uma senha de pelo menos 10 caracteres para a cópia local.');
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 20000);
+                try {
+                    const response = await global.fetch('http://127.0.0.1:4781/import', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'omit',
+                        redirect: 'error', referrerPolicy: 'no-referrer', signal: controller.signal,
+                        body: JSON.stringify({ file: toBase64(bytes), password })
+                    });
+                    const result = await response.json();
+                    if (!response.ok || result.error) throw new Error(result.error || 'Não foi possível abrir o arquivo no Windows.');
+                    record = result.wallet;
+                } catch (error) {
+                    if (error instanceof TypeError || error.name === 'AbortError')
+                        throw new Error('Inicie o Povix.WalletBridge no Windows com este site autorizado e permita o acesso à rede local no navegador. O arquivo do Desktop é aberto somente no seu dispositivo.');
+                    throw error;
+                } finally { clearTimeout(timeout); bytes.fill(0); }
+            } else {
+                try { record = JSON.parse(decoder.decode(bytes).replace(/^\uFEFF/, '')); }
+                catch (_) { throw new Error('Arquivo inválido. Escolha wallet.dat, wallets.dat ou um backup cifrado do DEX.'); }
+                finally { bytes.fill(0); }
+            }
+            return read(record, password);
+        },
+        async readSaved(password) {
+            const saved = global.localStorage.getItem(STORAGE);
+            if (!saved) throw new Error('Escolha o arquivo de carteiras primeiro.');
+            return read(JSON.parse(saved), password);
+        },
+        selectWallet,
         async importFile(file, password) {
-            if (!file || file.size > 6000000) throw new Error('Escolha um backup de carteira de até 6 MB.');
-            return load(JSON.parse(await file.text()), password);
+            const choices = await this.readFile(file, password);
+            if (choices.length !== 1) throw new Error('O arquivo contém várias carteiras. Selecione qual deseja abrir.');
+            return selectWallet(choices[0].id);
         },
         async unlock(password) {
             const saved = global.localStorage.getItem(STORAGE);
             if (!saved) throw new Error('Importe um backup de carteira primeiro.');
-            return load(JSON.parse(saved), password);
+            const choices = await read(JSON.parse(saved), password);
+            if (choices.length !== 1) throw new Error('O arquivo contém várias carteiras. Selecione qual deseja abrir.');
+            return selectWallet(choices[0].id);
         },
         hasSavedWallet() { try { return Boolean(global.localStorage.getItem(STORAGE)); } catch (_) { return false; } },
-        lock() { active = null; },
+        lock() { active = null; staged = null; },
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
@@ -207,5 +268,5 @@
             return signatures;
         }
     };
-    if (global.addEventListener) global.addEventListener('pagehide', () => { active = null; });
+    if (global.addEventListener) global.addEventListener('pagehide', () => { active = null; staged = null; });
 })(typeof window === 'undefined' ? globalThis : window);

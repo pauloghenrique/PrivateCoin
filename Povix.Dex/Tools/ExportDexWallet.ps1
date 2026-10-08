@@ -31,9 +31,10 @@ try {
     $store = [Text.Encoding]::UTF8.GetString($clear) | ConvertFrom-Json
     $wallets = @($store.Wallets)
     if ($WalletName) { $wallets = @($wallets | Where-Object { $_.Name -eq $WalletName }) }
-    if ($wallets.Count -ne 1) { throw 'Use -WalletName para selecionar exatamente uma carteira.' }
-    $selected = $wallets[0]
-    if (@($selected.PrivateKeys).Count -eq 0 -or @($selected.PrivateKeys).Count -gt 998) { throw 'A carteira deve conter entre 1 e 998 chaves.' }
+    if ($wallets.Count -eq 0 -or $wallets.Count -gt 100 -or ($WalletName -and $wallets.Count -ne 1)) { throw 'O arquivo deve conter entre 1 e 100 carteiras; -WalletName precisa identificar uma única carteira.' }
+    foreach ($wallet in $wallets) {
+        if (@($wallet.PrivateKeys).Count -eq 0 -or @($wallet.PrivateKeys).Count -gt 1000) { throw 'Cada carteira deve conter entre 1 e 1000 chaves.' }
+    }
     $securePassword = Read-Host 'Senha do backup (mínimo de 10 caracteres)' -AsSecureString
     $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
     $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
@@ -46,7 +47,8 @@ try {
     try { $keyBytes = $derivation.GetBytes(64) } finally { $derivation.Dispose() }
     $aesKey = [byte[]]$keyBytes[0..31]
     $macKey = [byte[]]$keyBytes[32..63]
-    $payload = [Text.Encoding]::UTF8.GetBytes((@{ Name = $selected.Name; PrivateKeys = @($selected.PrivateKeys) } | ConvertTo-Json -Compress -Depth 5))
+    $exported = @($wallets | ForEach-Object { @{ Name = $_.Name; PrivateKeys = @($_.PrivateKeys) } })
+    $payload = [Text.Encoding]::UTF8.GetBytes((@{ Wallets = $exported } | ConvertTo-Json -Compress -Depth 5))
     $aes = [System.Security.Cryptography.Aes]::Create()
     try {
         $aes.Key = $aesKey

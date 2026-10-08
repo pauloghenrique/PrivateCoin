@@ -9,6 +9,7 @@
     let network = null, draft = null, expected = null, changeAddress = null;
     let busy = false, refreshing = false, backupDownloaded = false, balance = null;
     let signedSignatures = null;
+    let walletChoices = null;
 
     function message(text) { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; }
     async function post(url, values) {
@@ -43,7 +44,10 @@
         const enough = balance === null || BigInt(balance) >= BigInt(selectedFee());
         byId('prepare-token').disabled = busy || Boolean(draft) || !unlocked || !ready || !enough;
         byId('own-address').disabled = busy || Boolean(draft) || !unlocked;
-        byId('wallet-connect').disabled = busy;
+        byId('wallet-connect').disabled = busy || (Boolean(walletChoices) && !byId('wallet-choice').value);
+        byId('wallet-file').disabled = busy;
+        byId('wallet-password').disabled = busy || Boolean(walletChoices);
+        byId('wallet-choice').disabled = busy || !walletChoices;
         byId('wallet-lock').disabled = busy;
         byId('token-fields').disabled = busy || Boolean(draft);
         byId('sign-token').disabled = busy || !draft || !unlocked || !ready || !backupDownloaded || !byId('backup-confirmed').checked;
@@ -111,8 +115,21 @@
         const password = byId('wallet-password').value;
         byId('wallet-password').value = '';
         try {
-            const file = byId('wallet-file').files[0];
-            const info = file ? await wallet.importFile(file, password) : await wallet.unlock(password);
+            if (!walletChoices) {
+                const file = byId('wallet-file').files[0];
+                walletChoices = file ? await wallet.readFile(file, password) : await wallet.readSaved(password);
+                const select = byId('wallet-choice');
+                select.replaceChildren(new Option('Selecione uma carteira', ''));
+                walletChoices.forEach((item, index) => select.add(new Option((index + 1) + ' · ' + item.name + ' (' + item.addressCount + ' endereços)', item.id)));
+                select.required = true;
+                byId('wallet-selection').hidden = false;
+                byId('wallet-password-field').hidden = true;
+                byId('wallet-password').required = false;
+                byId('wallet-connect').textContent = 'Abrir carteira selecionada';
+                byId('wallet-choice-help').textContent = walletChoices.length + (walletChoices.length === 1 ? ' carteira encontrada neste arquivo.' : ' carteiras encontradas neste arquivo.');
+                return;
+            }
+            const info = await wallet.selectWallet(byId('wallet-choice').value);
             resetDraft(); changeAddress = null; balance = null;
             byId('wallet-name').textContent = info.name;
             byId('wallet-state').textContent = 'Assinatura local';
@@ -123,8 +140,21 @@
         } catch (error) { message(error.message); }
         finally { busy = false; updateControls(); }
     });
+    function resetWalletSelection() {
+        walletChoices = null;
+        byId('wallet-selection').hidden = true;
+        byId('wallet-choice').replaceChildren(new Option('Selecione uma carteira', ''));
+        byId('wallet-choice').required = false;
+        byId('wallet-password-field').hidden = false;
+        byId('wallet-password').required = true;
+        byId('wallet-connect').textContent = 'Ler carteiras do arquivo';
+        updateControls();
+    }
+    byId('wallet-file').addEventListener('change', () => { wallet.lock(); resetWalletSelection(); message(''); });
+    byId('wallet-choice').addEventListener('change', updateControls);
     byId('wallet-lock').addEventListener('click', () => {
         wallet.lock(); changeAddress = null; balance = null; resetDraft();
+        resetWalletSelection();
         byId('wallet-state').textContent = 'Bloqueada';
         byId('wallet-form').hidden = false; byId('wallet-connected').hidden = true;
     });
@@ -180,7 +210,7 @@
             message(error.message + (error.rejected ? '' : ' Se o envio foi interrompido, repita o mesmo envio para recuperar o comprovante.'));
         } finally { busy = false; byId('sign-token').textContent = 'Assinar e enviar à rede'; updateControls(); }
     });
-    if (wallet.hasSavedWallet()) byId('wallet-file').nextElementSibling.textContent = 'Já existe uma carteira cifrada neste navegador. Informe a senha para desbloqueá-la.';
+    if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um arquivo cifrado salvo neste navegador. Informe a senha para listar suas carteiras ou escolha outro arquivo.';
     refreshNetwork();
     setInterval(refreshNetwork, 10000);
 })();

@@ -35,17 +35,39 @@ Sem pares configurados o formulário continua disponível, mas não transmite
 criações. Os validadores existentes precisam incluir a operação em um bloco;
 o DEX não confirma suas próprias transações.
 
-## Importar a carteira do Desktop
+## Abrir o arquivo de carteiras
+
+Na tela, escolha `wallet.dat` ou `wallets.dat`, clique em **Ler carteiras do
+arquivo**, selecione uma das carteiras listadas e clique em **Abrir carteira
+selecionada**. A seleção é explícita, mesmo quando o arquivo contém uma única
+carteira. Somente a carteira escolhida fornece as chaves e os endereços para
+consultar o saldo e assinar.
+
+O arquivo original do Desktop é protegido pelo usuário do Windows. Para abri-lo
+diretamente, execute o [Povix.WalletBridge](../Povix.WalletBridge/README.md) no
+seu Windows com a origem HTTPS do DEX autorizada. A leitura passa exclusivamente
+por `127.0.0.1:4781`; o arquivo e a senha não são enviados ao servidor do DEX.
+Defina uma senha para guardar a cópia cifrada no navegador. O original permanece
+inalterado. Se o navegador solicitar permissão de acesso à rede local, permita
+a conexão com o auxiliar.
+
+Também é possível listar as carteiras da cópia cifrada já salva no navegador:
+deixe o seletor de arquivo vazio e informe a senha existente. Backups antigos
+contendo uma única carteira continuam compatíveis.
+
+### Exportação alternativa sem auxiliar em execução
 
 No Windows, execute a exportação **localmente**, com o mesmo usuário que possui
 o `wallets.dat`. O script lê a proteção DPAPI já usada pelo Desktop e grava
 somente um backup cifrado, sem modificar a carteira original:
 
 ```powershell
-.\Povix.Dex\Tools\ExportDexWallet.ps1 -WalletName "Minha carteira" -OutputFile ".\minha-carteira.povixwallet"
+.\Povix.Dex\Tools\ExportDexWallet.ps1 -OutputFile ".\minhas-carteiras.povixwallet"
 ```
 
-Se a instalação usa a pasta antiga, informe também `-WalletFile` com o caminho
+O exportador inclui todas as carteiras por padrão. Para incluir somente uma,
+informe `-WalletName "Minha carteira"`. Se a instalação usa a pasta antiga,
+informe também `-WalletFile` com o caminho
 correto. Escolha uma senha de pelo menos 10 caracteres; a senha é solicitada
 localmente. Importe o `.povixwallet` na tela do DEX e informe a mesma senha.
 A carteira precisa ter POVIX confirmado e disponível para pagar a taxa.
@@ -55,10 +77,12 @@ O backup usa PBKDF2-SHA256 com 210.000 iterações, AES-256-CBC e HMAC-SHA256
 (encrypt-then-MAC com chaves independentes). O navegador guarda somente o
 backup cifrado em armazenamento local. Desbloquear mantém o material privado
 em memória até bloquear, sair ou recarregar a página. Não há scripts externos
-na tela; a política CSP permite scripts e conexões apenas da mesma origem.
+na tela; a política CSP permite scripts da mesma origem e conexões ao servidor
+do DEX e ao auxiliar de loopback fixo.
 
 Endereços novos de recebimento e troco são gerados localmente e salvos cifrados
-**antes** da assinatura. A revisão pede o download do backup atualizado. Esse
+**antes** da assinatura. O backup atualizado preserva todas as carteiras da
+coleção e modifica apenas a selecionada. A revisão pede seu download. Esse
 backup inclui as chaves novas que não existem no `wallets.dat` original nem
 podem ser recuperadas apenas pela frase antiga. Use o backup atualizado para
 restaurar a carteira no DEX em outro navegador. Não apague o armazenamento
