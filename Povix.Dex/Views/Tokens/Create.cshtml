@@ -11,9 +11,11 @@
             <section class="card wallet-card" aria-labelledby="wallet-title">
                 <div class="card-heading"><span class="step-icon">↗</span><div><h2 id="wallet-title">Sua carteira</h2><p>As chaves e a senha ficam neste navegador.</p></div><span id="wallet-state" class="small-pill">Bloqueada</span></div>
                 <form id="wallet-form" class="wallet-form">
-                    <div><label for="wallet-file">Backup da carteira</label><input id="wallet-file" type="file" accept=".povixwallet,application/json" /><small>Importe o arquivo .povixwallet exportado do Desktop.</small></div>
-                    <div><label for="wallet-password">Senha do backup</label><input id="wallet-password" type="password" minlength="10" autocomplete="current-password" placeholder="Sua senha local" required /></div>
-                    <button id="wallet-connect" class="button button-secondary" type="submit">Desbloquear carteira</button>
+                    <div><label for="wallet-file">Arquivo de carteiras</label><input id="wallet-file" type="file" accept=".dat,.povixwallet,application/json" /><small id="wallet-file-help">Escolha wallet.dat, wallets.dat ou um backup cifrado do DEX.</small></div>
+                    <div id="wallet-password-field"><label for="wallet-password">Senha da cópia local</label><input id="wallet-password" type="password" minlength="10" autocomplete="current-password" placeholder="Sua senha local" required /><small>Arquivo do Desktop: defina uma senha. Backup do DEX: use a senha existente.</small></div>
+                    <div id="wallet-selection" class="wallet-selection" hidden><label for="wallet-choice">Carteira salva no arquivo</label><select id="wallet-choice" disabled><option value="">Selecione uma carteira</option></select><small id="wallet-choice-help">Escolha a carteira que deseja usar.</small></div>
+                    <button id="wallet-connect" class="button button-secondary" type="submit">Ler carteiras do arquivo</button>
+                    <p class="wallet-local-help">Arquivos do Desktop são abertos pelo auxiliar local Povix.WalletBridge, no seu Windows.</p>
                 </form>
                 <div id="wallet-connected" class="wallet-connected" hidden><div><strong id="wallet-name"></strong><p>Disponível para taxas: <strong id="wallet-balance">Consultando…</strong></p></div><button id="wallet-lock" class="text-button" type="button">Bloquear</button></div>
             </section>

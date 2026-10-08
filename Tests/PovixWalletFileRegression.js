@@ -1,0 +1,84 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const net = require('node:net');
+const storage = new Map();
+global.localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
+const fixture = JSON.parse(fs.readFileSync(path.join(process.argv[2], 'wallet-files.json'), 'utf8'));
+vm.runInThisContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-wallet.js'), 'utf8'));
+const wallet = global.PovixTokenWallet;
+const realFetch = global.fetch;
+const file = record => {
+    const bytes = new TextEncoder().encode(JSON.stringify(record));
+    return { size: bytes.length, arrayBuffer: async () => bytes.buffer };
+};
+
+(async function () {
+    let response = await realFetch(fixture.helperUrl, { method: 'OPTIONS', headers: { Origin: 'https://untrusted.example' } });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('access-control-allow-origin'), null);
+    const rawHostResponse = await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port: Number(new URL(fixture.helperUrl).port) });
+        let text = '';
+        socket.on('connect', () => socket.write('OPTIONS /import HTTP/1.1\r\nHost: rebound.example\r\nOrigin: ' + fixture.helperOrigin + '\r\nConnection: close\r\n\r\n'));
+        socket.on('data', bytes => { text += bytes.toString(); });
+        socket.on('end', () => resolve(text));
+        socket.on('error', reject);
+    });
+    assert(rawHostResponse.startsWith('HTTP/1.1 403'));
+    response = await realFetch(fixture.helperUrl, { method: 'OPTIONS', headers: { Origin: fixture.helperOrigin } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('access-control-allow-origin'), fixture.helperOrigin);
+    assert.equal(response.headers.get('access-control-allow-private-network'), 'true');
+    response = await realFetch(fixture.helperUrl, { method: 'POST', headers: { Origin: fixture.helperOrigin, 'Content-Type': 'text/plain' }, body: '{}' });
+    assert.equal(response.status, 400);
+    response = await realFetch(fixture.helperUrl, { method: 'POST', headers: { Origin: fixture.helperOrigin, 'Content-Type': 'application/json' }, body: 'null' });
+    assert.equal(response.status, 400);
+
+    const choices = await wallet.readFile(file(fixture.portable), 'local-test-password');
+    assert.deepEqual(choices.map(item => item.name), ['Carteira principal', 'Carteira de tokens']);
+    assert.equal(wallet.isUnlocked(), false);
+    assert.throws(() => wallet.addresses(), /Desbloqueie/);
+    await assert.rejects(wallet.selectWallet('missing'), /Selecione/);
+    await wallet.selectWallet('1');
+    assert.deepEqual(wallet.addresses(), [fixture.secondAddress]);
+    const newAddress = await wallet.createAddress();
+    wallet.lock();
+    assert.equal(wallet.isUnlocked(), false);
+    const reopened = await wallet.readSaved('local-test-password');
+    assert.equal(reopened.length, 2);
+    await wallet.selectWallet('0');
+    assert.deepEqual(wallet.addresses(), [fixture.firstAddress]);
+    await wallet.selectWallet('1');
+    assert(wallet.addresses().includes(newAddress));
+    assert(!wallet.addresses().includes(fixture.firstAddress));
+    wallet.lock();
+    assert(!storage.get('povix.dex.encrypted-wallet.v1').includes('RSAKeyValue'));
+
+    let nativeCalls = 0;
+    global.fetch = async (url, options) => {
+        assert.equal(url, 'http://127.0.0.1:4781/import');
+        assert.equal(options.credentials, 'omit');
+        assert.equal(options.redirect, 'error');
+        assert.equal(options.referrerPolicy, 'no-referrer');
+        assert.deepEqual(Object.keys(JSON.parse(options.body)).sort(), ['file', 'password']);
+        nativeCalls++;
+        return realFetch(fixture.helperUrl, { ...options, headers: { ...options.headers, Origin: fixture.helperOrigin } });
+    };
+    const nativeBytes = Uint8Array.from(Buffer.from(fixture.desktopFile, 'base64'));
+    const nativeFile = { size: nativeBytes.length, arrayBuffer: async () => nativeBytes.slice().buffer };
+    const nativeChoices = await wallet.readFile(nativeFile, 'local-test-password');
+    assert.equal(nativeCalls, 1);
+    assert.equal(nativeChoices.length, 2);
+    assert.equal(wallet.isUnlocked(), false);
+    await wallet.selectWallet('1');
+    assert.deepEqual(wallet.addresses(), [fixture.secondAddress]);
+    wallet.lock();
+    global.fetch = async () => { throw new TypeError('connection refused'); };
+    await assert.rejects(wallet.readFile(nativeFile, 'local-test-password'), /Inicie o Povix.WalletBridge/);
+    assert.equal(wallet.isUnlocked(), false);
+    await assert.rejects(wallet.readFile(file({ Wallets: [{ PrivateKeys: ['plaintext'] }] }), 'local-test-password'), /formato reconhecido/);
+    console.log('PASS wallet file selection: names, isolated keys, preserved collection, native loopback opening, CORS/Host checks and unavailable-helper error');
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
