@@ -1,0 +1,13 @@
+@model Povix.Dex.Models.TokenRegistrationViewModel
+@using Povix.Dex.Models
+@{ ViewBag.Title = "Registro do token"; }
+<main id="registration-app" class="receipt-page" data-status-url="@Url.Action("RegistrationStatus", new { id = Model.TransactionId })">
+    <a class="back-link" href="@Url.Action("Create")">← Criar outro token</a>
+    <div class="page-intro"><span class="eyebrow">REGISTRO NA BLOCKCHAIN</span><h1 id="receipt-title">@(Model.Status == "confirmed" ? "Token registrado." : Model.Status == "pending" ? "Transação enviada." : "Registro não confirmado.")</h1><p id="receipt-description">@(Model.Status == "confirmed" ? "A criação do token consta em um bloco validado da rede POVIX." : Model.Status == "pending" ? "A criação está na fila e aguarda confirmação em um bloco validado." : "A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.")</p></div>
+    <section class="card receipt-card"><div class="receipt-heading"><div class="token-identity"><span class="token-avatar">@Model.Token.Symbol.Substring(0, 1)</span><div><strong>@Model.Token.Name</strong><span>@Model.Token.Symbol</span></div></div><span id="receipt-status" class="status-pill">@(Model.Status == "confirmed" ? "Confirmado" : Model.Status == "pending" ? "Pendente" : "Não confirmado")</span></div>
+        <div class="receipt-stats"><div><span>Quantidade total</span><strong>@Model.SupplyDisplay @Model.Token.Symbol</strong></div><div><span>Taxa da transação em POVIX</span><strong>@TokenNetworkViewModel.FormatPovix(Model.Fee)</strong></div><div><span>Confirmações</span><strong id="receipt-confirmations">@Model.Confirmations</strong></div></div>
+        <dl class="receipt-data"><dt>Identificador do token</dt><dd>@Model.Token.Id</dd><dt>Transação</dt><dd>@Model.TransactionId</dd><dt>Endereço de recebimento</dt><dd>@Model.DestinationAddress</dd><dt>Bloco</dt><dd id="receipt-block">@(Model.BlockHeight.HasValue ? Model.BlockHeight.Value.ToString() : "Aguardando confirmação")</dd><dt>Hash do bloco</dt><dd id="receipt-hash">@(Model.BlockHash ?? "—")</dd></dl>
+        <p id="receipt-connectivity" class="muted-text">@Model.PeerCount pares conectados · Atualização automática a cada 10 segundos</p>
+    </section>
+</main>
+@section scripts { <script src="@Url.Content("~/Scripts/povix-token-status.js")"></script> }

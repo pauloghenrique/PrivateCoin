@@ -59,6 +59,7 @@
     <Compile Include="ProofOfStake.cs" />
     <Compile Include="UpnpPortMapper.cs" />
     <Compile Include="Wallet.cs" />
+    <Compile Include="TokenCreation.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

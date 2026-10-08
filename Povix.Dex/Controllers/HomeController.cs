@@ -10,7 +10,7 @@ namespace Povix.Dex.Controllers
     {
         public ActionResult Index()
         {
-            return View();
+            return RedirectToAction("Create", "Tokens");
         }
 
         public ActionResult About()

@@ -13,6 +13,9 @@ namespace Povix.Dex
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 
+            routes.MapRoute("CreateToken", "tokens/criar", new { controller = "Tokens", action = "Create" });
+            routes.MapRoute("TokenRegistration", "tokens/registro/{id}", new { controller = "Tokens", action = "Details" });
+
             routes.MapRoute(
                 name: "Default",
                 url: "{controller}/{action}/{id}",

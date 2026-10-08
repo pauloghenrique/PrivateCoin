@@ -366,3 +366,7 @@ FodyWeavers.xsd
 /PrivateCoin.Desktop/Blockchain.json
 /PrivateCoin.Desktop/recovery.dat
 /PrivateCoin.Desktop/peers.dat
+# Task scratch files and DEX runtime cache
+/work/
+/Povix.Dex/App_Data/dex-network.json
+/Povix.Dex/App_Data/dex-peers.dat

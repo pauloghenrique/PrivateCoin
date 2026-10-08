@@ -75,8 +75,11 @@ chain.ValidatePendingTransactions(new[] { transfer });
 long confirmedBalance = chain.GetTokenBalance(wallet.OwnedOneTimeAddresses, tokenId);
 ```
 
-O suporte inicial é pela API do Core; o Desktop ainda não tem formulário de
-criação, transferência ou exibição dos saldos de tokens. Nenhum token é criado
+O `Povix.Dex` oferece o cadastro em `/tokens/criar`, com assinatura local por
+carteira e confirmação acompanhada na blockchain existente. Consulte
+[configuração e importação da carteira](Povix.Dex/README.md).
+O Desktop ainda não tem formulário de criação, transferência ou exibição dos
+saldos de tokens. Nenhum token é criado
 apenas ao compilar o projeto ou executar os testes.
 
 **Ativação:** clientes de consenso 3 aceitam as novas operações a partir do

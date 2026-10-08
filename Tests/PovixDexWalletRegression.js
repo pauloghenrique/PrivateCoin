@@ -1,0 +1,45 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const storage = new Map();
+global.localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
+const directory = process.argv[2];
+const fixture = JSON.parse(fs.readFileSync(path.join(directory, 'fixture.json'), 'utf8'));
+vm.runInThisContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-wallet.js'), 'utf8'));
+const wallet = global.PovixTokenWallet;
+
+(async function () {
+    const file = record => ({ size: JSON.stringify(record).length, text: async () => JSON.stringify(record) });
+    await assert.rejects(wallet.importFile(file(fixture.wallet), 'incorrect-password'), /Senha incorreta/);
+    assert.equal(wallet.isUnlocked(), false);
+    await wallet.importFile(file(fixture.wallet), 'dex-test-password-only');
+    assert(wallet.addresses().includes(fixture.changeAddress));
+    await wallet.verifyDraft(fixture.draft, fixture.expected, fixture.networkId, fixture.changeAddress);
+    assert.equal(wallet.parseSupply('92233720368,54775807', 8), '9223372036854775807');
+    assert.equal(wallet.formatAtomic('9223372036854775807', 8), '92.233.720.368,54775807');
+    for (const [text, decimals] of [['92233720368,54775808', 8], ['1,001', 2], ['0', 8], ['1e8', 8], ['1.000.000', 8]])
+        assert.throws(() => wallet.parseSupply(text, decimals));
+    await assert.rejects(wallet.verifyDraft({ ...fixture.draft, destinationAddress: '0'.repeat(64) }, fixture.expected, fixture.networkId, fixture.changeAddress));
+    await assert.rejects(wallet.verifyDraft({ ...fixture.draft, signingPayload: Buffer.from('tampered').toString('base64') }, fixture.expected, fixture.networkId, fixture.changeAddress));
+    await assert.rejects(wallet.verifyDraft({ ...fixture.draft, changeAddress: '0'.repeat(64) }, fixture.expected, fixture.networkId, fixture.changeAddress));
+    await assert.rejects(wallet.verifyDraft({ ...fixture.draft, expiresUtc: 'invalid-date' }, fixture.expected, fixture.networkId, fixture.changeAddress));
+    const signatures = await wallet.sign(fixture.draft);
+    assert(signatures.every(value => Buffer.from(value, 'base64').length === 256));
+    const newAddress = await wallet.createAddress();
+    const saved = JSON.parse(storage.get('povix.dex.encrypted-wallet.v1'));
+    assert(!JSON.stringify(saved).includes('RSAKeyValue'));
+    wallet.lock();
+    assert.equal(wallet.isUnlocked(), false);
+    await wallet.unlock('dex-test-password-only');
+    assert(wallet.addresses().includes(newAddress));
+    const publicKeys = wallet.publicKeys().map(value => Buffer.from(value, 'base64').toString('utf8'));
+    assert(publicKeys.every(value => !value.includes('<D>') && !value.includes('<P>')));
+    const tampered = { ...saved, hmac: Buffer.alloc(32).toString('base64') };
+    wallet.lock();
+    await assert.rejects(wallet.importFile(file(tampered), 'dex-test-password-only'), /backup alterado/);
+    assert.equal(wallet.isUnlocked(), false);
+    fs.writeFileSync(path.join(directory, 'browser-result.json'), JSON.stringify({ signatures, newAddress, publicKeys, encryptedWallet: saved }));
+    console.log('PASS browser wallet: encrypted import/storage, exact quantities, payload review, local RSA signatures, updated backup and tamper rejection');
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
