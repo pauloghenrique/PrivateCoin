@@ -75,3 +75,17 @@ distinção por identificador entre símbolos iguais, confirmação de transfer�
 e atualização após troca de cadeia. Criações e transferências pendentes ficam
 fora dos registros/saldos confirmados. Os dados de produção não são acessados.
 A interface WinForms ainda deve ser verificada visualmente no Windows.
+
+Para verificar o bloqueio durante reconexão, compile o Core e execute:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -out:work/PrivateCoinReconnectRegression.exe \
+  Tests/PrivateCoinReconnectRegression.cs PrivateCoin.Desktop/NetworkReadiness.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinReconnectRegression.exe
+```
+
+Verifica o bloqueio inicial e offline, a sincronização com cadeia idêntica,
+a invalidação de respostas antigas, a adoção de uma cadeia maior após
+reconexão e a rejeição de cadeia inválida. Não depende de WinForms nem de
+carteiras de produção.

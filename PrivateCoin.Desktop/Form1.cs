@@ -13,6 +13,7 @@ namespace PrivateCoin.Desktop
     public partial class Form1 : Form
     {
         private readonly object pendingSync = new object();
+        private readonly NetworkReadiness networkReadiness = new NetworkReadiness();
         private readonly List<Transaction> pendingTransactions = new List<Transaction>();
         private readonly HashSet<string> pendingIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<NamedWallet> wallets = new List<NamedWallet>();
@@ -90,16 +91,15 @@ namespace PrivateCoin.Desktop
 
         private static Blockchain CreateBlockchainForWallet(Wallet wallet)
         {
-            var chain = new Blockchain();
-            AddInitialWalletReward(chain, wallet);
-            return chain;
+            // Opening a wallet must not create an isolated chain or issue coins.
+            return new Blockchain();
         }
 
-        private static void AddInitialWalletReward(Blockchain chain, Wallet wallet)
+        private bool IsNetworkConnected() => peerNode != null && peerNode.ConnectedPeerCount > 0;
+
+        private T ExecuteNetworkOperation<T>(Func<T> operation)
         {
-            Block rewardBlock;
-            if (!chain.TryAddWalletCreationReward(wallet.CreateReceiveAddress(), out rewardBlock))
-                throw new InvalidOperationException("Não foi possível distribuir a recompensa da nova carteira.");
+            return networkReadiness.Execute(IsNetworkConnected, operation);
         }
 
         protected override void OnShown(EventArgs e)
@@ -191,9 +191,10 @@ namespace PrivateCoin.Desktop
             bool walletAdded = false;
             try
             {
+                ExecuteNetworkOperation(() => true);
                 string rewardAddress = namedWallet.Wallet.CreateReceiveAddress();
                 Block rewardBlock = null;
-                bool rewarded = await Task.Run(() => blockchain.TryAddWalletCreationReward(rewardAddress, out rewardBlock));
+                bool rewarded = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.TryAddWalletCreationReward(rewardAddress, out rewardBlock)));
 
                 wallets.Add(namedWallet);
                 walletAdded = true;
@@ -318,6 +319,7 @@ namespace PrivateCoin.Desktop
                 if (!bool.TryParse(ConfigurationManager.AppSettings["EnableNatTraversal"], out enableNatTraversal))
                     enableNatTraversal = true;
                 string peerCachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "peers.dat");
+                networkReadiness.Disconnect();
                 peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
@@ -355,6 +357,7 @@ namespace PrivateCoin.Desktop
 
         private void PeerNodePeerCountChanged(object sender, EventArgs e)
         {
+            if (!IsNetworkConnected()) networkReadiness.Disconnect();
             if (!IsHandleCreated || IsDisposed) return;
             BeginInvoke(new Action(UpdatePeerStatus));
         }
@@ -366,7 +369,7 @@ namespace PrivateCoin.Desktop
             nodeStatusLabel.Text = "Nó ativo na porta " + listenPortTextBox.Text.Trim() +
                 "   |   Pares: " + node.ConnectedPeerCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture);
-            nodeStatusLabel.Text += "   |   NAT: " + node.NatTraversalStatus;
+            nodeStatusLabel.Text += "   |   " + (networkReadiness.IsReady && IsNetworkConnected() ? "Sincronizado" : "Aguardando sincronização") + "   |   NAT: " + node.NatTraversalStatus;
         }
 
         private async void ConnectButtonClick(object sender, EventArgs e)
@@ -383,7 +386,6 @@ namespace PrivateCoin.Desktop
             try
             {
                 await peerNode.ConnectAsync(peerHostTextBox.Text.Trim(), port);
-                await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 await peerNode.RequestSynchronizationAsync();
                 Log("Conectado ao par " + peerHostTextBox.Text.Trim() + ":" + port.ToString(CultureInfo.InvariantCulture) + ".", true);
             }
@@ -441,7 +443,10 @@ namespace PrivateCoin.Desktop
 
         private void PeerNodeTransactionReceived(object sender, TransactionReceivedEventArgs e)
         {
-            BeginInvoke(new Action(() => ValidateAndQueue(e.Transaction, "Rede P2P")));
+            BeginInvoke(new Action(() =>
+            {
+                if (networkReadiness.IsReady && IsNetworkConnected()) ValidateAndQueue(e.Transaction, "Rede P2P");
+            }));
         }
 
         private void PeerNodeSynchronizationRequested(object sender, EventArgs e)
@@ -452,19 +457,34 @@ namespace PrivateCoin.Desktop
 
         private void PeerNodeChainReceived(object sender, ChainReceivedEventArgs e)
         {
+            long epoch = networkReadiness.Epoch;
             BeginInvoke(new Action(async () =>
             {
                 try
                 {
-                    if (blockchain.TryReplaceChain(e.Blocks))
+                    bool changed = false;
+                    bool accepted = networkReadiness.Accept(epoch,
+                        () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
+                        {
+                            // TryReplaceChain validates even when the chain is identical
+                            // or loses the deterministic fork-choice comparison.
+                            changed = blockchain.TryReplaceChain(e.Blocks);
+                            if (changed)
+                            {
+                                RemoveInvalidPendingTransactions();
+                                SaveState();
+                            }
+                        });
+                    if (!accepted) return;
+                    UpdatePeerStatus();
+                    UpdateChainSummary();
+                    if (changed)
                     {
-                        RemoveInvalidPendingTransactions();
-                        SaveState();
-                        UpdateChainSummary();
                         Log("Blockchain sincronizada pela rede (" + e.Blocks.Length.ToString(CultureInfo.InvariantCulture) + " blocos).", true);
                         PeerNode node = peerNode;
                         if (node != null) await node.BroadcastChainAsync(blockchain.Blocks);
                     }
+                    if (SnapshotPending().Length > 0) StartAutomaticMining();
                 }
                 catch (Exception error)
                 {
@@ -528,7 +548,7 @@ namespace PrivateCoin.Desktop
 
         private async void StartAutomaticMining()
         {
-            if (miningInProgress) return;
+            if (miningInProgress || !networkReadiness.IsReady || !IsNetworkConnected()) return;
             miningInProgress = true;
             try
             {
@@ -548,7 +568,7 @@ namespace PrivateCoin.Desktop
                     Log("Consenso proof-of-stake iniciado após a validação de " +
                         batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
-                    Block block = await Task.Run(() => blockchain.AddProofOfStakeBlock(batch, activeValidators));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -608,6 +628,7 @@ namespace PrivateCoin.Desktop
 
             try
             {
+                ExecuteNetworkOperation(() => true);
                 long amount = checked((long)(coins * Blockchain.OneCoin));
                 if (coins * Blockchain.OneCoin != amount)
                     throw new InvalidOperationException("O valor aceita no máximo 8 casas decimais.");
@@ -646,6 +667,7 @@ namespace PrivateCoin.Desktop
 
             try
             {
+                ExecuteNetworkOperation(() => true);
                 long amount = checked((long)(coins * Blockchain.OneCoin));
                 if (coins * Blockchain.OneCoin != amount)
                     throw new InvalidOperationException("A garantia aceita no máximo 8 casas decimais.");
@@ -659,7 +681,7 @@ namespace PrivateCoin.Desktop
 
                 string rewardAddress = selected.Wallet.CreateReceiveAddress();
                 Transaction lockTransaction = selected.Wallet.CreateStakeLockTransaction(blockchain, SnapshotPending(), rewardAddress, amount, fee);
-                Block lockBlock = blockchain.AddBlock(new[] { lockTransaction });
+                Block lockBlock = ExecuteNetworkOperation(() => blockchain.AddBlock(new[] { lockTransaction }));
                 selected.ActivateValidator(amount, rewardAddress);
                 SaveState();
                 if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
@@ -691,10 +713,11 @@ namespace PrivateCoin.Desktop
                 NamedWallet selected = SelectedWallet;
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
 
+                ExecuteNetworkOperation(() => true);
                 decimal unlockedCoins = (decimal)selected.LockedStake / Blockchain.OneCoin;
                 long fee = Blockchain.CalculateAutomaticFee(SnapshotPending().Length, 1);
                 Transaction unlockTransaction = selected.Wallet.CreateStakeUnlockTransaction(blockchain, selected.ValidatorRewardAddress, fee);
-                Block unlockBlock = blockchain.AddBlock(new[] { unlockTransaction });
+                Block unlockBlock = ExecuteNetworkOperation(() => blockchain.AddBlock(new[] { unlockTransaction }));
                 selected.DeactivateValidator();
                 SaveState();
                 if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
