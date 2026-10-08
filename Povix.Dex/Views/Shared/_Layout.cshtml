@@ -1,39 +1,19 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="pt-BR">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@ViewBag.Title - My ASP.NET Application</title>
-    @Styles.Render("~/Content/css")
-    @Scripts.Render("~/bundles/modernizr")
+    <title>@ViewBag.Title · Povix.Dex</title>
+    <meta name="description" content="Crie tokens de quantidade fixa na blockchain POVIX com assinatura local da sua carteira." />
+    <link rel="stylesheet" href="@Url.Content("~/Content/Site.css")" />
 </head>
 <body>
-    <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark">
-        <div class="container">
-            @Html.ActionLink("Application name", "Index", "Home", new { area = "" }, new { @class = "navbar-brand" })
-            <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" title="Toggle navigation" aria-controls="navbarSupportedContent"
-                    aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse d-sm-inline-flex justify-content-between">
-                <ul class="navbar-nav flex-grow-1">
-                    <li>@Html.ActionLink("Home", "Index", "Home", new { area = "" }, new { @class = "nav-link" })</li>
-                    <li>@Html.ActionLink("About", "About", "Home", new { area = "" }, new { @class = "nav-link" })</li>
-                    <li>@Html.ActionLink("Contact", "Contact", "Home", new { area = "" }, new { @class = "nav-link" })</li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-    <div class="container body-content">
-        @RenderBody()
-        <hr />
-        <footer>
-            <p>&copy; @DateTime.Now.Year - My ASP.NET Application</p>
-        </footer>
-    </div>
-
-    @Scripts.Render("~/bundles/jquery")
-    @Scripts.Render("~/bundles/bootstrap")
+    <header class="site-header">
+        <a class="brand" href="@Url.Action("Create", "Tokens")" aria-label="Povix.Dex início"><span class="brand-mark">P</span><span>povix<span class="brand-dex">.dex</span></span></a>
+        <nav aria-label="Navegação principal"><a class="nav-active" href="@Url.Action("Create", "Tokens")">Criar token</a><span class="network-label"><i></i> Blockchain POVIX</span></nav>
+    </header>
+    <div class="page-shell">@RenderBody()</div>
+    <footer class="site-footer"><span>POVIX · Infraestrutura para seus ativos</span><span>Assinatura local. Registro na blockchain.</span></footer>
     @RenderSection("scripts", required: false)
 </body>
 </html>

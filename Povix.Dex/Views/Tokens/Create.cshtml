@@ -1,0 +1,61 @@
+@model Povix.Dex.Models.CreateTokenViewModel
+@using Povix.Dex.Models
+@{ ViewBag.Title = "Criar token"; }
+<main id="token-app" data-network-url="@Url.Action("NetworkStatus")" data-balance-url="@Url.Action("Balance")"
+      data-prepare-url="@Url.Action("Prepare")" data-submit-url="@Url.Action("Submit")" data-network-id="@Model.Network.NetworkId">
+    <div class="page-intro"><span class="eyebrow">SEU ATIVO, NA REDE POVIX</span><h1>Crie seu token.</h1><p>Defina os detalhes, assine com sua carteira e acompanhe o registro na blockchain.</p></div>
+    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span><span class="network-strip-end">Quantidade fixa · Sem emissão adicional</span></div>
+    <div id="app-message" class="notice" role="alert" hidden></div>
+    <div class="create-grid">
+        <div>
+            <section class="card wallet-card" aria-labelledby="wallet-title">
+                <div class="card-heading"><span class="step-icon">↗</span><div><h2 id="wallet-title">Sua carteira</h2><p>As chaves e a senha ficam neste navegador.</p></div><span id="wallet-state" class="small-pill">Bloqueada</span></div>
+                <form id="wallet-form" class="wallet-form">
+                    <div><label for="wallet-file">Backup da carteira</label><input id="wallet-file" type="file" accept=".povixwallet,application/json" /><small>Importe o arquivo .povixwallet exportado do Desktop.</small></div>
+                    <div><label for="wallet-password">Senha do backup</label><input id="wallet-password" type="password" minlength="10" autocomplete="current-password" placeholder="Sua senha local" required /></div>
+                    <button id="wallet-connect" class="button button-secondary" type="submit">Desbloquear carteira</button>
+                </form>
+                <div id="wallet-connected" class="wallet-connected" hidden><div><strong id="wallet-name"></strong><p>Disponível para taxas: <strong id="wallet-balance">Consultando…</strong></p></div><button id="wallet-lock" class="text-button" type="button">Bloquear</button></div>
+            </section>
+            <form id="token-form" class="card token-form">
+                @Html.AntiForgeryToken()
+                <fieldset id="token-fields">
+                    <section class="form-section"><div class="section-heading"><span class="step-number">01</span><div><h2>Identidade do token</h2><p>O nome e o símbolo serão públicos na blockchain.</p></div></div>
+                        <div class="field-grid"><div><label for="Name">Nome do token</label>@Html.TextBoxFor(m => m.Name, new { placeholder = "Ex.: Aurora", maxlength = "64", required = "required", autocomplete = "off" })</div><div><label for="Symbol">Símbolo</label>@Html.TextBoxFor(m => m.Symbol, new { placeholder = "Ex.: AUR", maxlength = "10", pattern = "[A-Z]{1,10}", required = "required", autocomplete = "off" })<small>De 1 a 10 letras, de A a Z.</small></div></div>
+                    </section>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">02</span><div><h2>Quantidade e precisão</h2><p>A quantidade total é definida uma única vez.</p></div></div>
+                        <div class="field-grid"><div><label for="Supply">Quantidade total</label>@Html.TextBoxFor(m => m.Supply, new { placeholder = "Ex.: 1000000", maxlength = "30", required = "required", inputmode = "decimal", pattern = "[0-9]+([.,][0-9]+)?" })<small>Use vírgula ou ponto para decimais, sem separador de milhar.</small></div><div><label for="Decimals">Casas decimais</label>@Html.DropDownListFor(m => m.Decimals, Enumerable.Range(0, 9).Select(n => new SelectListItem { Value = n.ToString(), Text = n + (n == 1 ? " casa decimal" : " casas decimais"), Selected = n == Model.Decimals }))<small id="precision-example">Menor unidade: 0,00000001</small></div></div>
+                    </section>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">03</span><div><h2>Destino dos tokens</h2><p>Toda a quantidade será enviada para este endereço.</p></div></div>
+                        <label for="DestinationAddress">Endereço de recebimento POVIX</label>@Html.TextBoxFor(m => m.DestinationAddress, new { placeholder = "Endereço descartável de 64 caracteres", maxlength = "64", pattern = "[0-9a-f]{64}", required = "required", autocomplete = "off", @class = "address-input" })
+                        <div class="field-caption"><small>Confira o endereço antes de assinar.</small><button id="own-address" class="text-button" type="button" disabled>Gerar endereço da minha carteira</button></div>
+                    </section>
+                    <section class="form-section fee-section"><div class="section-heading"><span class="step-number">04</span><div><h2>Taxa da rede</h2><p>A taxa é paga com o saldo disponível em POVIX.</p></div></div>
+                        <div class="fee-options">
+                            @for (int i = 0; i < 3; i++)
+                            {
+                                var priority = new[] { 1, 2, 4 }[i];
+                                var label = new[] { "Econômica", "Normal", "Prioritária" }[i];
+                                <label class="fee-option"><input type="radio" name="FeePriority" value="@priority" checked="@(priority == 2 ? "checked" : null)" /><span><strong>@label</strong><small data-fee="@i">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[i]) POVIX</small></span></label>
+                            }
+                        </div>
+                    </section>
+                </fieldset>
+                <div class="form-bottom"><p id="create-hint">Desbloqueie a carteira e aguarde a conexão com a rede.</p><button id="prepare-token" type="submit" class="button button-primary" disabled>Revisar criação <span aria-hidden="true">→</span></button></div>
+            </form>
+        </div>
+        <aside class="review-column">
+            <section class="card review-card" aria-labelledby="review-title"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Resumo do token</h2><div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu novo token</strong><span id="review-symbol">SÍMBOLO</span></div><span class="small-pill">Quantidade fixa</span></div>
+                <dl class="review-list"><div><dt>Quantidade total</dt><dd id="review-supply">—</dd></div><div><dt>Casas decimais</dt><dd id="review-decimals">8</dd></div><div><dt>Taxa de criação</dt><dd id="review-fee">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[1]) POVIX</dd></div><div class="review-destination"><dt>Endereço de destino</dt><dd id="review-destination">Informe o endereço de recebimento</dd></div></dl>
+                <div class="review-note"><strong>Você controla a assinatura.</strong><p>O servidor recebe dados públicos e assinaturas. A senha e as chaves privadas permanecem no navegador.</p></div>
+                <div id="sign-actions" hidden><div class="backup-note"><strong>Guarde o backup atualizado</strong><p>Ele inclui as chaves dos novos endereços de recebimento e troco.</p><button id="download-backup" type="button" class="button button-secondary">Baixar backup cifrado</button><label class="checkbox-label"><input id="backup-confirmed" type="checkbox" /> Guardei o backup atualizado em um local seguro.</label></div><button id="sign-token" type="button" class="button button-primary full-width" disabled>Assinar e enviar à rede</button><button id="edit-token" type="button" class="text-button full-width">Voltar e editar</button></div>
+            </section>
+            <div class="registration-note"><span aria-hidden="true">◷</span><p><strong>A confirmação vem da rede.</strong> Depois do envio, acompanhe a transação até sua inclusão em um bloco validado.</p></div>
+        </aside>
+    </div>
+    <noscript><div class="notice">Ative o JavaScript para desbloquear a carteira e assinar a criação localmente.</div></noscript>
+</main>
+@section scripts {
+    <script src="@Url.Content("~/Scripts/povix-token-wallet.js")"></script>
+    <script src="@Url.Content("~/Scripts/povix-token-create.js")"></script>
+}
