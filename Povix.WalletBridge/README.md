@@ -57,6 +57,10 @@ Na página `/tokens/criar`:
 
 1. Escolha `wallet.dat` ou `wallets.dat`. O Desktop usa normalmente
    `%LOCALAPPDATA%\PrivateCoin\.privatecoin\wallets.dat`.
+   Para localizar o arquivo efetivamente aberto, clique em **Pasta da carteira**
+   no Desktop e escolha o `wallets.dat` destacado no Explorador. Instalações
+   antigas podem usar outra pasta `.privatecoin`; uma cópia em outra pasta
+   pode pertencer a um usuário ou instalação anterior.
 2. Defina uma senha de pelo menos 10 caracteres para guardar a cópia cifrada
    no navegador e clique em **Ler carteiras do arquivo**. Essa senha protege
    a cópia local do DEX; a abertura do original depende do seu usuário Windows.
@@ -87,3 +91,36 @@ do DEX contendo uma única carteira continuam aceitos.
 Os testes automatizados do conversor substituem somente a abertura DPAPI no
 limite do Windows, pois o ambiente de testes é Linux. A leitura DPAPI real e
 a permissão de rede local no navegador precisam ser verificadas no Windows.
+
+## Diagnosticar uma falha de abertura
+
+Feche as instâncias antigas e recompile o auxiliar antes de testar. As falhas
+agora indicam a etapa e um código; a mensagem antiga reunia causas diferentes.
+Para testar o arquivo diretamente no Windows, sem iniciar o servidor nem
+definir senha para uma cópia, execute em PowerShell na raiz do projeto:
+
+```powershell
+.\Povix.WalletBridge\bin\Release\Povix.WalletBridge.exe --check-wallet "C:\caminho\real\wallets.dat"
+```
+
+Use o caminho localizado em **Pasta da carteira**. O diagnóstico informa o
+usuário Windows do auxiliar e, em caso de sucesso, apenas a quantidade de
+carteiras e endereços. Em caso de falha, informa o código e, quando disponível,
+o tipo/HRESULT da exceção. Ele não exporta chaves, não mostra o conteúdo do
+arquivo, não altera o original e não faz chamadas de rede.
+
+| Código | Significado e ação |
+| --- | --- |
+| `file_access` | O caminho não existe ou a leitura foi negada; confira o arquivo selecionado. |
+| `wallet_file` | O arquivo está vazio ou incompleto; escolha o `wallets.dat` em uso no Desktop. |
+| `windows_protection` | A abertura DPAPI falhou; escolha o arquivo em uso no Desktop e execute o auxiliar com o mesmo usuário Windows. A senha da cópia do DEX não abre essa proteção. |
+| `wallet_format` | A abertura DPAPI funcionou, mas o conteúdo não foi reconhecido como JSON de carteiras do Desktop. |
+| `wallet_empty`, `wallet_keys` | A coleção está vazia ou contém uma carteira sem chaves válidas. |
+| `file_size`, `wallet_limit`, `key_limit` | O arquivo ou a coleção excede um dos limites documentados. |
+| `copy_password` | A senha da cópia local deve conter entre 10 e 1024 caracteres. |
+| `copy_encryption` | O arquivo foi lido, mas a criptografia da cópia falhou; confira o .NET Framework 4.8 e a versão do auxiliar. |
+| `import_request` | O auxiliar recebeu uma requisição inválida; atualize o DEX e o auxiliar juntos. |
+
+O leitor aceita o formato atual do Desktop, a coleção legada com dados da
+blockchain e JSON UTF-8 com BOM. Não há tentativa de abrir DPAPI como texto
+nem de usar outra proteção quando o Windows rejeita o arquivo.

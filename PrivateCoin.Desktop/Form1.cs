@@ -308,6 +308,21 @@ namespace PrivateCoin.Desktop
                 dialog.ShowDialog(this);
         }
 
+        private void WalletFolderButtonClick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (!walletStore.WalletExists) throw new FileNotFoundException("O arquivo local de carteiras ainda não foi salvo.");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe",
+                    "/select,\"" + walletStore.WalletFilePath + "\"") { UseShellExecute = true });
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, "Não foi possível abrir a pasta.\n\nArquivo em uso: " + walletStore.WalletFilePath + "\n\n" + error.Message,
+                    "POVIX", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private void StartNodeButtonClick(object sender, EventArgs e)
         {
             int port;

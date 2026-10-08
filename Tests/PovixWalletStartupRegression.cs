@@ -3,6 +3,8 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Linq;
+using System.Security.Cryptography;
 using Povix.WalletBridge;
 
 internal static class PovixWalletStartupRegression
@@ -43,6 +45,7 @@ internal static class PovixWalletStartupRegression
                     "an occupied port shows a specific error and waits before closing the window");
             }
             finally { occupied.Stop(); }
+            CheckDiagnostics();
             return 0;
         }
         catch (Exception exception) { Console.Error.WriteLine(exception.Message); return 1; }
@@ -50,6 +53,32 @@ internal static class PovixWalletStartupRegression
 
     private static void Check(bool value, string label)
     { if (!value) throw new Exception(label); Console.WriteLine("PASS " + label); }
+
+    private static void CheckDiagnostics()
+    {
+        string directory = Path.Combine("work", "wallet-diagnostic-regression");
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "wallets.dat");
+        byte[] original = new byte[20]; original[0] = 1;
+        File.WriteAllBytes(path, original);
+        var output = new StringWriter(); var error = new StringWriter();
+        byte[] inspected = null;
+        int result = Program.CheckWallet(path, output, error, bytes => {
+            inspected = bytes;
+            return WalletFileConverter.InspectFile(bytes, data => Encoding.UTF8.GetBytes("{\"Wallets\":[{\"Name\":\"Private name\",\"PrivateKeys\":[\"private-key-secret\"]}]}"));
+        });
+        Check(result == 0 && output.ToString().Contains("1 carteira(s), 1 endereço(s)") && !output.ToString().Contains("Private name") && !output.ToString().Contains("private-key-secret"),
+            "local diagnosis returns only wallet/address counts, without private material");
+        Check(File.ReadAllBytes(path).SequenceEqual(original) && inspected.All(value => value == 0),
+            "local diagnosis leaves the selected file unchanged and clears its read buffer");
+        error = new StringWriter();
+        result = Program.CheckWallet(path, new StringWriter(), error, bytes => WalletFileConverter.InspectFile(bytes, data => { throw new CryptographicException("private-exception-detail"); }));
+        Check(result == 1 && error.ToString().Contains("Código: windows_protection") && !error.ToString().Contains("private-exception-detail"),
+            "local Windows-protection diagnostics are specific and redact exception contents");
+        error = new StringWriter();
+        Check(Program.CheckWallet(Path.Combine(directory, "missing.dat"), new StringWriter(), error) == 1 && error.ToString().Contains("file_access"),
+            "local diagnosis distinguishes a missing file from decryption failure");
+    }
 
     private sealed class CountingReader : TextReader
     {

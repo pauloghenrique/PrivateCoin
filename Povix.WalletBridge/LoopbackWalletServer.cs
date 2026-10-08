@@ -112,9 +112,13 @@ namespace Povix.WalletBridge
                     }
                     finally { Array.Clear(body, 0, body.Length); }
                 }
+                catch (WalletImportException error)
+                {
+                    Respond(stream, 400, new { error = error.Message, code = error.Code }, authorized);
+                }
                 catch (Exception error) when (error is ArgumentException || error is FormatException || error is CryptographicException || error is InvalidOperationException)
                 {
-                    Respond(stream, 400, new { error = "Não foi possível abrir as carteiras. Use o mesmo usuário Windows que criou o arquivo e confira o arquivo e a senha da cópia local." }, authorized);
+                    Respond(stream, 400, new { error = "O auxiliar recebeu uma requisição inválida. Atualize o DEX e o Povix.WalletBridge e tente novamente.", code = "import_request" }, authorized);
                 }
                 catch (IOException) { }
             }

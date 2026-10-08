@@ -51,6 +51,13 @@ Defina uma senha para guardar a cópia cifrada no navegador. O original permanec
 inalterado. Se o navegador solicitar permissão de acesso à rede local, permita
 a conexão com o auxiliar.
 
+Para escolher o arquivo correto, clique em **Pasta da carteira** no Desktop:
+o Explorador destaca o `wallets.dat` efetivamente usado, inclusive em instalações
+com uma pasta antiga. Se a leitura falhar, o DEX mostra um código específico.
+Use o diagnóstico local `Povix.WalletBridge.exe --check-wallet "C:\caminho\wallets.dat"`
+para verificar a proteção do Windows e o formato antes da criação da cópia cifrada.
+Consulte os códigos e as instruções no README do auxiliar.
+
 Também é possível listar as carteiras da cópia cifrada já salva no navegador:
 deixe o seletor de arquivo vazio e informe a senha existente. Backups antigos
 contendo uma única carteira continuam compatíveis.
