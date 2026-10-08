@@ -11,7 +11,7 @@ vm.runInThisContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/p
 const wallet = global.PovixTokenWallet;
 
 (async function () {
-    const file = record => ({ size: JSON.stringify(record).length, text: async () => JSON.stringify(record) });
+    const file = record => ({ size: Buffer.byteLength(JSON.stringify(record)), arrayBuffer: async () => new TextEncoder().encode(JSON.stringify(record)).buffer });
     await assert.rejects(wallet.importFile(file(fixture.wallet), 'incorrect-password'), /Senha incorreta/);
     assert.equal(wallet.isUnlocked(), false);
     await wallet.importFile(file(fixture.wallet), 'dex-test-password-only');

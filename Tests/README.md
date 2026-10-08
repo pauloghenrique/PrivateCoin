@@ -23,3 +23,21 @@ backup alterado, revisão do payload completo, assinatura Web Crypto aceita pelo
 Core, sessão, rejeição de assinatura inválida, reserva de UTXOs, propagação P2P,
 repetição idempotente, reinício, confirmação proof-of-stake e preservação das
 chaves de endereços gerados no navegador.
+
+Para verificar abertura do arquivo e seleção entre carteiras, compile também
+`Povix.WalletBridge` em Release e execute:
+
+```sh
+mcs -r:Povix.WalletBridge/bin/Release/Povix.WalletBridge.exe \
+  -r:Povix.Dex/bin/PrivateCoin.Core.dll -r:System.Web.Extensions -r:System.Core \
+  -out:work/PovixWalletFileRegression.exe Tests/PovixWalletFileRegression.cs
+MONO_PATH=Povix.WalletBridge/bin/Release:Povix.Dex/bin mono \
+  work/PovixWalletFileRegression.exe work/wallet-files-regression "$(command -v node)"
+```
+
+Essa regressão usa uma coleção descartável com duas carteiras. Verifica os
+nomes, a seleção explícita e o isolamento das chaves, a preservação das demais
+carteiras no backup, a comunicação real com o auxiliar via loopback e a
+rejeição de origens/Host não autorizados. A abertura DPAPI é substituída somente
+nesse teste em Linux; a leitura real deve ser verificada no Windows, com o
+mesmo usuário que possui o arquivo.
