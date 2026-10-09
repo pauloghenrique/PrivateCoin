@@ -57,6 +57,7 @@
     <Compile Include="PeerAddressBook.cs" />
     <Compile Include="PeerNode.cs" />
     <Compile Include="ProofOfStake.cs" />
+    <Compile Include="ProofOfWork.cs" />
     <Compile Include="UpnpPortMapper.cs" />
     <Compile Include="Wallet.cs" />
     <Compile Include="TokenCreation.cs" />

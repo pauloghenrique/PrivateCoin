@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -195,12 +195,19 @@ namespace Povix.Dex.Services
                 lock (sync)
                 {
                     var candidate = new Blockchain(blockchain.Blocks);
-                    if (candidate.TryReplaceChain(args.Blocks))
+                    bool changed;
+                    if (!candidate.TrySynchronizeChain(args.Blocks, out changed)) return;
+                    if (changed)
                     {
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
                         var valid = new List<Transaction>();
-                        foreach (Transaction transaction in Blockchain.OrderByFeePriority(pending.Where(tx => !confirmed.Contains(tx.Id))))
+                        var recoverable = pending.Concat(blockchain.Blocks.SelectMany(block => block.Transactions)
+                                .Where(tx => tx.Inputs.Count > 0))
+                            .Concat(submitted.Select(item => item.Transaction)).Where(tx => !confirmed.Contains(tx.Id))
+                            .GroupBy(tx => tx.Id, StringComparer.Ordinal).Select(group => group.First());
+                        foreach (Transaction transaction in Blockchain.OrderByFeePriority(recoverable))
                         {
+                            if (valid.Count == MaximumPending) break;
                             try { candidate.ValidatePendingTransactions(valid.Concat(new[] { transaction })); valid.Add(transaction); }
                             catch (Exception error) when (IsInvalidData(error)) { }
                         }
@@ -208,7 +215,7 @@ namespace Povix.Dex.Services
                         blockchain = candidate;
                         pending = valid;
                     }
-                    synchronized = true; // Also accepts an identical, validated chain after reconnect.
+                    synchronized = node.ConnectedPeerCount > 0; // Identical validated chains also complete synchronization.
                 }
                 RelayPending();
             }

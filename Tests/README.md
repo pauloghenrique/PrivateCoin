@@ -137,11 +137,11 @@ e atualização após troca de cadeia. Criações e transferências pendentes fi
 fora dos registros/saldos confirmados. Os dados de produção não são acessados.
 A interface WinForms ainda deve ser verificada visualmente no Windows.
 
-Para verificar os lotes de 20 validações e a remuneração por transação:
+Para verificar o histórico v4, os lotes de 20 e a remuneração por transação:
 
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
-  -out:work/PrivateCoinValidationRegression.exe Tests/PrivateCoinValidationRegression.cs
+  -out:work/PrivateCoinValidationRegression.exe Tests/PrivateCoinValidationRegression.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinValidationRegression.exe
 ```
 
@@ -150,6 +150,24 @@ restauração das provas e rejeição de assinaturas falsas, duplicadas ou ausen
 pagamentos redirecionados, taxas somadas à recompensa do bloco e ordem inválida.
 Os blocos adulterados têm seus votos assinados novamente e são minerados antes
 da verificação, para exercitar as regras de consenso além da integridade do hash.
+
+Para verificar o consenso híbrido v7 e a escolha por trabalho acumulado:
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Numerics -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinProofOfWorkRegression.exe \
+  Tests/PrivateCoinProofOfWorkRegression.cs Tests/LegacyConsensusFixture.cs Tests/ValidationBatchFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinProofOfWorkRegression.exe
+```
+
+Verifica o alvo, o cálculo do trabalho, lotes completos, seleção por stake,
+votos e prova de trabalho, emissão, restauração v4/v7, resgate de garantias,
+confirmações, desempate, rejeição de cadeia inválida e reorganização sem
+checkpoint. Confere que zeros adicionais não dão trabalho extra e que
+confirmações/saldos saem da cadeia quando uma transação fica órfã.
+`LegacyConsensusFixture` existe somente nos testes para produzir provas
+históricas v4 e não altera a API de produção.
 
 Para verificar o bloqueio durante reconexão, compile o Core e execute:
 
@@ -161,6 +179,21 @@ MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinReconnectRegressi
 ```
 
 Verifica o bloqueio inicial e offline, a sincronização com cadeia idêntica,
-a invalidação de respostas antigas, a adoção de uma cadeia maior após
-reconexão e a rejeição de cadeia inválida. Não depende de WinForms nem de
+a invalidação de respostas antigas e a adoção de uma cadeia com mais trabalho
+após reconexão. Confere também o bloqueio diante de cadeias atrasadas ou
+inválidas. Não depende de WinForms nem de
 carteiras de produção.
+
+Para verificar o estado das garantias no Desktop após reorganização:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -out:work/PrivateCoinValidatorStateRegression.exe Tests/PrivateCoinValidatorStateRegression.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinValidatorStateRegression.exe \
+  PrivateCoin.Desktop/bin/Release/PrivateCoin.Desktop.exe
+```
+
+Executa o método real de reconciliação sem abrir uma janela. Confere todas as
+carteiras locais, atualizações repetidas, a remoção de garantias órfãs e a
+adoção das garantias da cadeia substituta. A interface visual precisa ser
+verificada no Windows.

@@ -88,6 +88,7 @@ internal static partial class PovixDexRegression
             Check(chain.IsValid(), "existing test chain contains confirmed funds and validator collateral");
             using (var batches = new ValidationBatchFixture(chain))
             {
+            var commonChain = chain.Blocks.ToArray();
             var model = new CreateTokenViewModel { Name = "Aurora | edição 🌙", Symbol = "AUR", Decimals = 8, Supply = "92233720368,54775807", DestinationAddress = destination, FeePriority = 2 };
             int peerPort = Port(), dexPort = Port();
             using (var peer = new PeerNode(peerPort))
@@ -164,6 +165,11 @@ internal static partial class PovixDexRegression
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v3 cache preserves pending creation while synchronization is required again");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 4;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v7 upgrade");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
@@ -188,6 +194,17 @@ internal static partial class PovixDexRegression
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
                     RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators, batches);
+                    var fork = new Blockchain(commonChain);
+                    while (fork.ChainWork <= chain.ChainWork)
+                        fork.TryAddWalletCreationReward("reorganization-fixture-" + fork.Blocks.Count, out reward);
+                    peer.BroadcastChainAsync(fork.Blocks).GetAwaiter().GetResult();
+                    Wait(() => service.GetRegistration(id).Status == "pending", "greater-work reorganization returns an orphaned valid creation to the queue");
+                    Check(service.GetRegistration(id).Confirmations == 0 && service.GetRegistration(id).BlockHash == null,
+                        "the receipt loses its old block and confirmations after reorganization");
+                    service.Dispose();
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && service.GetRegistration(id).Confirmations == 0 && !service.GetNetwork().CanCreate,
+                        "restart preserves the adopted fork and pending receipt while awaiting synchronization");
                 }
                 finally { service.Dispose(); }
             }

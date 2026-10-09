@@ -5,9 +5,9 @@
 ## Características
 
 - bloco gênese sem emissão e recompensa promocional de **6 POVIX** por nova carteira, limitada a 180.000 POVIX;
-- recompensa proof-of-stake em quatro fases, paga ao criador e aos confirmadores de cada bloco;
+- consenso híbrido: stake escolhe o criador, votos são verificados e o bloco também exige prova de trabalho;
 - blocos ligados por SHA-256 e prova de trabalho;
-- política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
+- escolha da cadeia válida por maior trabalho acumulado, sem checkpoint; emissão em quatro fases e seleção do criador ponderada pelo stake;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
 - fila de validação por maior taxa, com 20 transações validadas por bloco e taxas pagas aos validadores das transações mediante assinaturas individuais;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
@@ -35,7 +35,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer`; a versão **4** do consenso
+O Core oferece `TokenCreate` e `TokenTransfer`; a versão **7** do consenso
 exige 20 transações distintas com provas assinadas para cada bloco de consenso.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
 permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
@@ -202,7 +202,7 @@ A rede não consegue provar qual executável um par está usando: um programa mo
 
 Para impedir que uma cadeia criada com outras regras seja confundida com a rede POVIX, o Core fixa o bloco gênese e inclui `NetworkId` e `ConsensusVersion` em todas as mensagens P2P. Mensagens com outra identidade ou versão são descartadas e a conexão é encerrada. Uma mudança intencional nas regras exige incrementar `ConsensusVersion`, definir uma política de ativação por altura e distribuir a atualização; sem adesão suficiente, ela cria um fork em vez de substituir silenciosamente a rede existente.
 
-Esses identificadores são separação de protocolo, não atestado do binário. Não se deve aceitar uma transação ou bloco por causa da versão anunciada, nem usar hash do DLL como regra de consenso: esse mecanismo seria falsificável por um cliente hostil e impediria implementações independentes. Antes de produção, as garantias de validadores e seus votos também precisam existir como transações e assinaturas verificáveis globalmente, como descrito abaixo.
+Esses identificadores são separação de protocolo, não atestado do binário. Não se deve aceitar uma transação ou bloco por causa da versão anunciada, nem usar hash do DLL como regra de consenso: esse mecanismo seria falsificável por um cliente hostil e impediria implementações independentes. As garantias e os votos são verificados contra o estado da cadeia, além da prova de trabalho descrita abaixo.
 
 ## Emissão e validadores
 
@@ -228,12 +228,49 @@ prevista. Um mesmo participante pode também validar transações, mas só receb
 suas taxas mediante as respectivas provas assinadas. Os valores e fases da
 recompensa e sua divisão de 30%/70% permanecem iguais.
 
-Novos blocos usam `ConsensusVersion = 4`. O histórico sem esse campo mantém
-as regras antigas e pode preceder os blocos novos; após o primeiro bloco v4,
-a cadeia rejeita blocos legados. Pares v3 são desconectados pelo handshake.
-O DEX revalida caches v3 e preserva transações pendentes antes de salvar em v4.
-`AddBlock` fica reservado às operações de garantia; transferências e tokens
-exigem consenso. A distribuição promocional de carteiras continua separada.
+Novos blocos usam `ConsensusVersion = 7`. Ao restaurar, o Core revalida o
+histórico v0/v4 e permite sua extensão em v7; uma cadeia não pode voltar para
+uma versão anterior após a transição. Caches do DEX v3/v4 são revalidados antes
+da migração. Pares que anunciam outras versões são desconectados; os nós e os
+clientes do DEX precisam atualizar juntos. A versão anunciada nunca substitui
+a validação dos dados.
+
+`AddProofOfStakeBlock` continua sendo a entrada para produzir um bloco de
+consenso: exige exatamente 20 transações distintas, garantias globais válidas,
+criador escolhido por stake e provas assinadas. O bloco só é acrescentado
+depois de satisfazer também a prova de trabalho. Blocos recebidos passam pelas
+mesmas regras. `AddBlock` continua restrito a bloqueios/resgates de garantias.
+A distribuição promocional de carteiras permanece em blocos próprios. Essas
+duas operações especiais não completam um lote de transferências.
+
+### Trabalho acumulado, confirmações e reorganizações
+
+`ProofOfWork.Target` mantém o alvo fixo existente de 12 bits (hash iniciada por
+`000`). O trabalho de um bloco vem de `floor(2^256 / (target + 1))`: **4096**
+unidades. Zeros adicionais encontrados por acaso não aumentam esse valor.
+`ChainWork` soma o trabalho validado em `BigInteger`, incluindo o gênese.
+Com esse alvo fixo, mais trabalho equivale a mais blocos; não existe preferência
+automática pela cadeia menor. Em empate, vence a menor hash da ponta.
+
+Cada nó valida integralmente a cadeia candidata, incluindo assinaturas de
+transações e votos, garantias no estado anterior, prova de trabalho, gastos
+duplos, conservação de ativos e emissão. Trabalho não torna um bloco inválido
+aceitável. `TrySynchronizeChain` também distingue uma cadeia idêntica válida
+de uma cadeia antiga com menos trabalho, evitando liberar operações com uma
+resposta atrasada durante reconexão.
+
+`GetConfirmations` conta o bloco de inclusão e os seguintes; `GetConfirmationWork`
+soma o trabalho desse trecho. A consulta do explorador expõe trabalho e
+confirmações. Se uma transação sai da cadeia após reorganização, sua contagem
+volta a zero. O Desktop e o DEX recolocam transações órfãs ainda válidas na fila,
+e os comprovantes do DEX refletem a cadeia atual, inclusive após reinício.
+
+**Não há checkpoint nem finalização irreversível.** Uma cadeia válida com maior
+trabalho pode substituir o histórico local. Seis confirmações são uma referência,
+não uma garantia de segurança de 100%. O alvo atual é baixo e não tem ajuste
+automático: esta implementação experimental não tem a resistência econômica
+da rede Bitcoin. As regras de stake, distribuição promocional e seleção de
+validadores também tornam este protocolo diferente do Bitcoin.
 
 A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 POVIX**:
 
@@ -269,7 +306,7 @@ cria um bloco. Para criar outra carteira com recompensa é necessário primeiro
 conectar a uma rede existente. Uma rede completamente nova precisa de um
 procedimento separado de inicialização; não existe exceção automática offline.
 
-A escolha da cadeia permanece determinística: mais blocos e, em empate, menor
-hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
+A escolha da cadeia é determinística: maior trabalho acumulado e, em empate,
+menor hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
 mas não estabelece finalização nem obriga nós antigos ou outros clientes a
-seguir a mesma política. Uma cadeia válida maior ainda pode substituir a local.
+seguir a mesma política. Uma cadeia válida com maior trabalho ainda pode substituir a local.

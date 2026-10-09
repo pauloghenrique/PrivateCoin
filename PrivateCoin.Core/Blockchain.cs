@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Threading;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -17,13 +19,13 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 4;
+        public const int ConsensusVersion = 7;
+        private const int LegacySignedVersion = 4;
         public const int ValidationsPerBlock = 20;
         public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
         public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
         private const long GenesisNonce = 4995L;
-        private const string ProofPrefix = "000";
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
 
@@ -166,26 +168,51 @@ namespace PrivateCoin.Core
             return blocks.Skip(1).Count(block => block.Transactions.Count > 0 && IsWalletCreationReward(block.Transactions[0]));
         }
 
-        /// <summary>
-        /// Adopts a valid chain selected by a deterministic longest-chain rule.
-        /// The tip hash breaks ties so two newly connected nodes also converge when
-        /// they were created independently at the same height.
-        /// </summary>
+        /// <summary>Validated cumulative work, including the canonical genesis block.</summary>
+        public BigInteger ChainWork { get { lock (sync) return blocks.Aggregate(BigInteger.Zero, (sum, b) => sum + ProofOfWork.GetBlockWork(b)); } }
+
+        public int GetConfirmations(string transactionId)
+        {
+            lock (sync)
+            {
+                Block block = blocks.FirstOrDefault(b => b.Transactions.Any(tx => tx.Id == transactionId));
+                return block == null ? 0 : blocks.Count - block.Height;
+            }
+        }
+
+        public BigInteger GetConfirmationWork(string transactionId)
+        {
+            lock (sync)
+            {
+                Block block = blocks.FirstOrDefault(b => b.Transactions.Any(tx => tx.Id == transactionId));
+                return block == null ? BigInteger.Zero : blocks.Skip(block.Height)
+                    .Aggregate(BigInteger.Zero, (sum, b) => sum + ProofOfWork.GetBlockWork(b));
+            }
+        }
+
         public bool TryReplaceChain(IEnumerable<Block> candidateBlocks)
         {
+            bool changed;
+            return TrySynchronizeChain(candidateBlocks, out changed) && changed;
+        }
+
+        /// <summary>Fully validates the candidate, then chooses greater work and a deterministic tip tie-break.</summary>
+        public bool TrySynchronizeChain(IEnumerable<Block> candidateBlocks, out bool changed)
+        {
+            changed = false;
             if (candidateBlocks == null) throw new ArgumentNullException(nameof(candidateBlocks));
             var candidate = new Blockchain(candidateBlocks);
             Block[] replacement = candidate.Blocks.ToArray();
-
+            BigInteger candidateWork = candidate.ChainWork;
             lock (sync)
             {
-                bool isBetter = replacement.Length > blocks.Count ||
-                    (replacement.Length == blocks.Count &&
-                     string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
-                if (!isBetter) return false;
-
+                bool identical = replacement.Length == blocks.Count && replacement.Last().Hash == blocks.Last().Hash;
+                if (identical) return true;
+                int comparison = candidateWork.CompareTo(ChainWork);
+                if (comparison < 0 || (comparison == 0 && string.CompareOrdinal(replacement.Last().Hash, blocks.Last().Hash) >= 0)) return false;
                 blocks.Clear();
                 blocks.AddRange(replacement);
+                changed = true;
                 return true;
             }
         }
@@ -333,17 +360,20 @@ namespace PrivateCoin.Core
         {
             lock (sync)
             {
-                if (blocks.Count == 0) return false;
-                if (!IsCanonicalGenesis(blocks[0])) return false;
-                for (int i = 0; i < blocks.Count; i++)
+                try
                 {
-                    var block = blocks[i];
-                    if (block.Height != i || block.Hash != block.CalculateHash() || !block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal)) return false;
-                    if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
+                    if (blocks.Count == 0 || blocks[0] == null || !IsCanonicalGenesis(blocks[0])) return false;
+                    for (int i = 0; i < blocks.Count; i++)
+                    {
+                        var block = blocks[i];
+                        if (block == null || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
+                        if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
+                    }
+                    ValidateWholeChain(); return true;
                 }
-                try { ValidateWholeChain(); return true; }
                 catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
-                    error is CryptographicException || error is OverflowException) { return false; }
+                    error is CryptographicException || error is OverflowException || error is FormatException ||
+                    error is NullReferenceException || error is System.Xml.XmlException || error is KeyNotFoundException) { return false; }
             }
         }
 
@@ -360,18 +390,21 @@ namespace PrivateCoin.Core
             if (genesis.Transactions.Count != 0) throw new InvalidOperationException("The genesis block must not issue tokens.");
             long issued = 0;
             long validatorIssued = 0;
-            bool upgraded = false;
+            int latestVersion = 0;
+            var transactionIds = new HashSet<string>(StringComparer.Ordinal);
 
             for (int blockIndex = 1; blockIndex < blocks.Count; blockIndex++)
             {
                 Block block = blocks[blockIndex];
-                if (block.ConsensusVersion == ConsensusVersion && block.Transactions.Count == 0)
+                if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
-                if (upgraded && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
-                upgraded |= block.ConsensusVersion == ConsensusVersion;
+                latestVersion = Math.Max(latestVersion, block.ConsensusVersion);
+                foreach (Transaction tx in block.Transactions)
+                    if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
                 if (block.TransactionValidations != null && (block.ConsensusVersion == 0 || block.Validators == null || block.Validators.Count == 0))
                     throw new InvalidOperationException("Unexpected transaction validation proofs.");
                 int regularTransactionIndex = 0;
@@ -393,7 +426,7 @@ namespace PrivateCoin.Core
                 }
                 for (int transactionIndex = regularTransactionIndex; transactionIndex < block.Transactions.Count; transactionIndex++)
                 {
-                    if (block.ConsensusVersion == ConsensusVersion && regularTransactionIndex == 0 &&
+                    if (block.ConsensusVersion >= LegacySignedVersion && regularTransactionIndex == 0 &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeLock &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeUnlock)
                         throw new InvalidOperationException("Transfers and token operations require signed consensus validations.");
@@ -423,7 +456,7 @@ namespace PrivateCoin.Core
                 if (!collateralExists) throw new InvalidOperationException("The validator collateral is not globally locked on chain.");
             }
             Transaction[] transfers = block.Transactions.Skip(1).ToArray();
-            if (block.ConsensusVersion == ConsensusVersion &&
+            if (block.ConsensusVersion >= LegacySignedVersion &&
                 (transfers.Length != ValidationsPerBlock || transfers.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != ValidationsPerBlock ||
                 !transfers.Select(item => item.Id).SequenceEqual(OrderByFeePriority(transfers).Select(item => item.Id), StringComparer.Ordinal)))
                 throw new InvalidOperationException("A consensus block requires 20 distinct transactions in fee priority order.");
@@ -439,7 +472,7 @@ namespace PrivateCoin.Core
             IReadOnlyList<ValidatorReward> expected = ProofOfStake.DistributeReward(block.Height, expectedCreator,
                 stakes.Where(item => item.ValidatorId != expectedCreator.ValidatorId));
             Transaction reward = block.Transactions[0];
-            if (block.ConsensusVersion == ConsensusVersion)
+            if (block.ConsensusVersion >= LegacySignedVersion)
             {
                 ValidateTransactionFees(block, transfers, stakes, previousHash, expected);
                 Apply(reward, utxo, true);
@@ -733,8 +766,7 @@ namespace PrivateCoin.Core
 
         private static void Mine(Block block)
         {
-            do { block.Nonce++; block.Hash = block.CalculateHash(); }
-            while (!block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal));
+            ProofOfWork.Mine(block, CancellationToken.None);
         }
     }
 }
