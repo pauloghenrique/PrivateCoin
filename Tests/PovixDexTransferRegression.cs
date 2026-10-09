@@ -19,8 +19,8 @@ internal static partial class PovixDexRegression
         using (var recipient = new Wallet())
         {
             string destination = recipient.CreateReceiveAddress();
-            Block reward;
-            chain.TryAddWalletCreationReward(destination, out reward);
+
+            LegacyConsensusFixture.Fund(chain, destination);
             peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
             Wait(() => service.GetNetwork().Height == chain.Blocks.Last().Height, "transfer screen reads the synchronized blockchain");
             string[] addresses = issuer.OwnedOneTimeAddresses.ToArray();

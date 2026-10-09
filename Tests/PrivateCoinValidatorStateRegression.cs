@@ -22,9 +22,9 @@ internal static class PrivateCoinValidatorStateRegression
             using (var first = new Wallet()) using (var second = new Wallet()) using (var inactive = new Wallet())
             {
                 string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
-                var chain = new Blockchain(); Block reward;
-                chain.TryAddWalletCreationReward(firstAddress, out reward);
-                chain.TryAddWalletCreationReward(secondAddress, out reward);
+                var chain = new Blockchain();
+                LegacyConsensusFixture.Fund(chain, firstAddress);
+                LegacyConsensusFixture.Fund(chain, secondAddress);
                 var common = chain.Blocks.ToArray();
                 object a = Activator.CreateInstance(named, new object[] { "A", first, 0L, null, null, false });
                 object b = Activator.CreateInstance(named, new object[] { "B", second, 0L, null, null, false });
@@ -44,7 +44,7 @@ internal static class PrivateCoinValidatorStateRegression
                     (long)named.GetProperty("LockedStake").GetValue(b) == 2 * Blockchain.OneCoin,
                     "all local wallets restore confirmed guarantees and repeated refresh is safe");
                 var fork = new Blockchain(common);
-                for (int i = 0; i < 3; i++) fork.TryAddWalletCreationReward("validator-state-fixture-" + i, out reward);
+                for (int i = 0; i < 3; i++) LegacyConsensusFixture.Fund(fork, "validator-state-fixture-" + i);
                 Check(chain.TryReplaceChain(fork.Blocks), "a valid greater-work fork replaces the old stake history");
                 refresh.Invoke(form, null);
                 Check(!(bool)named.GetProperty("IsValidator").GetValue(a) && !(bool)named.GetProperty("IsValidator").GetValue(b),

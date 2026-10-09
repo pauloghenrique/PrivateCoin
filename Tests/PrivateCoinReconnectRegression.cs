@@ -50,7 +50,7 @@ internal static class PrivateCoinReconnectRegression
         using (var wallet = new Wallet())
         {
             Block reward;
-            chain.TryAddWalletCreationReward(wallet.CreateReceiveAddress(), out reward);
+            reward = LegacyConsensusFixture.Fund(chain, wallet.CreateReceiveAddress());
             return reward;
         }
     }

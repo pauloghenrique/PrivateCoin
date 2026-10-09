@@ -27,11 +27,10 @@ internal static class PrivateCoinDesktopTokenRegression
         using (var first = new Wallet()) using (var second = new Wallet())
         {
             var chain = new Blockchain();
-            Block reward;
-            chain.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
+            LegacyConsensusFixture.Fund(chain, issuer.CreateReceiveAddress());
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
-            chain.TryAddWalletCreationReward(firstAddress, out reward);
-            chain.TryAddWalletCreationReward(secondAddress, out reward);
+            LegacyConsensusFixture.Fund(chain, firstAddress);
+            LegacyConsensusFixture.Fund(chain, secondAddress);
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
@@ -97,7 +96,7 @@ internal static class PrivateCoinDesktopTokenRegression
                     "the sender balance and confirmation count follow the synchronized chain");
 
                 var fork = new Blockchain(commonBlocks);
-                for (int i = 0; i < 4; i++) fork.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
+                for (int i = 0; i < 4; i++) LegacyConsensusFixture.Fund(fork, issuer.CreateReceiveAddress());
                 chain = fork;
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.Blocks.Last().Hash == fork.Blocks.Last().Hash && desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,

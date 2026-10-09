@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using PrivateCoin.Core;
 
-// Creates version-4 fixtures to verify historical validation and migration.
+// Creates historical proofs and wallet funding fixtures for migration checks.
 // Deliberately separate from the production block creation API.
 internal static class LegacyConsensusFixture
 {
@@ -22,11 +22,25 @@ internal static class LegacyConsensusFixture
     private static ValidatorStake SelectTransactionValidator(IEnumerable<ValidatorStake> stakes, Transaction tx, string parent, int height) => (ValidatorStake)Call("SelectTransactionValidator", stakes, tx, parent, height);
     private static string CreateTransactionValidationPayload(Transaction tx, string parent, int height, string address) => (string)Call("CreateTransactionValidationPayload", tx, parent, height, address);
     private static string CreateVotePayload(Block block) => (string)Call("CreateVotePayload", block);
-    public static void Fund(Blockchain chain, string address)
+    public static Block Fund(Blockchain chain, string address)
     {
-        Block block; chain.TryAddWalletCreationReward(address, out block);
-        block.ConsensusVersion = 4; Mine(block);
-        if (!chain.IsValid()) throw new Exception("Invalid legacy funding fixture");
+        if (chain.Blocks.Last().ConsensusVersion >= 8)
+        {
+            var registrations = new List<Transaction>();
+            registrations.Add(chain.CreateWalletCreationTransaction(address, registrations));
+            while (registrations.Count < Blockchain.ValidationsPerBlock)
+                registrations.Add(chain.CreateWalletCreationTransaction("wallet-fixture-" + Guid.NewGuid().ToString("N"), registrations));
+            return chain.AddBlock(registrations);
+        }
+        var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
+        reward.Outputs.Add(new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = address });
+        reward.Id = Id(reward);
+        var block = new Block { ConsensusVersion = Math.Max(4, chain.Blocks.Last().ConsensusVersion), Height = chain.Blocks.Count,
+            PreviousHash = chain.Blocks.Last().Hash, TimestampUtcTicks = reward.TimestampUtcTicks,
+            Transactions = new List<Transaction> { reward } };
+        Mine(block);
+        if (!chain.TryReplaceChain(chain.Blocks.Concat(new[] { block }))) throw new Exception("Invalid legacy funding fixture");
+        return block;
     }
     public static Block Lock(Blockchain chain, Transaction tx)
     {
