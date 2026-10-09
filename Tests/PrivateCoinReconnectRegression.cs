@@ -19,7 +19,7 @@ internal static class PrivateCoinReconnectRegression
             long staleEpoch = readiness.Epoch;
             Check(readiness.Accept(staleEpoch, () => connected, () => local.TryReplaceChain(remote.Blocks)),
                 "an identical validated chain releases the node");
-            readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0]));
+            readiness.Execute(() => connected, () => Reward(local));
             connected = false;
             readiness.Disconnect();
             Reject(() => readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0])));
@@ -27,8 +27,8 @@ internal static class PrivateCoinReconnectRegression
             Check(!readiness.Accept(staleEpoch, () => connected, () => { throw new Exception("stale callback ran"); }),
                 "a queued response from before disconnection cannot release the node");
             Reject(() => readiness.Execute(() => connected, () => local.AddBlock(new Transaction[0])));
-            remote.AddBlock(new Transaction[0]);
-            remote.AddBlock(new Transaction[0]);
+            Reward(remote);
+            Reward(remote);
             Check(readiness.Accept(readiness.Epoch, () => connected, () => local.TryReplaceChain(remote.Blocks)) &&
                 local.Blocks[local.Blocks.Count - 1].Hash == remote.Blocks[remote.Blocks.Count - 1].Hash,
                 "reconnection adopts the valid longer network chain");
@@ -40,6 +40,15 @@ internal static class PrivateCoinReconnectRegression
             return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+    private static Block Reward(Blockchain chain)
+    {
+        using (var wallet = new Wallet())
+        {
+            Block reward;
+            chain.TryAddWalletCreationReward(wallet.CreateReceiveAddress(), out reward);
+            return reward;
+        }
     }
     private static void Reject(Action operation)
     {

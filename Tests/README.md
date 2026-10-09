@@ -13,7 +13,7 @@ mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
-  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/ValidationBatchFixture.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
   work/dex-regression "$(command -v node)"
 ```
@@ -124,7 +124,7 @@ em Release e execute:
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -out:work/PrivateCoinDesktopTokenRegression.exe \
-  Tests/PrivateCoinDesktopTokenRegression.cs PrivateCoin.Desktop/TokenAmount.cs
+  Tests/PrivateCoinDesktopTokenRegression.cs Tests/ValidationBatchFixture.cs PrivateCoin.Desktop/TokenAmount.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
   work/PrivateCoinDesktopTokenRegression.exe work/desktop-tokens-regression
 ```
@@ -136,6 +136,20 @@ distinção por identificador entre símbolos iguais, confirmação de transfer�
 e atualização após troca de cadeia. Criações e transferências pendentes ficam
 fora dos registros/saldos confirmados. Os dados de produção não são acessados.
 A interface WinForms ainda deve ser verificada visualmente no Windows.
+
+Para verificar os lotes de 20 validações e a remuneração por transação:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinValidationRegression.exe Tests/PrivateCoinValidationRegression.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinValidationRegression.exe
+```
+
+Confere prioridade por taxa, limites de lote, conservação das taxas e da emissão,
+restauração das provas e rejeição de assinaturas falsas, duplicadas ou ausentes,
+pagamentos redirecionados, taxas somadas à recompensa do bloco e ordem inválida.
+Os blocos adulterados têm seus votos assinados novamente e são minerados antes
+da verificação, para exercitar as regras de consenso além da integridade do hash.
 
 Para verificar o bloqueio durante reconexão, compile o Core e execute:
 
