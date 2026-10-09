@@ -1,4 +1,4 @@
-# Regressão do cadastro de tokens
+# Regressão do cadastro e da movimentação de tokens
 
 Compile `Povix.Dex` e `PrivateCoin.Core` em Release, após restaurar os pacotes
 NuGet. A regressão exige Node.js 20+ com Web Crypto e .NET Framework 4.8 (ou Mono).
@@ -13,7 +13,7 @@ mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
-  Tests/PovixDexRegression.cs
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
   work/dex-regression "$(command -v node)"
 ```
@@ -33,6 +33,18 @@ local real, também confere os valores retornados pela ação MVC de saldo e
 pelo comprovante. Após a confirmação, os mesmos endereços do arquivo original
 da carteira reconhecem exatamente o saldo anterior menos a taxa, sem contar
 a quantidade do token como POVIX.
+
+Inclui também a movimentação de tokens pelo DEX: listagem de criações
+confirmadas pela chave do criador, seleção explícita da carteira, revisão dos
+dois tipos de troco, assinatura Web Crypto das entradas e autorização separada
+do criador. Verifica rejeição de outra carteira, de assinatura falsa e de
+autorização reaproveitada em outra preparação, inclusive quando quem tenta
+enviar possui tokens e assina corretamente suas próprias entradas. Após um
+bloco validado, confere conservação do token e desconto de somente a taxa em
+POVIX nos endereços originais. Testa ainda reserva de saldos, envio de todo o
+saldo, repetição após falha temporária, histórico/comprovante e recuperação
+após reinício. As transferências normais de proprietários continuam válidas
+pelo consenso existente fora dessa tela do DEX.
 
 A preparação e o envio passam também pelas ações MVC reais, usando contextos
 HTTP de teste e a coleção de sessão do ASP.NET. Confere que a preparação grava

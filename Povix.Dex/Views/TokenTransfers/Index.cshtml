@@ -1,0 +1,47 @@
+@model Povix.Dex.Models.TokenTransferViewModel
+@using Povix.Dex.Models
+@{ ViewBag.Title = "Movimentar tokens"; }
+<main id="transfer-app" data-network-url="@Url.Action("NetworkStatus", "Tokens")" data-balance-url="@Url.Action("Balance", "Tokens")"
+      data-tokens-url="@Url.Action("WalletTokens")" data-history-url="@Url.Action("History")" data-receipt-url="@Url.Action("Details", new { id = "__id__" })"
+      data-prepare-url="@Url.Action("Prepare")" data-submit-url="@Url.Action("Submit")" data-network-id="@Model.Network.NetworkId" data-token-id="@Model.TokenId">
+    <div class="page-intro"><span class="eyebrow">SEUS TOKENS NA BLOCKCHAIN</span><h1>Movimente seu token.</h1><p>Abra a carteira que criou o token, escolha a quantidade e assine o envio no seu dispositivo.</p></div>
+    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span></div>
+    <div id="app-message" class="notice" role="alert" hidden></div>
+    <div class="create-grid">
+        <div>
+            @Html.Partial("_Wallet")
+            <form id="transfer-form" class="card token-form">
+                @Html.AntiForgeryToken()
+                <fieldset id="transfer-fields" disabled>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">01</span><div><h2>Token criado por você</h2><p>Esta tela exige a assinatura do criador registrada na criação.</p></div></div>
+                        <label for="TokenId">Selecione o token</label><select id="TokenId" name="TokenId" required><option value="">Abra a carteira para consultar</option></select>
+                        <small id="token-balance">Somente tokens confirmados são listados.</small><small id="token-identifier" class="address-input"></small>
+                    </section>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">02</span><div><h2>Quantidade e destino</h2><p>Você pode enviar somente o saldo disponível desta carteira.</p></div></div>
+                        <label for="Amount">Quantidade a enviar</label>@Html.TextBoxFor(m => m.Amount, new { maxlength = "30", pattern = "[0-9]+([.,][0-9]+)?", required = "required", inputmode = "decimal", placeholder = "Ex.: 100,50" })<small id="amount-help">A precisão segue o token selecionado.</small>
+                        <label for="DestinationAddress" class="transfer-destination-label">Endereço de recebimento</label>@Html.TextBoxFor(m => m.DestinationAddress, new { maxlength = "64", pattern = "[0-9a-f]{64}", required = "required", autocomplete = "off", @class = "address-input", placeholder = "Endereço POVIX de 64 caracteres" })<small>Confira o endereço. Uma transação confirmada não pode ser cancelada.</small>
+                    </section>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">03</span><div><h2>Taxa em POVIX</h2><p>O token enviado e os POVIX da taxa são contabilizados separadamente.</p></div></div>
+                        <div class="fee-options">
+                            @for (var i = 0; i < 3; i++)
+                            {
+                                var priority = new[] { 1, 2, 4 }[i];
+                                <label class="fee-option"><input type="radio" name="FeePriority" value="@priority" @(priority == 2 ? "checked" : "") /><span><strong>@(i == 0 ? "Econômica" : i == 1 ? "Normal" : "Prioritária")</strong><small data-fee="@i">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[i]) POVIX</small></span></label>
+                            }
+                        </div>
+                    </section>
+                </fieldset>
+                <div class="form-bottom"><p id="transfer-hint">Abra a carteira do criador para continuar.</p><button id="prepare-transfer" class="button button-primary" type="submit" disabled>Revisar movimentação →</button></div>
+            </form>
+            <section class="card transfer-history"><h2>Envios pelo DEX</h2><p id="history-empty" class="muted-text">Selecione um token para consultar os últimos 20 envios registrados neste DEX.</p><div id="transfer-history" class="transfer-history-list"></div></section>
+        </div>
+        <aside class="review-column"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise o envio</h2>
+            <div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu token</strong><span id="review-symbol">SÍMBOLO</span></div></div>
+            <dl class="review-list"><div><dt>Quantidade a enviar</dt><dd id="review-amount">—</dd></div><div><dt>Taxa da rede</dt><dd id="review-fee">—</dd></div><div><dt>Troco do token</dt><dd id="review-token-change">Calculado na revisão</dd></div><div><dt>Troco em POVIX</dt><dd id="review-povix-change">Calculado na revisão</dd></div><div class="review-destination"><dt>Endereço de destino</dt><dd id="review-destination">Informe o endereço</dd></div><div class="review-destination"><dt>Endereço do troco</dt><dd id="review-change-address">Da carteira aberta</dd></div></dl>
+            <div class="review-note"><strong>Autorização exclusiva do criador.</strong><p>O DEX verifica a assinatura do criador e as assinaturas do saldo movimentado. As chaves privadas permanecem no seu dispositivo.</p></div>
+            <p class="wallet-local-help">A taxa desconta somente POVIX. O troco do token e dos POVIX volta a um endereço já salvo na carteira. A disponibilidade depende da confirmação pela rede.</p>
+            <div id="sign-actions" hidden><div class="backup-note"><strong>Guarde sua carteira</strong><p>Preserve o backup que contém as chaves do token e do criador.</p><button id="download-backup" type="button" class="button button-secondary">Baixar backup cifrado</button><label class="checkbox-label"><input id="backup-confirmed" type="checkbox" /> Guardei o backup e conferi a quantidade e o destino.</label></div><button id="sign-transfer" type="button" class="button button-primary full-width" disabled>Autorizar, assinar e enviar</button><button id="edit-transfer" type="button" class="text-button full-width">Voltar e editar</button></div>
+        </section></aside>
+    </div>
+</main>
+@section scripts { <script src="@Url.Content("~/Scripts/povix-token-wallet.js")"></script><script src="@Url.Content("~/Scripts/povix-token-transfer.js")"></script> }

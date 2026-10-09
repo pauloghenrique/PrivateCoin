@@ -73,6 +73,12 @@ namespace Povix.Dex.Models
         public string NetworkId => Blockchain.NetworkId;
         public int ConsensusVersion => Blockchain.ConsensusVersion;
         public static string FormatPovix(long amount) => (amount / (decimal)Blockchain.OneCoin).ToString("0.00000000", CultureInfo.GetCultureInfo("pt-BR"));
+        public static string FormatToken(long amount, int decimals)
+        {
+            decimal divisor = 1;
+            for (int i = 0; i < decimals; i++) divisor *= 10;
+            return (amount / divisor).ToString("N" + decimals, CultureInfo.GetCultureInfo("pt-BR"));
+        }
     }
 
     public sealed class TokenRegistrationViewModel
