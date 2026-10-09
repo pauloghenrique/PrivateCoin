@@ -70,6 +70,7 @@
         try { byId('review-supply').textContent = wallet.formatAtomic(draft ? draft.supplyAtomic : wallet.parseSupply(data.Supply, decimals), decimals); }
         catch (_) { byId('review-supply').textContent = '—'; }
         byId('review-fee').textContent = wallet.formatAtomic(draft ? draft.feeAtomic : selectedFee(), 8) + ' POVIX';
+        byId('review-change').textContent = draft ? wallet.formatAtomic(draft.changeAtomic, 8) + ' POVIX' : 'Calculado na revisão';
         byId('precision-example').textContent = 'Menor unidade: ' + wallet.formatAtomic('1', decimals);
     }
     function resetDraft() {
@@ -86,7 +87,15 @@
             if (!wallet.isUnlocked()) return;
             balance = result.balanceAtomic;
             byId('wallet-balance').textContent = wallet.formatAtomic(balance, 8) + ' POVIX';
-        } catch (_) { balance = null; byId('wallet-balance').textContent = 'Consulta indisponível'; }
+            const detail = byId('wallet-balance-detail');
+            detail.hidden = result.confirmedAtomic == null;
+            detail.textContent = detail.hidden ? '' : 'Confirmado: ' + wallet.formatAtomic(result.confirmedAtomic, 8) +
+                ' POVIX · Reservado: ' + wallet.formatAtomic(result.reservedAtomic, 8) +
+                ' POVIX · A receber após confirmação: ' + wallet.formatAtomic(result.pendingIncomingAtomic, 8) + ' POVIX';
+        } catch (_) {
+            balance = null; byId('wallet-balance').textContent = 'Consulta indisponível';
+            byId('wallet-balance-detail').hidden = true;
+        }
         updateControls();
     }
     async function refreshNetwork() {
@@ -184,7 +193,10 @@
         try {
             expected = Object.freeze(fields());
             wallet.parseSupply(expected.Supply, Number(expected.Decimals));
-            if (!changeAddress) changeAddress = await wallet.createAddress();
+            // Keep POVIX change under a key already present in the imported wallet.
+            // A new browser-only key would hide the remaining funds from Desktop.
+            if (!changeAddress) changeAddress = wallet.addresses()[0];
+            if (!changeAddress) throw new Error('A carteira precisa ter um endereço para receber o troco.');
             const result = await post(app.dataset.prepareUrl, { ...expected, publicKeys: wallet.publicKeys(), changeAddress });
             await wallet.verifyDraft(result, expected, app.dataset.networkId, changeAddress);
             draft = Object.freeze(result);

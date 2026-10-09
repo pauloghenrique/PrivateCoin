@@ -81,6 +81,7 @@ namespace Povix.Dex.Models
         public TokenDefinition Token { get; set; }
         public string DestinationAddress { get; set; }
         public long Fee { get; set; }
+        public TransactionOutput[] PovixOutputs { get; set; } = new TransactionOutput[0];
         public string Status { get; set; }
         public int? BlockHeight { get; set; }
         public string BlockHash { get; set; }

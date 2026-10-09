@@ -93,14 +93,34 @@ em memória até bloquear, sair ou recarregar a página. Não há scripts extern
 na tela; a política CSP permite scripts da mesma origem e conexões ao servidor
 do DEX e ao auxiliar de loopback fixo.
 
-Endereços novos de recebimento e troco são gerados localmente e salvos cifrados
-**antes** da assinatura. O backup atualizado preserva todas as carteiras da
-coleção e modifica apenas a selecionada. A revisão pede seu download. Esse
-backup inclui as chaves novas que não existem no `wallets.dat` original nem
-podem ser recuperadas apenas pela frase antiga. Use o backup atualizado para
-restaurar a carteira no DEX em outro navegador. Não apague o armazenamento
-local antes de guardá-lo. Evite usar a mesma carteira simultaneamente em
-instalações diferentes: uma transação concorrente pode consumir seu UTXO.
+O troco em POVIX da taxa retorna ao primeiro endereço já presente na carteira
+selecionada. Ao abrir uma carteira do Desktop, sua chave continua no
+`wallets.dat` original, permitindo ao Desktop reconhecer o troco confirmado.
+Essa escolha reutiliza um endereço da carteira. A criação desconta somente a
+taxa em POVIX; a quantidade do token emitido não é descontada do saldo nativo.
+Por exemplo, 6 POVIX com uma taxa de 0,00000002 POVIX deixam 5,99999998 POVIX
+após a confirmação. Enquanto a transação está pendente, o UTXO inteiro pode
+estar reservado: a tela separa disponível, confirmado, reservado e valores a
+receber. O troco pendente não pode ser gasto até sua confirmação.
+
+O botão de gerar endereço de recebimento ainda cria uma chave local, salva
+cifrada **antes** da assinatura. O backup atualizado preserva todas as
+carteiras da coleção e modifica apenas a selecionada. A revisão pede seu
+download. Esse backup inclui as chaves novas de recebimento que não existem no
+`wallets.dat` original nem podem ser recuperadas apenas pela frase antiga.
+Use o backup atualizado para restaurar a carteira no DEX em outro navegador.
+Não apague o armazenamento local antes de guardá-lo. Evite usar a mesma
+carteira simultaneamente em instalações diferentes: uma transação concorrente
+pode consumir seu UTXO.
+
+Versões anteriores do DEX também criavam uma chave nova para o troco. Se uma
+criação anterior deixou o saldo zerado no arquivo original do Desktop, abra
+o `.povixwallet` atualizado baixado antes daquela assinatura e selecione a
+mesma carteira no DEX. Ele preserva a chave desse troco. O comprovante mostra
+os valores e endereços das saídas em POVIX da transação para conferência.
+Esta correção não modifica transações já confirmadas nem importa as chaves
+do backup para o Desktop automaticamente. Guarde esse backup; o arquivo
+original do Desktop e sua frase antiga não contêm a chave gerada pelo DEX.
 
 Nome: até 64 caracteres; símbolo: 1–10 letras A–Z; precisão: 0–8 casas; quantidade:
 positiva, limitada a `Int64.MaxValue` em unidades atômicas. A conversão não usa
