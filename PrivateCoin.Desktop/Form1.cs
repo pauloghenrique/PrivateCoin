@@ -193,11 +193,16 @@ namespace PrivateCoin.Desktop
             {
                 ExecuteNetworkOperation(() => true);
                 string rewardAddress = namedWallet.Wallet.CreateReceiveAddress();
-                Block rewardBlock = null;
-                bool rewarded = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.TryAddWalletCreationReward(rewardAddress, out rewardBlock)));
+                Transaction registration = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.CreateWalletCreationTransaction(rewardAddress, SnapshotPending())));
 
                 wallets.Add(namedWallet);
                 walletAdded = true;
+                lock (pendingSync)
+                {
+                    blockchain.ValidatePendingTransactions(pendingTransactions.Concat(new[] { registration }));
+                    pendingIds.Add(registration.Id);
+                    pendingTransactions.Add(registration);
+                }
                 walletNameTextBox.Clear();
                 RefreshWalletList(wallets.Count - 1);
                 SaveState();
@@ -211,18 +216,12 @@ namespace PrivateCoin.Desktop
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
-                if (rewarded)
-                {
-                    decimal reward = (decimal)Blockchain.WalletCreationReward / Blockchain.OneCoin;
-                    Log("Carteira “" + name + "” criada com recompensa de " +
-                        reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX no bloco #" +
-                        rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
-                    if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
-                }
-                else
-                    Log("Carteira “" + name + "” criada e salva. Os 180.000 POVIX reservados para novas carteiras já foram distribuídos.", true);
+                Log("Carteira “" + name + "” criada e salva. O registro conta como uma operação na fila de 20, sem aprovação por tokens bloqueados. " +
+                    (registration.Outputs[0].Amount > 0 ? "A recompensa de 6 POVIX será confirmada no bloco." : "A distribuição promocional terminou."), true);
+                if (peerNode != null) await peerNode.BroadcastAsync(registration);
 
                 UpdateChainSummary();
+                BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
             {
@@ -482,7 +481,7 @@ namespace PrivateCoin.Desktop
                         () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
                         {
                             var orphaned = blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0).ToArray();
+                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate).ToArray();
                             if (!blockchain.TrySynchronizeChain(e.Blocks, out changed)) return false;
                             if (changed)
                             {
@@ -578,17 +577,18 @@ namespace PrivateCoin.Desktop
                     if (batch.Length == 0) break;
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
-                    if (activeValidators.Length < 2)
+                    bool walletsOnly = batch.All(tx => tx.Kind == TransactionKind.WalletCreate);
+                    if (!walletsOnly && activeValidators.Length < 2)
                     {
                         miningStatusLabel.Text = "Aguardando 2 validadores sem participação na transferência";
                         Log("O bloco aguarda dois validadores elegíveis: remetentes e destinatários não podem criar nem confirmar o bloco.", false);
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Consenso proof-of-stake iniciado após a validação de " +
+                    Log("Criação de bloco iniciada após reunir " +
                         batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
 
-                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.AddProofOfStakeBlock(batch, activeValidators)));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => walletsOnly && activeValidators.Length < 2 ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -597,11 +597,15 @@ namespace PrivateCoin.Desktop
                             pendingIds.Remove(transaction.Id);
                         }
                     }
-                    BlockValidator creator = block.Validators.Single(item => item.IsCreator);
-                    decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
-                    Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
-                        "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
-                        " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
+                    if (block.Validators != null && block.Validators.Count > 0)
+                    {
+                        BlockValidator creator = block.Validators.Single(item => item.IsCreator);
+                        decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
+                        Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
+                            "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
+                            " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
+                    }
+                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com 20 registros de carteira: " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -617,11 +621,11 @@ namespace PrivateCoin.Desktop
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
                 Transaction[] nextBatch = Blockchain.SelectValidationBatch(remaining).ToArray();
-                miningStatusLabel.Text = nextBatch.Length > 0 && EligibleValidators(nextBatch).Length < 2
+                miningStatusLabel.Text = nextBatch.Length > 0 && !nextBatch.All(tx => tx.Kind == TransactionKind.WalletCreate) && EligibleValidators(nextBatch).Length < 2
                     ? "Aguardando 2 validadores sem participação na transferência"
                     : "Validações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "/" + Blockchain.ValidationsPerBlock.ToString(CultureInfo.InvariantCulture);
                 UpdateChainSummary();
-                if (!IsDisposed && nextBatch.Length > 0 && EligibleValidators(nextBatch).Length >= 2)
+                if (!IsDisposed && nextBatch.Length > 0 && (nextBatch.All(tx => tx.Kind == TransactionKind.WalletCreate) || EligibleValidators(nextBatch).Length >= 2))
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }

@@ -55,7 +55,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 Check(chain.ChainWork == chain.Blocks.Count * ProofOfWork.WorkPerBlock, "cumulative work is exact and includes genesis");
                 var queries = new BlockchainQueryApi(chain); BlockchainSummary summary = queries.GetSummary();
                 Check(summary.ChainWork == chain.ChainWork.ToString(CultureInfo.InvariantCulture) &&
-                    summary.IssuedTokenAmount == 23 * Blockchain.WalletCreationReward + ProofOfStake.GetBlockReward(block.Height),
+                    summary.IssuedTokenAmount == chain.Blocks.Where(b => b.Validators == null || b.Validators.Count == 0).SelectMany(b => b.Transactions).Where(t => t.Inputs.Count == 0).Sum(t => t.Outputs.Sum(o => o.Amount)) + ProofOfStake.GetBlockReward(block.Height),
                     "the explorer exposes work and issuance without counting fees as emission");
                 Check(queries.GetLedger(0, 100).Single(entry => entry.TransactionId == tx.Id).Confirmations == 1,
                     "ledger entries expose current confirmation counts");
@@ -73,7 +73,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 Reject(() => new Blockchain(malformed), "malformed peer data is rejected");
                 var lowerVersion = Clone(chain.Blocks); lowerVersion.Last().ConsensusVersion = 4;
                 LegacyConsensusFixture.Mine(lowerVersion.Last());
-                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v7 to v4");
+                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v8 to v4");
                 Reject(() => chain.AddProofOfStakeBlock(block.Transactions.Skip(1), new[] { validators[0] }), "a miner cannot omit eligible locked stake");
 
                 var luckyBlocks = Clone(chain.Blocks);
@@ -116,7 +116,7 @@ internal static class PrivateCoinProofOfWorkRegression
             using (var batches = new ValidationBatchFixture(legacy))
             {
                 batches.Confirm(legacy, new Transaction[0], validators);
-                Check(legacy.IsValid() && legacy.Blocks.Last().ConsensusVersion == 7, "legacy collateral can participate in the upgraded hybrid consensus");
+                Check(legacy.IsValid() && legacy.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion, "legacy collateral can participate in the upgraded hybrid consensus");
                 var unlock = first.CreateStakeUnlockTransaction(legacy, firstAddress, 1);
                 legacy.AddBlock(new[] { unlock });
                 Check(new Blockchain(Clone(legacy.Blocks)).GetActiveValidators().Count == 1, "signed stake unlock remains valid after upgrade and restart");
@@ -125,7 +125,7 @@ internal static class PrivateCoinProofOfWorkRegression
     }
 
     private static string Hash(Block block) => (string)typeof(Block).GetMethod("CalculateHash", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(block, null);
-    private static void Fund(Blockchain chain, string address) { Block block; chain.TryAddWalletCreationReward(address, out block); }
+    private static void Fund(Blockchain chain, string address) { LegacyConsensusFixture.Fund(chain, address); }
     private static List<Block> Clone(IEnumerable<Block> blocks)
     {
         var serializer = new DataContractJsonSerializer(typeof(List<Block>));

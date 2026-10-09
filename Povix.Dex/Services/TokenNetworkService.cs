@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -202,7 +202,7 @@ namespace Povix.Dex.Services
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
                         var valid = new List<Transaction>();
                         var recoverable = pending.Concat(blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0))
+                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate))
                             .Concat(submitted.Select(item => item.Transaction)).Where(tx => !confirmed.Contains(tx.Id))
                             .GroupBy(tx => tx.Id, StringComparer.Ordinal).Select(group => group.First());
                         foreach (Transaction transaction in Blockchain.OrderByFeePriority(recoverable))

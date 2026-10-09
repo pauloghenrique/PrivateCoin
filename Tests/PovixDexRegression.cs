@@ -76,13 +76,12 @@ internal static partial class PovixDexRegression
         using (var issuer = new Wallet()) using (var first = new Wallet()) using (var second = new Wallet())
         {
             var chain = new Blockchain();
-            Block reward;
-            chain.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
+            LegacyConsensusFixture.Fund(chain, issuer.CreateReceiveAddress());
             string destination = issuer.CreateReceiveAddress(), change = issuer.OwnedOneTimeAddresses.First();
             string[] originalAddresses = issuer.OwnedOneTimeAddresses.ToArray();
             long originalBalance = chain.GetBalance(originalAddresses);
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
-            chain.TryAddWalletCreationReward(firstAddress, out reward); chain.TryAddWalletCreationReward(secondAddress, out reward);
+            LegacyConsensusFixture.Fund(chain, firstAddress); LegacyConsensusFixture.Fund(chain, secondAddress);
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             Check(chain.IsValid(), "existing test chain contains confirmed funds and validator collateral");
@@ -169,7 +168,12 @@ internal static partial class PovixDexRegression
                     legacyCache["ConsensusVersion"] = 4;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v7 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v8 upgrade");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 7;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v8 upgrade");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
@@ -196,7 +200,7 @@ internal static partial class PovixDexRegression
                     RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators, batches);
                     var fork = new Blockchain(commonChain);
                     while (fork.ChainWork <= chain.ChainWork)
-                        fork.TryAddWalletCreationReward("reorganization-fixture-" + fork.Blocks.Count, out reward);
+                        LegacyConsensusFixture.Fund(fork, "reorganization-fixture-" + fork.Blocks.Count);
                     peer.BroadcastChainAsync(fork.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "pending", "greater-work reorganization returns an orphaned valid creation to the queue");
                     Check(service.GetRegistration(id).Confirmations == 0 && service.GetRegistration(id).BlockHash == null,

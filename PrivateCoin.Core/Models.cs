@@ -13,7 +13,8 @@ namespace PrivateCoin.Core
         StakeLock = 1,
         StakeUnlock = 2,
         TokenCreate = 3,
-        TokenTransfer = 4
+        TokenTransfer = 4,
+        WalletCreate = 5
     }
 
     [DataContract]

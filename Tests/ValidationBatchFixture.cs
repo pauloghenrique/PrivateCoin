@@ -13,8 +13,7 @@ internal sealed class ValidationBatchFixture : IDisposable
         destination = filler.CreateReceiveAddress();
         for (int index = 0; index < Blockchain.ValidationsPerBlock; index++)
         {
-            Block reward;
-            chain.TryAddWalletCreationReward(filler.CreateReceiveAddress(), out reward);
+            LegacyConsensusFixture.Fund(chain, filler.CreateReceiveAddress());
         }
     }
 

@@ -13,7 +13,7 @@ mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
-  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/ValidationBatchFixture.cs
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
   work/dex-regression "$(command -v node)"
 ```
@@ -124,7 +124,7 @@ em Release e execute:
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -out:work/PrivateCoinDesktopTokenRegression.exe \
-  Tests/PrivateCoinDesktopTokenRegression.cs Tests/ValidationBatchFixture.cs PrivateCoin.Desktop/TokenAmount.cs
+  Tests/PrivateCoinDesktopTokenRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs PrivateCoin.Desktop/TokenAmount.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
   work/PrivateCoinDesktopTokenRegression.exe work/desktop-tokens-regression
 ```
@@ -174,7 +174,7 @@ Para verificar o bloqueio durante reconexão, compile o Core e execute:
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -out:work/PrivateCoinReconnectRegression.exe \
-  Tests/PrivateCoinReconnectRegression.cs PrivateCoin.Desktop/NetworkReadiness.cs
+  Tests/PrivateCoinReconnectRegression.cs Tests/LegacyConsensusFixture.cs PrivateCoin.Desktop/NetworkReadiness.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinReconnectRegression.exe
 ```
 
@@ -188,7 +188,7 @@ Para verificar o estado das garantias no Desktop após reorganização:
 
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
-  -out:work/PrivateCoinValidatorStateRegression.exe Tests/PrivateCoinValidatorStateRegression.cs
+  -out:work/PrivateCoinValidatorStateRegression.exe Tests/PrivateCoinValidatorStateRegression.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinValidatorStateRegression.exe \
   PrivateCoin.Desktop/bin/Release/PrivateCoin.Desktop.exe
 ```
@@ -197,3 +197,18 @@ Executa o método real de reconciliação sem abrir uma janela. Confere todas as
 carteiras locais, atualizações repetidas, a remoção de garantias órfãs e a
 adoção das garantias da cadeia substituta. A interface visual precisa ser
 verificada no Windows.
+
+Para verificar a contagem de carteiras no consenso v8, após compilar o Core:
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
+  -r:System.Numerics -out:work/PrivateCoinWalletValidationRegression.exe \
+  Tests/PrivateCoinWalletValidationRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinWalletValidationRegression.exe
+```
+
+Confere 19/20 registros, confirmação sem stake, saldo pendente, 18 transferências
+mais 2 carteiras, taxas apenas das transferências, divisão da recompensa,
+restauração, migração v7/v8, limite promocional e rejeição de blocos adulterados.
+`LegacyConsensusFixture.Fund` prepara a distribuição histórica antes do v8 e
+usa lotes completos de carteiras depois da transição.
