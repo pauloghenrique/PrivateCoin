@@ -569,7 +569,7 @@ namespace PrivateCoin.Desktop
             {
                 while (true)
                 {
-                    Transaction[] batch = SnapshotPending();
+                    Transaction[] batch = Blockchain.SelectValidationBatch(SnapshotPending()).ToArray();
                     if (batch.Length == 0) break;
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
@@ -611,11 +611,12 @@ namespace PrivateCoin.Desktop
             {
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
-                miningStatusLabel.Text = remaining.Length > 0 && EligibleValidators(remaining).Length < 2
+                Transaction[] nextBatch = Blockchain.SelectValidationBatch(remaining).ToArray();
+                miningStatusLabel.Text = nextBatch.Length > 0 && EligibleValidators(nextBatch).Length < 2
                     ? "Aguardando 2 validadores sem participação na transferência"
-                    : "Aguardando uma transferência válida";
+                    : "Validações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "/" + Blockchain.ValidationsPerBlock.ToString(CultureInfo.InvariantCulture);
                 UpdateChainSummary();
-                if (!IsDisposed && remaining.Length > 0 && EligibleValidators(remaining).Length >= 2)
+                if (!IsDisposed && nextBatch.Length > 0 && EligibleValidators(nextBatch).Length >= 2)
                     BeginInvoke(new Action(StartAutomaticMining));
             }
         }

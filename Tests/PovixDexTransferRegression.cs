@@ -14,7 +14,7 @@ using PrivateCoin.Core;
 internal static partial class PovixDexRegression
 {
     private static void RunTransfers(string directory, string nodeExecutable, Wallet issuer, Blockchain chain,
-        TokenNetworkService service, PeerNode peer, ValidatorStake[] validators)
+        TokenNetworkService service, PeerNode peer, ValidatorStake[] validators, ValidationBatchFixture batches)
     {
         using (var recipient = new Wallet())
         {
@@ -101,7 +101,7 @@ internal static partial class PovixDexRegression
                 "receipt exposes exact token and POVIX change under original wallet keys");
             Check(service.SubmitTransferAsync(draftId, signatures, creatorSignature, "transfer-owner").GetAwaiter().GetResult() == transactionId, "movement retry is idempotent");
             RejectTransfer(TransferControllerFor(service, "transfer-owner", items), (string)conflicts["draftId"], conflictingSignatures, conflictingAuthorization, "funding_unavailable");
-            Block confirmed = chain.AddProofOfStakeBlock(new[] { propagated }, validators);
+            Block confirmed = batches.Confirm(chain, new[] { propagated }, validators);
             peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
             Wait(() => service.GetTransferReceipt(transactionId).Status == "confirmed", "movement receipt confirms only after a validated block");
             Check(chain.IsValid() && chain.GetTokenBalance(addresses, tokenId) == long.MaxValue - amount && chain.GetTokenBalance(new[] { destination }, tokenId) == amount &&

@@ -137,7 +137,7 @@ namespace PrivateCoin.Core
                 Blockchain.CalculateAutomaticFee(pendingCount, 1));
         }
 
-        /// <summary>Creates a transaction and reserves the fee for its block creator.</summary>
+        /// <summary>Creates a transaction and reserves the fee for its transaction validator.</summary>
         public Transaction CreateTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string destinationOneTimeAddress, long amount, long fee)
         {
             return CreateSignedTransaction(chain, pendingTransactions, destinationOneTimeAddress, amount, fee, TransactionKind.Transfer, null, null);

@@ -53,6 +53,21 @@ namespace PrivateCoin.Core
     }
 
     [DataContract]
+    public sealed class TransactionValidation
+    {
+        [DataMember(Order = 1)] public string TransactionId { get; set; }
+        [DataMember(Order = 2)] public string ValidatorId { get; set; }
+        [DataMember(Order = 3)] public string RewardAddress { get; set; }
+        [DataMember(Order = 4)] public string PublicKey { get; set; }
+        [DataMember(Order = 5)] public string Signature { get; set; }
+
+        internal string ProofPayload()
+        {
+            return TransactionId + ":" + ValidatorId + ":" + RewardAddress + ":" + PublicKey + ":" + Signature;
+        }
+    }
+
+    [DataContract]
     public sealed class TransactionInput
     {
         [DataMember(Order = 1)] public string TransactionId { get; set; }
@@ -134,6 +149,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 5)] public List<Transaction> Transactions { get; set; } = new List<Transaction>();
         [DataMember(Order = 6)] public string Hash { get; set; }
         [DataMember(Order = 7, EmitDefaultValue = false)] public List<BlockValidator> Validators { get; set; }
+        [DataMember(Order = 8, EmitDefaultValue = false)] public int ConsensusVersion { get; set; }
+        [DataMember(Order = 9, EmitDefaultValue = false)] public List<TransactionValidation> TransactionValidations { get; set; }
 
         internal string CalculateHash()
         {
@@ -143,7 +160,15 @@ namespace PrivateCoin.Core
                 ":key:" + v.PublicKey + ":vote:" + v.VoteSignature));
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
-                string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof));
+                string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof) +
+                ValidationProofPayload());
+        }
+
+        internal string ValidationProofPayload()
+        {
+            return ConsensusVersion == 0 && TransactionValidations == null ? string.Empty :
+                "|consensus:" + ConsensusVersion.ToString(CultureInfo.InvariantCulture) + "|transaction-validations|" +
+                string.Join("|", (TransactionValidations ?? new List<TransactionValidation>()).Select(item => item == null ? string.Empty : item.ProofPayload()));
         }
     }
 

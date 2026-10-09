@@ -35,6 +35,8 @@ internal static class PrivateCoinDesktopTokenRegression
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
+            using (var batches = new ValidationBatchFixture(chain))
+            {
             var desktopChain = new Blockchain(chain.Blocks);
             var commonBlocks = chain.Blocks.ToArray();
             string destination = issuer.CreateReceiveAddress(), recipientAddress = recipient.CreateReceiveAddress();
@@ -55,7 +57,7 @@ internal static class PrivateCoinDesktopTokenRegression
                 source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain.Blocks);
                 source.Start(new string[0]); desktop.Start(new string[0]);
                 desktop.ConnectAsync("127.0.0.1", sourcePort).GetAwaiter().GetResult();
-                Block creationBlock = chain.AddProofOfStakeBlock(new[] { create }, validators);
+                Block creationBlock = batches.Confirm(chain, new[] { create }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,
                     "a confirmed native DEX token appears after P2P blockchain synchronization");
@@ -75,7 +77,7 @@ internal static class PrivateCoinDesktopTokenRegression
                 } finally { Thread.CurrentThread.CurrentCulture = previousCulture; }
 
                 Transaction another = PrepareAndSign(chain, issuer, "Outro Aurora", "AUR", 0, 123, recipientAddress);
-                chain.AddProofOfStakeBlock(new[] { another }, validators);
+                batches.Confirm(chain, new[] { another }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 2, "new confirmed creations refresh the list");
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Select(item => item.Id).Distinct().Count() == 2 &&
@@ -86,7 +88,7 @@ internal static class PrivateCoinDesktopTokenRegression
                 chain.ValidatePendingTransactions(new[] { transfer });
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue,
                     "a pending transfer does not alter the confirmed balance");
-                chain.AddProofOfStakeBlock(new[] { transfer }, validators);
+                batches.Confirm(chain, new[] { transfer }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,
                     "a confirmed token transfer refreshes the recipient balance");
@@ -100,6 +102,7 @@ internal static class PrivateCoinDesktopTokenRegression
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.Blocks.Last().Hash == fork.Blocks.Last().Hash && desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,
                     "a valid longer fork removes token records and balances absent from the adopted chain");
+            }
             }
         }
     }

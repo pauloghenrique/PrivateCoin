@@ -9,7 +9,7 @@
 - blocos ligados por SHA-256 e prova de trabalho;
 - política de emissão em quatro fases de 2 milhões de blocos e seleção determinística de validadores ponderada pelas moedas bloqueadas;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
-- fila de validação ordenada pela opção de taxa escolhida pelo usuário entre valores calculados conforme o congestionamento, paga integralmente ao criador do bloco;
+- fila de validação por maior taxa, com 20 transações validadas por bloco e taxas pagas aos validadores das transações mediante assinaturas individuais;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
 - sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
@@ -25,7 +25,7 @@ using (var bob = new Wallet())
     Block rewardBlock;
     chain.TryAddWalletCreationReward(alice.CreateReceiveAddress(), out rewardBlock);
     var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 5 * Blockchain.OneCoin);
-    chain.AddBlock(new[] { payment });
+    chain.ValidatePendingTransactions(new[] { payment });
 }
 ```
 
@@ -35,7 +35,8 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer` na versão **3** do consenso.
+O Core oferece `TokenCreate` e `TokenTransfer`; a versão **4** do consenso
+exige 20 transações distintas com provas assinadas para cada bloco de consenso.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
 permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
 maiúsculas A–Z, de 0 a 8 casas decimais e quantidade positiva em unidades
@@ -169,7 +170,7 @@ carteira no DEX, especialmente quando existem cópias em pastas antigas.
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de POVIX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 POVIX em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 POVIX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 POVIX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 POVIX. A taxa selecionada é descontada além do valor enviado e creditada integralmente ao criador do bloco. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam o bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
+O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de POVIX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 POVIX em um endereço descartável gerado aleatoriamente, e a distribuição cria, salva e propaga imediatamente um novo bloco. A emissão termina quando o limite total de 180.000 POVIX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 POVIX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 POVIX. A taxa selecionada é descontada além do valor enviado e paga ao validador da transação, mediante prova assinada separada dos votos do bloco. Ao reunir 20 transações validadas, as 20 operações de maior taxa são incluídas no bloco e as demais continuam pendentes. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam esse bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
 
 ### Descoberta automática de nós
 
@@ -204,6 +205,35 @@ Para impedir que uma cadeia criada com outras regras seja confundida com a rede 
 Esses identificadores são separação de protocolo, não atestado do binário. Não se deve aceitar uma transação ou bloco por causa da versão anunciada, nem usar hash do DLL como regra de consenso: esse mecanismo seria falsificável por um cliente hostil e impediria implementações independentes. Antes de produção, as garantias de validadores e seus votos também precisam existir como transações e assinaturas verificáveis globalmente, como descrito abaixo.
 
 ## Emissão e validadores
+
+### Validação de transações e taxas
+
+`SelectValidationBatch` seleciona as 20 operações com maior taxa e retorna um
+lote vazio quando existem menos de 20. Cada operação conta uma vez; criações
+e transferências de tokens também participam dessa fila. Horário e identificador
+desempatam taxas iguais. As operações restantes continuam pendentes.
+
+`AddProofOfStakeBlock` exige exatamente 20 transações distintas. Um validador
+elegível é selecionado por operação, ponderado pela garantia, usando a hash
+anterior, a altura e o identificador da transação. Ele valida e assina essa
+operação, vinculando a taxa ao seu endereço de recompensa. O bloco registra
+essas provas em `TransactionValidations`, cobertas pelo hash e pelos votos
+dos validadores do bloco. O nó verifica as assinaturas, a ordem, a quantidade
+e o pagamento integral de cada taxa ao restaurar ou sincronizar a cadeia.
+
+A transação de liquidação contém primeiro as parcelas da recompensa de
+consenso, sem taxas, e depois um pagamento por operação ao seu validador.
+Criar ou confirmar o bloco concede somente a parcela da recompensa já
+prevista. Um mesmo participante pode também validar transações, mas só recebe
+suas taxas mediante as respectivas provas assinadas. Os valores e fases da
+recompensa e sua divisão de 30%/70% permanecem iguais.
+
+Novos blocos usam `ConsensusVersion = 4`. O histórico sem esse campo mantém
+as regras antigas e pode preceder os blocos novos; após o primeiro bloco v4,
+a cadeia rejeita blocos legados. Pares v3 são desconectados pelo handshake.
+O DEX revalida caches v3 e preserva transações pendentes antes de salvar em v4.
+`AddBlock` fica reservado às operações de garantia; transferências e tokens
+exigem consenso. A distribuição promocional de carteiras continua separada.
 
 A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 POVIX**:
 

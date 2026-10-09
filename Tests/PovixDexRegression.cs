@@ -86,6 +86,8 @@ internal static partial class PovixDexRegression
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             Check(chain.IsValid(), "existing test chain contains confirmed funds and validator collateral");
+            using (var batches = new ValidationBatchFixture(chain))
+            {
             var model = new CreateTokenViewModel { Name = "Aurora | edição 🌙", Symbol = "AUR", Decimals = 8, Supply = "92233720368,54775807", DestinationAddress = destination, FeePriority = 2 };
             int peerPort = Port(), dexPort = Port();
             using (var peer = new PeerNode(peerPort))
@@ -157,8 +159,11 @@ internal static partial class PovixDexRegression
                     string state = File.ReadAllText(Path.Combine(directory, "dex-network.json"));
                     Check(!state.Contains("RSAKeyValue") || (!state.Contains("<D>") && !state.Contains("<P>")), "persisted network state contains no private keys");
                     service.Dispose();
+                    var legacyCache = (Dictionary<string, object>)Json.DeserializeObject(state);
+                    legacyCache["ConsensusVersion"] = 3;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "pending creation restored while synchronization is required again");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v3 cache preserves pending creation while synchronization is required again");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
@@ -169,7 +174,7 @@ internal static partial class PovixDexRegression
                     CheckRejection(ControllerFor(service, "regression", sessionItems), (string)conflictingDraft["draftId"], conflictingSignatures, "draft_missing");
                     chain.ValidatePendingTransactions(new[] { received });
                     var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
-                    Block confirmed = chain.AddProofOfStakeBlock(new[] { received }, validators);
+                    Block confirmed = batches.Confirm(chain, new[] { received }, validators);
                     Check(chain.IsValid() && chain.GetTokenBalance(new[] { destination }, (string)draft["tokenId"]) == long.MaxValue, "validators confirm exact token supply in a valid block");
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "confirmed", "receipt confirms only after receiving a validated block");
@@ -182,9 +187,10 @@ internal static partial class PovixDexRegression
                         "confirmed change becomes spendable without changing the wallet keys or counting token supply as POVIX");
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
-                    RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators);
+                    RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators, batches);
                 }
                 finally { service.Dispose(); }
+            }
             }
         }
     }

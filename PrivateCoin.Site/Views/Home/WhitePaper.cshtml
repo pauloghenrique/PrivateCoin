@@ -91,7 +91,7 @@
                 <div class="wp-code-card">
                     <div><span></span><span></span><span></span><small>IDENTIDADE DA REDE</small></div>
                     <code>NetworkId = povix-mainnet-v1-{genesisHash}</code>
-                    <code>ConsensusVersion = 2</code>
+                    <code>ConsensusVersion = @PrivateCoin.Core.Blockchain.ConsensusVersion</code>
                     <p>Uma identidade canônica separa redes incompatíveis antes da propagação de dados.</p>
                 </div>
             </section>
@@ -111,6 +111,7 @@
                 <p class="wp-section-number">05 — CONSENSO E VALIDADORES</p>
                 <h2>Garantia econômica.<br />Seleção determinística.</h2>
                 <p>Participantes bloqueiam POVIX em uma transação de garantia (<em>StakeLock</em>). A seleção do criador do próximo bloco é ponderada pelo valor bloqueado e usa a hash anterior e a altura do bloco como semente verificável.</p>
+                <p>Transferências e operações de tokens aguardam em uma fila ordenada pela maior taxa. Cada bloco de consenso reúne 20 transações distintas, com provas individuais assinadas por seus validadores. As taxas remuneram esses validadores separadamente da recompensa pela criação e confirmação do bloco.</p>
                 <div class="wp-split-card">
                     <div class="wp-split-copy"><span>RECOMPENSA POR BLOCO</span><h3>Uma recompensa,<br />dois papéis.</h3><p>O criador propõe o bloco. Confirmadores elegíveis verificam e assinam o mesmo conteúdo.</p></div>
                     <div class="wp-split-bars"><div class="creator"><strong>30%</strong><span>Criador</span></div><div class="confirmers"><strong>70%</strong><span>Confirmadores</span><small>proporcional à garantia</small></div></div>
@@ -136,7 +137,7 @@
                     </div>
                 </div>
                 <div class="wp-token-breakdown"><div><span>99%</span><p><strong>17.820.000 POVIX</strong><br />Recompensas de consenso</p></div><div><span>1%</span><p><strong>180.000 POVIX</strong><br />Distribuição inicial</p></div></div>
-                <p class="wp-caption">Após o bloco 8.000.000, termina a emissão destinada ao consenso. Taxas de transferência continuam remunerando integralmente o criador do bloco.</p>
+                <p class="wp-caption">Após o bloco 8.000.000, termina a emissão destinada ao consenso. As taxas continuam remunerando integralmente os validadores das transações mediante suas provas assinadas.</p>
             </section>
 
             <section id="rede" class="wp-section">
