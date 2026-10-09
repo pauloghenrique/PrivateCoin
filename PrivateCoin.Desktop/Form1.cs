@@ -481,14 +481,19 @@ namespace PrivateCoin.Desktop
                     bool accepted = networkReadiness.Accept(epoch,
                         () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
                         {
-                            // TryReplaceChain validates even when the chain is identical
-                            // or loses the deterministic fork-choice comparison.
-                            changed = blockchain.TryReplaceChain(e.Blocks);
+                            var orphaned = blockchain.Blocks.SelectMany(block => block.Transactions)
+                                .Where(tx => tx.Inputs.Count > 0).ToArray();
+                            if (!blockchain.TrySynchronizeChain(e.Blocks, out changed)) return false;
                             if (changed)
                             {
+                                lock (pendingSync)
+                                    foreach (Transaction tx in orphaned)
+                                        if (pendingIds.Add(tx.Id)) pendingTransactions.Add(tx);
                                 RemoveInvalidPendingTransactions();
+                                RefreshValidatorState();
                                 SaveState();
                             }
+                            return true;
                         });
                     if (!accepted) return;
                     UpdatePeerStatus();
@@ -623,6 +628,7 @@ namespace PrivateCoin.Desktop
 
         private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions)
         {
+            RefreshValidatorState();
             Transaction[] batch = transactions.ToArray();
             return wallets.Where(item => item.IsValidator && !batch.Any(item.Wallet.IsParticipant))
                 .Select(item => item.Validator).ToArray();
@@ -760,6 +766,7 @@ namespace PrivateCoin.Desktop
 
         private void UpdateWalletSummary()
         {
+            RefreshValidatorState();
             NamedWallet selected = SelectedWallet;
             long totalBalance = selected == null ? 0 : blockchain.GetBalance(selected.Wallet.OwnedOneTimeAddresses);
             long lockedStake = selected == null ? 0 : selected.LockedStake;
@@ -774,6 +781,24 @@ namespace PrivateCoin.Desktop
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
+        }
+
+        private void RefreshValidatorState()
+        {
+            ValidatorStake[] active = blockchain.GetActiveValidators().ToArray();
+            foreach (NamedWallet wallet in wallets)
+            {
+                ValidatorStake stake = active.FirstOrDefault(item => wallet.Wallet.OwnedOneTimeAddresses.Contains(item.RewardAddress));
+                if (stake == null)
+                {
+                    if (wallet.IsValidator) wallet.DeactivateValidator();
+                }
+                else if (wallet.LockedStake != stake.LockedAmount || wallet.ValidatorRewardAddress != stake.RewardAddress)
+                {
+                    if (wallet.IsValidator) wallet.DeactivateValidator();
+                    wallet.ActivateValidator(stake.LockedAmount, stake.RewardAddress);
+                }
+            }
         }
 
         private void SaveState()
@@ -793,6 +818,7 @@ namespace PrivateCoin.Desktop
             Transaction[] pending = SnapshotPending();
             int pendingCount = pending.Length;
             chainStatusLabel.Text = "Blocos: " + blockchain.Blocks.Count.ToString(CultureInfo.InvariantCulture) +
+                "   |   Trabalho: " + blockchain.ChainWork.ToString(CultureInfo.InvariantCulture) +
                 "   |   Pendentes: " + pendingCount.ToString(CultureInfo.InvariantCulture) +
                 "   |   Cadeia: " + (blockchain.IsValid() ? "válida" : "inválida");
             int selectedFeeIndex = feeComboBox.SelectedIndex < 0 ? 1 : feeComboBox.SelectedIndex;

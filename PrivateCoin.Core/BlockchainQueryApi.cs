@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Globalization;
 
 namespace PrivateCoin.Core
 {
@@ -27,9 +29,10 @@ namespace PrivateCoin.Core
     public sealed class BlockchainSummary
     {
         internal BlockchainSummary(int issuedBlockCount, long issuedTokenAmount, long currentReward,
-            int initialDistributionBlocksIssued)
+            int initialDistributionBlocksIssued, string chainWork)
         {
             IssuedBlockCount = issuedBlockCount;
+            ChainWork = chainWork;
             IssuedTokenAmount = issuedTokenAmount;
             CurrentReward = currentReward;
             InitialDistributionBlocksIssued = initialDistributionBlocksIssued;
@@ -40,6 +43,7 @@ namespace PrivateCoin.Core
         }
 
         public int IssuedBlockCount { get; }
+        public string ChainWork { get; }
         public long IssuedTokenAmount { get; }
         public long CurrentReward { get; }
         public int InitialDistributionBlocksIssued { get; }
@@ -54,9 +58,10 @@ namespace PrivateCoin.Core
     public sealed class LedgerEntry
     {
         internal LedgerEntry(int blockHeight, string blockHash, Transaction transaction,
-            LedgerEntryType type, long inputAmount, long outputAmount, long issuedAmount)
+            LedgerEntryType type, long inputAmount, long outputAmount, long issuedAmount, int confirmations)
         {
             BlockHeight = blockHeight;
+            Confirmations = confirmations;
             BlockHash = blockHash;
             TransactionId = transaction.Id;
             TimestampUtcTicks = transaction.TimestampUtcTicks;
@@ -69,6 +74,7 @@ namespace PrivateCoin.Core
         }
 
         public int BlockHeight { get; }
+        public int Confirmations { get; }
         public string BlockHash { get; }
         public string TransactionId { get; }
         public long TimestampUtcTicks { get; }
@@ -112,7 +118,8 @@ namespace PrivateCoin.Core
                 .Aggregate(0L, (total, block) => checked(total + ProofOfStake.GetBlockReward(block.Height)));
             long issued = checked((long)initialBlocks * Blockchain.WalletCreationReward + validatorIssuance);
             return new BlockchainSummary(Math.Max(0, snapshot.Length - 1), issued,
-                ProofOfStake.GetBlockReward(snapshot.Length), initialBlocks);
+                ProofOfWork.GetBlockReward(snapshot.Length), initialBlocks,
+                snapshot.Aggregate(BigInteger.Zero, (total, block) => total + ProofOfWork.GetBlockWork(block)).ToString(CultureInfo.InvariantCulture));
         }
 
         public IReadOnlyList<LedgerEntry> GetLedger(int offset, int limit)
@@ -152,7 +159,7 @@ namespace PrivateCoin.Core
                     if (transaction.Kind == TransactionKind.TokenCreate) type = LedgerEntryType.TokenCreation;
                     else if (transaction.Kind == TransactionKind.TokenTransfer) type = LedgerEntryType.TokenTransfer;
                     entries.Add(new LedgerEntry(block.Height, block.Hash, transaction, type,
-                        inputAmount, outputAmount, issuedAmount));
+                        inputAmount, outputAmount, issuedAmount, snapshot.Length - block.Height));
                     for (int outputIndex = 0; outputIndex < transaction.Outputs.Count; outputIndex++)
                         knownOutputs.Add(OutputKey(transaction.Id, outputIndex), transaction.Outputs[outputIndex].AssetId == null ? transaction.Outputs[outputIndex].Amount : 0);
                 }

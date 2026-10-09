@@ -87,7 +87,7 @@
                     <div><span>04</span><i>✓</i><strong>Confirmar</strong><small>Validadores incluem e aprovam o bloco.</small></div>
                 </div>
                 <h3 class="wp-subtitle">Integridade da cadeia</h3>
-                <p>Blocos carregam a hash do bloco anterior e a hash de seu próprio conteúdo. Essa ligação torna alterações históricas detectáveis. Ao sincronizar, um nó aceita apenas uma cadeia que passe por toda a validação local, usando a cadeia válida mais longa e um desempate determinístico.</p>
+                <p>Blocos carregam a hash do bloco anterior e a hash de seu próprio conteúdo. Essa ligação torna alterações históricas detectáveis. Ao sincronizar, um nó aceita apenas uma cadeia que passe por toda a validação local, escolhendo a cadeia válida com maior trabalho acumulado e um desempate determinístico pela hash da ponta. Cada bloco precisa cumprir o alvo de prova de trabalho e suas demais regras de consenso.</p>
                 <div class="wp-code-card">
                     <div><span></span><span></span><span></span><small>IDENTIDADE DA REDE</small></div>
                     <code>NetworkId = povix-mainnet-v1-{genesisHash}</code>
@@ -109,9 +109,11 @@
 
             <section id="consenso" class="wp-section">
                 <p class="wp-section-number">05 — CONSENSO E VALIDADORES</p>
-                <h2>Garantia econômica.<br />Seleção determinística.</h2>
+                <h2>Garantia econômica.<br />Prova de trabalho.</h2>
                 <p>Participantes bloqueiam POVIX em uma transação de garantia (<em>StakeLock</em>). A seleção do criador do próximo bloco é ponderada pelo valor bloqueado e usa a hash anterior e a altura do bloco como semente verificável.</p>
-                <p>Transferências e operações de tokens aguardam em uma fila ordenada pela maior taxa. Cada bloco de consenso reúne 20 transações distintas, com provas individuais assinadas por seus validadores. As taxas remuneram esses validadores separadamente da recompensa pela criação e confirmação do bloco.</p>
+                <p>Transferências e operações de tokens aguardam em uma fila ordenada pela maior taxa. Cada bloco de consenso exige exatamente 20 transações distintas, com provas individuais assinadas por seus validadores. Lotes menores ficam na fila. As taxas remuneram esses validadores separadamente da recompensa pela criação e confirmação do bloco.</p>
+                <p>O stake escolhe o criador e os validadores assinam as provas. O bloco também precisa de uma hash SHA-256 que cumpra o alvo de mineração. Cada nó verifica a prova, as garantias, as assinaturas, os gastos e a emissão antes de considerar seu trabalho acumulado.</p>
+                <p>Não há checkpoint nem finalização irreversível. Uma cadeia válida com mais trabalho pode reorganizar o histórico e reduzir confirmações. Seis confirmações são uma referência, sem garantia absoluta. O alvo atual é fixo, com 12 bits de dificuldade, e não oferece a resistência econômica da rede Bitcoin.</p>
                 <div class="wp-split-card">
                     <div class="wp-split-copy"><span>RECOMPENSA POR BLOCO</span><h3>Uma recompensa,<br />dois papéis.</h3><p>O criador propõe o bloco. Confirmadores elegíveis verificam e assinam o mesmo conteúdo.</p></div>
                     <div class="wp-split-bars"><div class="creator"><strong>30%</strong><span>Criador</span></div><div class="confirmers"><strong>70%</strong><span>Confirmadores</span><small>proporcional à garantia</small></div></div>
