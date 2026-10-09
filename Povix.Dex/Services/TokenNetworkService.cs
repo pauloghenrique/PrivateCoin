@@ -68,6 +68,28 @@ namespace Povix.Dex.Services
             lock (sync) return blockchain.GetSpendableBalance(addresses, pending);
         }
 
+        public object GetBalanceDetails(string[] addresses)
+        {
+            lock (sync)
+            {
+                var confirmed = blockchain.GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == null).ToArray();
+                var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input =>
+                    input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
+                var pendingIds = new HashSet<string>(pending.Select(tx => tx.Id), StringComparer.Ordinal);
+                long reservedAmount = confirmed.Where(item => item.TransactionKind != TransactionKind.StakeLock &&
+                    reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
+                    .Sum(item => item.Output.Amount);
+                long incoming = blockchain.GetUnspentOutputs(addresses, pending).Where(item => item.Output.AssetId == null &&
+                    item.TransactionKind != TransactionKind.StakeLock && pendingIds.Contains(item.TransactionId)).Sum(item => item.Output.Amount);
+                return new {
+                    balanceAtomic = blockchain.GetSpendableBalance(addresses, pending).ToString(CultureInfo.InvariantCulture),
+                    confirmedAtomic = confirmed.Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
+                    reservedAtomic = reservedAmount.ToString(CultureInfo.InvariantCulture),
+                    pendingIncomingAtomic = incoming.ToString(CultureInfo.InvariantCulture)
+                };
+            }
+        }
+
         public object Prepare(CreateTokenViewModel model, string[] publicKeys, string changeAddress, string owner)
         {
             lock (sync)
@@ -150,6 +172,8 @@ namespace Povix.Dex.Services
                 if (transaction == null || transaction.Kind != TransactionKind.TokenCreate) return null;
                 return new TokenRegistrationViewModel { TransactionId = transaction.Id, Token = transaction.Token,
                     Fee = transaction.Fee, DestinationAddress = transaction.Outputs.First(output => output.AssetId == transaction.Token.Id).OneTimeAddress,
+                    PovixOutputs = transaction.Outputs.Where(output => output.AssetId == null).Select(output =>
+                        new TransactionOutput { Amount = output.Amount, OneTimeAddress = output.OneTimeAddress }).ToArray(),
                     Status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ? "pending" : "rejected",
                     BlockHeight = block?.Height, BlockHash = block?.Hash, PeerCount = node.ConnectedPeerCount,
                     Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1 };

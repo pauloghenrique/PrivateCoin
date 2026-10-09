@@ -25,6 +25,15 @@ Core, sessão, rejeição de assinatura inválida, reserva de UTXOs, propagaçã
 repetição idempotente, reinício, confirmação proof-of-stake e preservação das
 chaves de endereços gerados no navegador.
 
+A regressão do formulário executa o script real de criação com a carteira
+Web Crypto e respostas HTTP de teste: a preparação deve escolher um endereço
+da carteira importada sem adicionar uma chave para o troco, exibir seu valor
+exato na revisão e distinguir saldo reservado de saldo disponível. Na rede
+local real, também confere os valores retornados pela ação MVC de saldo e
+pelo comprovante. Após a confirmação, os mesmos endereços do arquivo original
+da carteira reconhecem exatamente o saldo anterior menos a taxa, sem contar
+a quantidade do token como POVIX.
+
 A preparação e o envio passam também pelas ações MVC reais, usando contextos
 HTTP de teste e a coleção de sessão do ASP.NET. Confere que a preparação grava
 a sessão (necessário para conservar seu cookie), que outra requisição com a

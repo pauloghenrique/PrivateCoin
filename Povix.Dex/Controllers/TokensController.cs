@@ -33,7 +33,7 @@ namespace Povix.Dex.Controllers
             NoCache();
             if (!ValidAddresses(addresses)) return Error("Endereços da carteira inválidos.", 400);
             if (MvcApplication.TokenNetwork == null) return Error("A conexão com a rede está indisponível.", 503);
-            return Json(new { balanceAtomic = MvcApplication.TokenNetwork.GetBalance(addresses).ToString(System.Globalization.CultureInfo.InvariantCulture) });
+            return Json(MvcApplication.TokenNetwork.GetBalanceDetails(addresses));
         }
 
         [HttpPost, ValidateAntiForgeryToken]

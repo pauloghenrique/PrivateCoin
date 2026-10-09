@@ -78,7 +78,9 @@ internal static class PovixDexRegression
             var chain = new Blockchain();
             Block reward;
             chain.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
-            string destination = issuer.CreateReceiveAddress(), change = issuer.CreateReceiveAddress();
+            string destination = issuer.CreateReceiveAddress(), change = issuer.OwnedOneTimeAddresses.First();
+            string[] originalAddresses = issuer.OwnedOneTimeAddresses.ToArray();
+            long originalBalance = chain.GetBalance(originalAddresses);
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
             chain.TryAddWalletCreationReward(firstAddress, out reward); chain.TryAddWalletCreationReward(secondAddress, out reward);
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
@@ -108,6 +110,9 @@ internal static class PovixDexRegression
                     Check(sessionItems.Dirty && sessionItems.Count > 0,
                         "MVC preparation persists session state so ASP.NET retains the owner cookie");
                     var draft = Json.DeserializeObject(Json.Serialize(prepared)) as Dictionary<string, object>;
+                    long fee = long.Parse((string)draft["feeAtomic"]), expectedChange = originalBalance - fee;
+                    Check((string)draft["changeAddress"] == change && long.Parse((string)draft["changeAtomic"]) == expectedChange,
+                        "review returns the full native balance minus only the fee to an original wallet address");
                     File.WriteAllText(Path.Combine(directory, "fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = prepared,
                         expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination },
                         networkId = Blockchain.NetworkId, changeAddress = change }));
@@ -140,6 +145,13 @@ internal static class PovixDexRegression
                     Wait(() => received != null && received.Id == id, "locally signed token creation propagates over P2P");
                     Check(service.GetRegistration(id).Status == "pending" && chain.GetTokens().Count == 0, "pending receipt does not claim blockchain confirmation");
                     Check(service.GetBalance(issuer.OwnedOneTimeAddresses.ToArray()) == 0, "pending funding output is reserved");
+                    var pendingBalance = BalanceResult(controller, originalAddresses);
+                    Check((string)pendingBalance["balanceAtomic"] == "0" && long.Parse((string)pendingBalance["confirmedAtomic"]) == originalBalance &&
+                        long.Parse((string)pendingBalance["reservedAtomic"]) == originalBalance && long.Parse((string)pendingBalance["pendingIncomingAtomic"]) == expectedChange,
+                        "MVC balance distinguishes the whole reserved UTXO from the pending change and the fee");
+                    var povixOutputs = service.GetRegistration(id).PovixOutputs;
+                    Check(povixOutputs.Length == 1 && povixOutputs[0].OneTimeAddress == change && povixOutputs[0].Amount == expectedChange,
+                        "receipt exposes the actual native change amount and its original wallet address");
                     Check(service.SubmitAsync((string)draft["draftId"], signatures, "regression").GetAwaiter().GetResult() == id, "submission retry is idempotent");
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "funding_unavailable");
                     string state = File.ReadAllText(Path.Combine(directory, "dex-network.json"));
@@ -162,6 +174,12 @@ internal static class PovixDexRegression
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "confirmed", "receipt confirms only after receiving a validated block");
                     Check(service.GetRegistration(id).BlockHash == confirmed.Hash && service.GetRegistration(id).Confirmations == 1, "receipt exposes real block hash and confirmations");
+                    Check(chain.GetBalance(originalAddresses) == expectedChange && service.GetBalance(originalAddresses) == expectedChange,
+                        "Desktop wallet addresses and DEX retain exactly the original POVIX balance minus the fee after confirmation");
+                    var confirmedBalance = BalanceResult(ControllerFor(service, "regression", sessionItems), originalAddresses);
+                    Check(long.Parse((string)confirmedBalance["balanceAtomic"]) == expectedChange && long.Parse((string)confirmedBalance["confirmedAtomic"]) == expectedChange &&
+                        (string)confirmedBalance["reservedAtomic"] == "0" && (string)confirmedBalance["pendingIncomingAtomic"] == "0",
+                        "confirmed change becomes spendable without changing the wallet keys or counting token supply as POVIX");
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
                 }
@@ -172,6 +190,9 @@ internal static class PovixDexRegression
 
     private static Dictionary<string, object> SubmitResult(TokensController controller, string draftId, string[] signatures)
         => Json.DeserializeObject(Json.Serialize(((JsonResult)controller.Submit(draftId, signatures).GetAwaiter().GetResult()).Data)) as Dictionary<string, object>;
+
+    private static Dictionary<string, object> BalanceResult(TokensController controller, string[] addresses)
+        => Json.DeserializeObject(Json.Serialize(((JsonResult)controller.Balance(addresses)).Data)) as Dictionary<string, object>;
 
     private static void CheckRejection(TokensController controller, string draftId, string[] signatures, string code, int status = 400)
     {

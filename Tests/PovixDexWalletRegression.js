@@ -16,6 +16,7 @@ const wallet = global.PovixTokenWallet;
     assert.equal(wallet.isUnlocked(), false);
     await wallet.importFile(file(fixture.wallet), 'dex-test-password-only');
     assert(wallet.addresses().includes(fixture.changeAddress));
+    await require('./PovixDexChangeUiRegression.js')(wallet, fixture);
     await wallet.verifyDraft(fixture.draft, fixture.expected, fixture.networkId, fixture.changeAddress);
     assert.equal(wallet.parseSupply('92233720368,54775807', 8), '9223372036854775807');
     assert.equal(wallet.formatAtomic('9223372036854775807', 8), '92.233.720.368,54775807');
