@@ -25,23 +25,45 @@
         return result;
     }
     const selected = () => tokens.find(token => token.tokenId === byId('TokenId').value);
-    function fee() { return network ? String(network.Fees[{ '1': 0, '2': 1, '4': 2 }[form.querySelector('[name="FeePriority"]:checked').value]]) : '0'; }
+    function fee() {
+        const option = form.querySelector('[name="FeePriority"]:checked');
+        const index = option && { '1': 0, '2': 1, '4': 2 }[option.value];
+        if (!network || !Array.isArray(network.Fees) || index == null) return null;
+        const value = String(network.Fees[index]);
+        return /^[0-9]+$/.test(value) && BigInt(value) >= 1n && BigInt(value) <= 100000000n ? value : null;
+    }
+    function reviewIssue() {
+        if (!wallet.isUnlocked()) return 'Abra a carteira do criador para continuar.';
+        if (!network || !network.CanCreate) return 'Aguarde a conexão e a sincronização da rede.';
+        if (balance === null) return 'Não foi possível consultar os saldos. Aguarde a atualização da carteira.';
+        if (!tokens.length) return 'Nenhum token confirmado foi criado com as chaves desta carteira.';
+        const token = selected();
+        if (!token) return 'Selecione um token criado por esta carteira.';
+        if (BigInt(token.balanceAtomic) === 0n) return BigInt(token.confirmedAtomic) > 0n ?
+            'O saldo confirmado deste token está reservado por um envio pendente. Aguarde a confirmação ou a atualização da cadeia.' :
+            'Não há saldo disponível deste token nas chaves da carteira aberta. Se o endereço de recebimento foi gerado no DEX, abra o backup .povixwallet atualizado que contém essa chave.';
+        if (!byId('Amount').value) return 'Informe a quantidade do token que deseja enviar.';
+        let amount;
+        try { amount = wallet.parseSupply(byId('Amount').value, token.decimals); } catch (error) { return error.message; }
+        if (BigInt(amount) > BigInt(token.balanceAtomic)) return 'A quantidade ultrapassa o saldo disponível do token: ' + wallet.formatAtomic(token.balanceAtomic, token.decimals) + ' ' + token.symbol + '.';
+        if (!/^[0-9a-f]{64}$/.test(byId('DestinationAddress').value)) return 'Informe um endereço de recebimento válido com 64 caracteres.';
+        const selectedFee = fee();
+        if (selectedFee === null) return 'Selecione uma taxa disponível e aguarde sua atualização pela rede.';
+        if (BigInt(balance) < BigInt(selectedFee)) return 'POVIX disponível para taxas: ' + wallet.formatAtomic(balance, 8) +
+            '. A taxa selecionada exige ' + wallet.formatAtomic(selectedFee, 8) + ' POVIX. Valores reservados ou bloqueados como garantia não ficam disponíveis para a taxa.';
+        return null;
+    }
     function update() {
         const unlocked = wallet.isUnlocked(), token = selected(), ready = Boolean(network && network.CanCreate);
-        let amountValid = false;
-        try { amountValid = Boolean(token && BigInt(wallet.parseSupply(byId('Amount').value, token.decimals)) <= BigInt(token.balanceAtomic)); } catch (_) { }
-        const enough = balance !== null && BigInt(balance) >= BigInt(fee());
         byId('transfer-fields').disabled = busy || Boolean(draft) || !unlocked || !tokens.length;
-        byId('prepare-transfer').disabled = busy || Boolean(draft) || !unlocked || !ready || !enough || !amountValid;
+        // A click can explain field/balance problems; preparation still checks every requirement.
+        byId('prepare-transfer').disabled = busy || Boolean(draft) || !unlocked || !ready;
         byId('wallet-connect').disabled = busy || Boolean(choices && !byId('wallet-choice').value);
         byId('wallet-file').disabled = busy; byId('wallet-password').disabled = busy || Boolean(choices);
         byId('wallet-choice').disabled = busy || !choices; byId('wallet-lock').disabled = busy;
         byId('sign-transfer').disabled = busy || !draft || !unlocked || !ready || !backupDownloaded || !byId('backup-confirmed').checked;
         byId('edit-transfer').disabled = busy; byId('download-backup').disabled = busy;
-        byId('transfer-hint').textContent = busy ? 'Processando no seu dispositivo…' : !unlocked ? 'Abra a carteira do criador para continuar.' :
-            !ready ? 'Aguarde a conexão e a sincronização da rede.' : draft ? 'Confira o resumo e assine.' : !tokens.length ?
-                'Nenhum token confirmado foi criado com as chaves desta carteira.' : !token ? 'Selecione um token criado por esta carteira.' :
-                    !enough ? 'É necessário saldo confirmado em POVIX para a taxa.' : !amountValid ? 'Informe uma quantidade dentro do saldo disponível.' : 'Revise a movimentação antes de assinar.';
+        byId('transfer-hint').textContent = busy ? 'Processando no seu dispositivo…' : draft ? 'Confira o resumo e assine.' : reviewIssue() || 'Revise a movimentação antes de assinar.';
         byId('review-name').textContent = draft ? draft.name : token ? token.name : 'Seu token';
         byId('review-symbol').textContent = draft ? draft.symbol : token ? token.symbol : 'SÍMBOLO';
         byId('review-avatar').textContent = (draft ? draft.symbol : token ? token.symbol : '◇').charAt(0);
@@ -51,7 +73,7 @@
             else if (token) amount = wallet.formatAtomic(wallet.parseSupply(byId('Amount').value, token.decimals), token.decimals) + ' ' + token.symbol;
         } catch (_) { }
         byId('review-amount').textContent = amount;
-        byId('review-fee').textContent = wallet.formatAtomic(draft ? draft.feeAtomic : fee(), 8) + ' POVIX';
+        byId('review-fee').textContent = draft ? wallet.formatAtomic(draft.feeAtomic, 8) + ' POVIX' : fee() === null ? 'Consultando a taxa…' : wallet.formatAtomic(fee(), 8) + ' POVIX';
         byId('review-token-change').textContent = draft ? wallet.formatAtomic(draft.tokenChangeAtomic, draft.decimals) + ' ' + draft.symbol : 'Calculado na revisão';
         byId('review-povix-change').textContent = draft ? wallet.formatAtomic(draft.povixChangeAtomic, 8) + ' POVIX' : 'Calculado na revisão';
         byId('review-destination').textContent = draft ? draft.destinationAddress : byId('DestinationAddress').value || 'Informe o endereço';
@@ -172,9 +194,16 @@
     byId('wallet-file').addEventListener('change', () => { lock(); message(''); });
     byId('wallet-choice').addEventListener('change', update); byId('wallet-lock').addEventListener('click', lock);
     byId('TokenId').addEventListener('change', () => { resetDraft(); update(); history(); });
-    form.addEventListener('input', () => { if (!draft) update(); });
+    function fieldsChanged() { if (!draft) { message(''); update(); } }
+    form.addEventListener('input', fieldsChanged);
+    form.addEventListener('change', fieldsChanged);
+    // Native HTML validation runs before submit; expose its reason in the page too.
+    form.addEventListener('invalid', () => { if (!draft) message(reviewIssue() || 'Confira os campos da movimentação.'); }, true);
     form.addEventListener('submit', async event => {
-        event.preventDefault(); if (busy || draft || !form.reportValidity()) return;
+        event.preventDefault(); if (busy || draft) return;
+        const issue = reviewIssue();
+        if (issue) { message(issue); form.reportValidity(); return; }
+        if (!form.reportValidity()) return;
         const token = selected(); if (!token || !wallet.isUnlocked()) return;
         busy = true; message(''); update();
         try {
