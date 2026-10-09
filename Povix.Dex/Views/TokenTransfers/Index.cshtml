@@ -16,6 +16,7 @@
                     <section class="form-section"><div class="section-heading"><span class="step-number">01</span><div><h2>Token criado por você</h2><p>Esta tela exige a assinatura do criador registrada na criação.</p></div></div>
                         <label for="TokenId">Selecione o token</label><select id="TokenId" name="TokenId" required><option value="">Abra a carteira para consultar</option></select>
                         <small id="token-balance">Somente tokens confirmados são listados.</small><small id="token-identifier" class="address-input"></small>
+                        <div id="token-receiving-addresses" class="token-receiving-addresses" aria-live="polite"></div>
                     </section>
                     <section class="form-section"><div class="section-heading"><span class="step-number">02</span><div><h2>Quantidade e destino</h2><p>Você pode enviar somente o saldo disponível desta carteira.</p></div></div>
                         <label for="Amount">Quantidade a enviar</label>@Html.TextBoxFor(m => m.Amount, new { maxlength = "30", pattern = "[0-9]+([.,][0-9]+)?", required = "required", inputmode = "decimal", placeholder = "Ex.: 100,50" })<small id="amount-help">A precisão segue o token selecionado.</small>

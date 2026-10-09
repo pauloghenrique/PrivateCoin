@@ -21,6 +21,7 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     };
     node('token-app').dataset = { networkUrl: '/network', balanceUrl: '/balance', prepareUrl: '/prepare', networkId: fixture.networkId };
     for (const key of ['Name', 'Symbol', 'Supply', 'Decimals', 'DestinationAddress']) node(key).value = fixture.expected[key];
+    node('DestinationAddress').value = '';
     let pending = false, refresh, preparations = 0;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-create.js'), 'utf8'), {
         window: { PovixTokenWallet: wallet }, document: { getElementById: node, querySelectorAll: () => [] },
@@ -44,11 +45,29 @@ module.exports = async function checkChangeUi(wallet, fixture) {
         }
     });
     const bytes = new TextEncoder().encode(JSON.stringify(fixture.wallet));
-    node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.buffer }];
+    node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.slice().buffer }];
     node('wallet-password').value = 'dex-test-password-only';
     await node('wallet-form').listeners.submit({ preventDefault() {} });
     node('wallet-choice').value = '0';
     await node('wallet-form').listeners.submit({ preventDefault() {} });
+    assert.equal(node('DestinationAddress').value, originalAddresses[0], 'opening the wallet defaults the issuance to an existing key');
+    assert(node('destination-help').textContent.includes('já salvo'));
+    node('DestinationAddress').value = '0'.repeat(64);
+    node('token-form').listeners.input();
+    assert(node('review-destination-help').textContent.includes('não pertence'), 'external issuance must explain why creator authorization alone cannot spend it');
+    node('wallet-lock').listeners.click();
+    node('wallet-password').value = 'dex-test-password-only';
+    await node('wallet-form').listeners.submit({ preventDefault() {} });
+    node('wallet-choice').value = '0';
+    await node('wallet-form').listeners.submit({ preventDefault() {} });
+    assert.equal(node('DestinationAddress').value, '0'.repeat(64), 'opening a wallet must preserve an explicitly chosen destination');
+    assert.equal(node('app-message').textContent, '');
+    assert.equal(wallet.isUnlocked(), true);
+    await node('own-address').listeners.click();
+    assert.equal(node('DestinationAddress').value, originalAddresses[0]);
+    assert.deepEqual(wallet.addresses(), originalAddresses, 'the receive button must not create a key missing from wallets.dat');
+    node('DestinationAddress').value = fixture.expected.DestinationAddress;
+    node('token-form').listeners.input();
     await node('token-form').listeners.submit({ preventDefault() {} });
     assert.equal(node('app-message').textContent, '');
     assert.equal(preparations, 1);
@@ -60,5 +79,5 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     assert(node('wallet-balance-detail').textContent.includes('Confirmado: 6,00000000 POVIX'));
     assert(node('wallet-balance-detail').textContent.includes('Reservado: 6,00000000 POVIX'));
     assert(node('wallet-balance-detail').textContent.includes('A receber após confirmação: ' + wallet.formatAtomic(fixture.draft.changeAtomic, 8)));
-    console.log('PASS token form returns change to an original wallet address and distinguishes reserved funds from the fee');
+    console.log('PASS token form receives issuance and change under original keys, explains external destinations and distinguishes reserved funds from the fee');
 };

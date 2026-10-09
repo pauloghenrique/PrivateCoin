@@ -32,6 +32,15 @@
         const value = String(network.Fees[index]);
         return /^[0-9]+$/.test(value) && BigInt(value) >= 1n && BigInt(value) <= 100000000n ? value : null;
     }
+    function tokenBalanceIssue(token) {
+        if (BigInt(token.confirmedAtomic) > 0n) return 'O saldo confirmado deste token está reservado por um envio pendente. Aguarde a confirmação ou a atualização da cadeia.';
+        if (Array.isArray(token.receivingAddresses)) {
+            const missing = token.receivingAddresses.some(item => !wallet.addresses().includes(item.address) && BigInt(item.confirmedAtomic) > 0n);
+            if (missing) return 'Há saldo do token no endereço que recebeu a emissão, mas a chave desse endereço não está na carteira aberta. Se ele foi gerado no DEX, abra o backup .povixwallet atualizado daquela criação e selecione a carteira do criador. O wallets.dat do Desktop não contém as chaves geradas no navegador.';
+            return 'Não há saldo disponível deste token nas chaves da carteira aberta. Confira os endereços que receberam a emissão e os envios já realizados.';
+        }
+        return 'Não há saldo disponível deste token nas chaves da carteira aberta. Se o endereço de recebimento foi gerado no DEX, abra o backup .povixwallet atualizado que contém essa chave.';
+    }
     function reviewIssue() {
         if (!wallet.isUnlocked()) return 'Abra a carteira do criador para continuar.';
         if (!network || !network.CanCreate) return 'Aguarde a conexão e a sincronização da rede.';
@@ -39,9 +48,7 @@
         if (!tokens.length) return 'Nenhum token confirmado foi criado com as chaves desta carteira.';
         const token = selected();
         if (!token) return 'Selecione um token criado por esta carteira.';
-        if (BigInt(token.balanceAtomic) === 0n) return BigInt(token.confirmedAtomic) > 0n ?
-            'O saldo confirmado deste token está reservado por um envio pendente. Aguarde a confirmação ou a atualização da cadeia.' :
-            'Não há saldo disponível deste token nas chaves da carteira aberta. Se o endereço de recebimento foi gerado no DEX, abra o backup .povixwallet atualizado que contém essa chave.';
+        if (BigInt(token.balanceAtomic) === 0n) return tokenBalanceIssue(token);
         if (!byId('Amount').value) return 'Informe a quantidade do token que deseja enviar.';
         let amount;
         try { amount = wallet.parseSupply(byId('Amount').value, token.decimals); } catch (error) { return error.message; }
@@ -81,6 +88,15 @@
         byId('token-balance').textContent = token ? 'Disponível: ' + wallet.formatAtomic(token.balanceAtomic, token.decimals) + ' ' + token.symbol +
             ' · Confirmado: ' + wallet.formatAtomic(token.confirmedAtomic, token.decimals) + ' ' + token.symbol : 'Somente tokens confirmados são listados.';
         byId('token-identifier').textContent = token ? token.tokenId : '';
+        const receiving = byId('token-receiving-addresses');
+        receiving.replaceChildren();
+        if (unlocked && token && Array.isArray(token.receivingAddresses)) token.receivingAddresses.forEach(item => {
+            const entry = document.createElement('small');
+            entry.textContent = 'Endereço que recebeu a emissão: ' + item.address + ' · Saldo confirmado nesse endereço: ' +
+                wallet.formatAtomic(item.confirmedAtomic, token.decimals) + ' ' + token.symbol + ' · ' +
+                (wallet.addresses().includes(item.address) ? 'Chave presente na carteira aberta.' : 'Chave ausente na carteira aberta.');
+            receiving.appendChild(entry);
+        });
         byId('amount-help').textContent = token ? token.decimals + ' casas decimais. Use vírgula ou ponto, sem separador de milhar.' : 'A precisão segue o token selecionado.';
     }
     function resetDraft() {

@@ -19,20 +19,33 @@ namespace Povix.Dex.Services
             lock (sync)
             {
                 var keys = new HashSet<string>(publicKeys, StringComparer.Ordinal);
-                var addresses = publicKeys.Select(AddressFor).ToArray();
-                // Read the wallet's confirmed outputs once for all token balances.
+                var addresses = new HashSet<string>(publicKeys.Select(AddressFor), StringComparer.Ordinal);
+                var creations = blockchain.Blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
+                    keys.Contains(tx.Inputs[0].PublicKey)).ToArray();
+                var receivingAddresses = creations.SelectMany(tx => tx.Outputs.Where(output => output.AssetId == tx.Token.Id))
+                    .Select(output => output.OneTimeAddress);
+                // Query confirmed outputs once; missing receiving keys are diagnostic only.
+                // An issuance to another address must never count as this wallet's spendable balance.
                 blockchain.ValidatePendingTransactions(pending);
-                var outputs = blockchain.GetUnspentOutputs(addresses).Where(item => item.Output.AssetId != null).ToArray();
+                var knownOutputs = blockchain.GetUnspentOutputs(addresses.Concat(receivingAddresses).Distinct(StringComparer.Ordinal))
+                    .Where(item => item.Output.AssetId != null).ToArray();
+                var outputs = knownOutputs.Where(item => addresses.Contains(item.Output.OneTimeAddress)).ToArray();
+                var receivingBalances = knownOutputs.GroupBy(item => item.Output.AssetId + ":" + item.Output.OneTimeAddress, StringComparer.Ordinal)
+                    .ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input =>
                     input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 var confirmed = outputs.GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
                 var available = outputs.Where(item => !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
-                return blockchain.Blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
-                    keys.Contains(tx.Inputs[0].PublicKey)).Select(tx => new {
+                return creations.Select(tx => new {
                         tokenId = tx.Token.Id, name = tx.Token.Name, symbol = tx.Token.Symbol, decimals = tx.Token.Decimals,
                         supplyAtomic = tx.Token.Supply.ToString(CultureInfo.InvariantCulture), creationTransactionId = tx.Id,
                         creatorAddress = AddressFor(tx.Inputs[0].PublicKey),
+                        receivingAddresses = tx.Outputs.Where(output => output.AssetId == tx.Token.Id)
+                            .Select(output => output.OneTimeAddress).Distinct(StringComparer.Ordinal).Select(address => new {
+                                address, owned = addresses.Contains(address),
+                                confirmedAtomic = (receivingBalances.ContainsKey(tx.Token.Id + ":" + address) ? receivingBalances[tx.Token.Id + ":" + address] : 0).ToString(CultureInfo.InvariantCulture)
+                            }).ToArray(),
                         balanceAtomic = (available.ContainsKey(tx.Token.Id) ? available[tx.Token.Id] : 0).ToString(CultureInfo.InvariantCulture),
                         confirmedAtomic = (confirmed.ContainsKey(tx.Token.Id) ? confirmed[tx.Token.Id] : 0).ToString(CultureInfo.InvariantCulture)
                     }).ToArray();

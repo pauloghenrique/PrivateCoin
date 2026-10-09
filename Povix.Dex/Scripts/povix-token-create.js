@@ -9,7 +9,7 @@
     let network = null, draft = null, expected = null, changeAddress = null;
     let busy = false, refreshing = false, backupDownloaded = false, balance = null;
     let signedSignatures = null;
-    let walletChoices = null;
+    let walletChoices = null, walletDestination = null;
 
     function message(text) { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; }
     async function post(url, values) {
@@ -67,6 +67,14 @@
         byId('review-avatar').textContent = symbol ? symbol.charAt(0) : '◇';
         byId('review-decimals').textContent = String(decimals);
         byId('review-destination').textContent = (draft ? draft.destinationAddress : data.DestinationAddress) || 'Informe o endereço de recebimento';
+        const destination = draft ? draft.destinationAddress : data.DestinationAddress;
+        const owned = wallet.isUnlocked() && wallet.addresses().includes(destination);
+        const destinationHelp = owned ? 'Os tokens serão recebidos em um endereço já salvo na carteira aberta.' :
+            /^[0-9a-f]{64}$/.test(destination) && wallet.isUnlocked() ?
+                'Este endereço não pertence à carteira aberta. Para movimentar os tokens pelo DEX, ela precisará também da chave desse endereço.' :
+                'Use um endereço da sua carteira para receber e depois movimentar o token.';
+        byId('destination-help').textContent = destinationHelp;
+        byId('review-destination-help').textContent = destinationHelp;
         try { byId('review-supply').textContent = wallet.formatAtomic(draft ? draft.supplyAtomic : wallet.parseSupply(data.Supply, decimals), decimals); }
         catch (_) { byId('review-supply').textContent = '—'; }
         byId('review-fee').textContent = wallet.formatAtomic(draft ? draft.feeAtomic : selectedFee(), 8) + ' POVIX';
@@ -149,6 +157,7 @@
                 return;
             }
             const info = await wallet.selectWallet(byId('wallet-choice').value);
+            if (!byId('DestinationAddress').value || byId('DestinationAddress').value === walletDestination) useOwnDestination();
             resetDraft(); changeAddress = null; balance = null;
             byId('wallet-name').textContent = info.name;
             byId('wallet-state').textContent = 'Assinatura local';
@@ -177,12 +186,19 @@
         byId('wallet-state').textContent = 'Bloqueada';
         byId('wallet-form').hidden = false; byId('wallet-connected').hidden = true;
     });
-    byId('own-address').addEventListener('click', async () => {
-        if (busy) return;
-        busy = true; message(''); updateControls();
-        try { byId('DestinationAddress').value = await wallet.createAddress(); updateReview(); }
+    function useOwnDestination() {
+        const address = wallet.addresses()[0];
+        if (!address) throw new Error('A carteira precisa ter um endereço de recebimento salvo.');
+        // Reuse a key in the imported file so Desktop and DEX recognize the issued balance.
+        walletDestination = address;
+        byId('DestinationAddress').value = address;
+    }
+    byId('own-address').addEventListener('click', () => {
+        if (busy || draft || !wallet.isUnlocked()) return;
+        message('');
+        try { useOwnDestination(); updateReview(); }
         catch (error) { message(error.message); }
-        finally { busy = false; updateControls(); }
+        updateControls();
     });
     form.addEventListener('input', () => { if (!draft) { updateReview(); updateControls(); } });
     byId('Symbol').addEventListener('input', () => { byId('Symbol').value = byId('Symbol').value.toUpperCase(); updateReview(); });
