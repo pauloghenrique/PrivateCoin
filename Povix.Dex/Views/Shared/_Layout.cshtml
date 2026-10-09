@@ -10,7 +10,7 @@
 <body>
     <header class="site-header">
         <a class="brand" href="@Url.Action("Create", "Tokens")" aria-label="Povix.Dex início"><span class="brand-mark">P</span><span>povix<span class="brand-dex">.dex</span></span></a>
-        <nav aria-label="Navegação principal"><a class="nav-active" href="@Url.Action("Create", "Tokens")">Criar token</a><span class="network-label"><i></i> Blockchain POVIX</span></nav>
+        <nav aria-label="Navegação principal"><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Tokens" ? "nav-active" : "")" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenTransfers" ? "nav-active" : "")" href="@Url.Action("Index", "TokenTransfers")">Movimentar tokens</a><span class="network-label"><i></i> Blockchain POVIX</span></nav>
     </header>
     <div class="page-shell">@RenderBody()</div>
     <footer class="site-footer"><span>POVIX · Infraestrutura para seus ativos</span><span>Assinatura local. Registro na blockchain.</span></footer>

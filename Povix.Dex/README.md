@@ -1,4 +1,4 @@
-# Cadastro de tokens no Povix.Dex
+# Cadastro e movimentação de tokens no Povix.Dex
 
 A tela `/tokens/criar` cadastra tokens nativos de quantidade fixa na **blockchain
 POVIX existente**, com as regras `TokenCreate` do `PrivateCoin.Core`. A página
@@ -152,6 +152,46 @@ Falhas temporárias retornam HTTP 503 e mantêm a revisão para nova tentativa.
 Rejeições que exigem outra preparação retornam HTTP 400. Os erros não mostram
 os dados da transação nem o conteúdo das exceções do servidor. Uma falha no
 envio não equivale a uma confirmação; consulte sempre o comprovante.
+
+## Movimentação dos tokens pelo criador
+
+Acesse **Movimentar tokens** no menu ou **Movimentar este token** no
+comprovante da criação. Abra o `wallets.dat` pelo auxiliar local Windows ou
+o `.povixwallet` atualizado e selecione a carteira que criou o token. A tela
+consulta as criações confirmadas na blockchain, reconhece o criador pela
+chave que assinou a primeira entrada da criação (da qual deriva o
+identificador do token) e mostra o saldo confirmado e o disponível.
+
+Escolha o token, a quantidade, o endereço de destino e a prioridade da taxa.
+O envio só usa tokens e POVIX confirmados disponíveis nas chaves dessa
+carteira. Se a criação enviou o token a outra carteira, o criador não pode
+gastar o saldo dela. Se o endereço de recebimento foi gerado pelo DEX, use
+o backup atualizado que contém essa chave.
+
+A revisão mostra quantidade, taxa em POVIX, troco do token, troco em POVIX e
+seus endereços. Ambos os trocos voltam ao primeiro endereço já existente da
+carteira aberta; a preparação não gera chaves novas. Baixe o backup, confira
+os dados e confirme antes de assinar. O navegador reconstrói o payload
+nativo `TokenTransfer` e assina cada entrada localmente. Também assina uma
+autorização separada, vinculada à rede, ao token, ao identificador da
+preparação e ao payload completo. O servidor valida essa autorização com a
+chave do criador registrada na blockchain antes de aceitar ou retransmitir.
+Conhecer a chave pública, receber tokens ou assinar entradas de outra carteira
+não concede essa permissão. Chaves privadas e senha continuam no dispositivo.
+
+A exclusividade do criador é uma regra **dessa tela e dos endpoints do DEX**.
+O consenso da rede e as transferências feitas por proprietários fora dela
+mantêm suas regras atuais. A assinatura do criador não permite gastar tokens
+ou POVIX de terceiros sem as assinaturas das entradas correspondentes.
+
+O comprovante começa pendente e confirma somente após um bloco validado,
+mostrando hash, altura e confirmações. O histórico lista os últimos 20 envios
+desse token aceitos por esta instalação do DEX, incluindo pendentes e
+rejeitados após mudança de cadeia; ele não é um histórico global da rede.
+Preparações expiram em 15 minutos, exigem a mesma sessão e são descartadas ao
+reiniciar. Envios já aceitos e seus comprovantes persistem; repetir o mesmo
+envio recupera o comprovante. Falhas temporárias preservam a revisão para
+uma nova tentativa, sem criar outra transferência.
 
 ## Verificação
 

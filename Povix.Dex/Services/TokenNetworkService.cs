@@ -13,8 +13,8 @@ using PrivateCoin.Core;
 
 namespace Povix.Dex.Services
 {
-    /// <summary>Validates public data and relays locally signed creation transactions to the existing network.</summary>
-    public sealed class TokenNetworkService : IDisposable
+    /// <summary>Validates public data and relays locally signed token transactions to the existing network.</summary>
+    public sealed partial class TokenNetworkService : IDisposable
     {
         private const int MaximumPending = 5000;
         private readonly object sync = new object();
@@ -96,7 +96,8 @@ namespace Povix.Dex.Services
             {
                 RequireReady();
                 foreach (string id in drafts.Where(item => item.Value.ExpiresUtc < DateTime.UtcNow).Select(item => item.Key).ToArray()) drafts.Remove(id);
-                if (drafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) >= 5)
+                foreach (string id in transferDrafts.Where(item => item.Value.ExpiresUtc < DateTime.UtcNow).Select(item => item.Key).ToArray()) transferDrafts.Remove(id);
+                if (drafts.Count + transferDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) >= 5)
                     throw new InvalidOperationException("Há preparações em andamento. Aguarde alguns minutos e tente novamente.");
                 long amount;
                 if (!CreateTokenViewModel.TryParseSupply(model.Supply, model.Decimals, out amount))
@@ -125,7 +126,7 @@ namespace Povix.Dex.Services
             Transaction transaction;
             lock (sync)
             {
-                SubmittedToken prior = submitted.FirstOrDefault(item => item.DraftId == draftId);
+                SubmittedToken prior = submitted.FirstOrDefault(item => item.DraftId == draftId && item.Transaction.Kind == TransactionKind.TokenCreate);
                 if (prior != null) return prior.Transaction.Id;
                 RequireReady();
                 PreparedToken draft;
@@ -290,6 +291,9 @@ namespace Povix.Dex.Services
         {
             [DataMember] public string DraftId { get; set; }
             [DataMember] public Transaction Transaction { get; set; }
+            [DataMember(EmitDefaultValue = false)] public TokenDefinition Token { get; set; }
+            [DataMember(EmitDefaultValue = false)] public string CreatorKey { get; set; }
+            [DataMember(EmitDefaultValue = false)] public string CreatorSignature { get; set; }
         }
 
         [DataContract]

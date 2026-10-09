@@ -123,6 +123,9 @@
     <Compile Include="App_Start\RouteConfig.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\TokensController.cs" />
+    <Compile Include="Controllers\TokenTransfersController.cs" />
+    <Compile Include="Models\TokenTransferViewModel.cs" />
+    <Compile Include="Services\TokenTransferService.cs" />
     <Compile Include="Models\CreateTokenViewModel.cs" />
     <Compile Include="Services\AtomicFile.cs" />
     <Compile Include="Services\TokenNetworkService.cs" />
@@ -156,6 +159,10 @@
     <Content Include="Scripts\povix-token-status.js" />
     <Content Include="Views\Tokens\Create.cshtml" />
     <Content Include="Views\Tokens\Details.cshtml" />
+    <Content Include="Views\Shared\_Wallet.cshtml" />
+    <Content Include="Views\TokenTransfers\Index.cshtml" />
+    <Content Include="Views\TokenTransfers\Details.cshtml" />
+    <Content Include="Scripts\povix-token-transfer.js" />
     <Content Include="Scripts\bootstrap.bundle.js" />
     <Content Include="Scripts\bootstrap.bundle.min.js" />
     <Content Include="Scripts\bootstrap.esm.js" />

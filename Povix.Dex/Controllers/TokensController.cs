@@ -114,7 +114,7 @@ namespace Povix.Dex.Controllers
 
         // Public XML is transported as Base64 to avoid ASP.NET's HTML request validation.
         // Exact canonical matching excludes private parameters before RSA import.
-        private static string[] DecodePublicKeys(string[] values)
+        internal static string[] DecodePublicKeys(string[] values)
         {
             if (values == null || values.Length == 0 || values.Length > 1000) throw new ArgumentException("Invalid public keys.");
             return values.Select(value =>

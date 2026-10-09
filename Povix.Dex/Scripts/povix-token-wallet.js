@@ -177,6 +177,47 @@
         if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) throw new Error('A preparação expirou. Prepare novamente.');
         return true;
     }
+    function transferAuthorization(draft) {
+        return toBase64(encoder.encode('povix-dex-token-transfer-authorize-v1|' + draft.networkId + '|' + draft.draftId + '|' + draft.tokenId + '|' + draft.signingPayload));
+    }
+    async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
+        const wallet = requireWallet();
+        const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
+        if (draft.networkId !== networkId || draft.consensusVersion !== 3 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+            draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
+            draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
+            draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||
+            !/^[0-9a-f]{32}$/.test(draft.draftId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
+            draft.changeAddress !== changeAddress || !wallet.keys.has(changeAddress) ||
+            !atomic(draft.tokenChangeAtomic) || !atomic(draft.povixChangeAtomic) || !atomic(draft.feeAtomic) ||
+            draft.feeAtomic !== expected.FeeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
+            !Array.isArray(draft.inputs) || draft.inputs.length < 2 || draft.inputs.length > 1000 ||
+            !Array.isArray(draft.inputAddresses) || draft.inputAddresses.length !== draft.inputs.length)
+            throw new Error('A preparação não corresponde à movimentação revisada ou à carteira do criador.');
+        let payload = draft.timestampUtcTicks;
+        const used = new Set();
+        for (let index = 0; index < draft.inputs.length; index++) {
+            const input = draft.inputs[index];
+            const reference = input.transactionId + ':' + input.outputIndex;
+            if (!wallet.keys.has(input.address) || draft.inputAddresses[index] !== input.address ||
+                !/^[0-9a-f]{64}$/.test(input.transactionId) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 || used.has(reference))
+                throw new Error('A movimentação contém uma entrada inválida ou de outra carteira.');
+            used.add(reference);
+            payload += '|' + reference;
+        }
+        payload += '|' + draft.amountAtomic + ':' + draft.destinationAddress;
+        const tokenChange = BigInt(draft.tokenChangeAtomic) > 0n, povixChange = BigInt(draft.povixChangeAtomic) > 0n;
+        if (tokenChange) payload += '|' + draft.tokenChangeAtomic + ':' + changeAddress;
+        if (povixChange) payload += '|' + draft.povixChangeAtomic + ':' + changeAddress;
+        payload += '|fee:' + draft.feeAtomic + '|kind:4|validator:|reward:|owned:|assets-v1|' + field(draft.tokenId);
+        if (tokenChange) payload += field(draft.tokenId);
+        if (povixChange) payload += field(null);
+        if (toBase64(encoder.encode(payload)) !== draft.signingPayload || transferAuthorization(draft) !== draft.authorizationPayload)
+            throw new Error('O conteúdo da assinatura ou da autorização do criador difere da revisão.');
+        if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now())
+            throw new Error('A preparação expirou. Prepare novamente.');
+        return true;
+    }
     function parseSupply(text, decimals) {
         if (!/^[0-9]+([.,][0-9]+)?$/.test(text) || !Number.isInteger(decimals) || decimals < 0 || decimals > 8) throw new Error('Quantidade inválida.');
         const parts = text.replace(',', '.').split('.');
@@ -252,7 +293,13 @@
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
-        createAddress, verifyDraft, parseSupply, formatAtomic,
+        createAddress, verifyDraft, verifyTransferDraft, parseSupply, formatAtomic,
+        async authorizeTransfer(draft) {
+            const wallet = requireWallet(), creator = wallet.keys.get(draft.creatorAddress);
+            if (!creator || transferAuthorization(draft) !== draft.authorizationPayload)
+                throw new Error('A carteira não pode autorizar esta movimentação como criadora do token.');
+            return toBase64(await crypto.subtle.sign(algorithm.name, creator.key, fromBase64(draft.authorizationPayload)));
+        },
         backup() {
             const wallet = requireWallet();
             const url = URL.createObjectURL(new Blob([JSON.stringify(wallet.record)], { type: 'application/json' }));

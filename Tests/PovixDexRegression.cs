@@ -21,7 +21,7 @@ using Povix.Dex.Models;
 using Povix.Dex.Services;
 using PrivateCoin.Core;
 
-internal static class PovixDexRegression
+internal static partial class PovixDexRegression
 {
     private static int checks;
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -182,6 +182,7 @@ internal static class PovixDexRegression
                         "confirmed change becomes spendable without changing the wallet keys or counting token supply as POVIX");
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
+                    RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators);
                 }
                 finally { service.Dispose(); }
             }

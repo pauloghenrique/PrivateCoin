@@ -12,9 +12,10 @@
             if (!response.ok) throw new Error('Status indisponível');
             const data = await response.json();
             const confirmed = data.status === 'confirmed', pending = data.status === 'pending';
-            byId('receipt-title').textContent = confirmed ? 'Token registrado.' : pending ? 'Transação enviada.' : 'Registro não confirmado.';
-            byId('receipt-description').textContent = confirmed ? 'A criação do token consta em um bloco validado da rede POVIX.' :
-                pending ? 'A criação está na fila e aguarda confirmação em um bloco validado.' :
+            const transfer = app.dataset.operation === 'transfer';
+            byId('receipt-title').textContent = confirmed ? (transfer ? 'Movimentação confirmada.' : 'Token registrado.') : pending ? 'Transação enviada.' : (transfer ? 'Movimentação não confirmada.' : 'Registro não confirmado.');
+            byId('receipt-description').textContent = confirmed ? (transfer ? 'A transferência consta em um bloco validado da rede POVIX.' : 'A criação do token consta em um bloco validado da rede POVIX.') :
+                pending ? (transfer ? 'O envio aguarda confirmação em um bloco validado.' : 'A criação está na fila e aguarda confirmação em um bloco validado.') :
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : pending ? 'Pendente' : 'Não confirmado';
             byId('receipt-status').classList.toggle('waiting', !confirmed);
