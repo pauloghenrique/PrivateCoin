@@ -17,12 +17,12 @@ namespace PrivateCoin.Desktop
             lock (sync) { synchronized = false; epoch++; }
         }
 
-        public bool Accept(long expectedEpoch, Func<bool> connected, Action validateAndApply)
+        public bool Accept(long expectedEpoch, Func<bool> connected, Func<bool> synchronize)
         {
             lock (sync)
             {
                 if (epoch != expectedEpoch || !connected()) return false;
-                validateAndApply();
+                if (!synchronize()) return false;
                 synchronized = connected();
                 return synchronized;
             }

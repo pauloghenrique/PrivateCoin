@@ -369,4 +369,9 @@ FodyWeavers.xsd
 # Task scratch files and DEX runtime cache
 /work/
 /Povix.Dex/App_Data/dex-network.json
+/Povix.Dex/App_Data/dex-network.json.lock
 /Povix.Dex/App_Data/dex-peers.dat
+/Povix.Dex/App_Data/node-id.dat
+/PrivateCoin.Site/App_Data/explorer-network.json
+/PrivateCoin.Site/App_Data/explorer-network.json.lock
+/PrivateCoin.Site/App_Data/node-id.dat

@@ -12,7 +12,9 @@
 - fila de validação ordenada pela opção de taxa escolhida pelo usuário entre valores calculados conforme o congestionamento, paga integralmente ao criador do bloco;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
-- sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
+- blocos novos registram o identificador público do nó de origem, incluído na hash e nos votos dos validadores;
+- finalização com votos assinados de mais de **2/3 do stake ativo anterior ao bloco**, com checkpoint persistente que impede substituir o histórico finalizado por qualquer cadeia;
+- sincronização sem preferência automática pela cadeia menor; o trecho ainda não finalizado pode mudar segundo os certificados verificados e o tamanho da cadeia;
 - identidade de rede vinculada a uma versão de consenso e a um bloco gênese canônico; pares incompatíveis são desconectados antes de seus dados serem propagados.
 
 ## Uso básico
@@ -33,9 +35,34 @@ O endereço retornado por `CreateReceiveAddress` deve ser entregue diretamente a
 
 Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, chame `Start()` e conecte aos pares conhecidos com `ConnectAsync`. Uma aplicação deve validar transações recebidas e adotar somente cadeias aceitas por `Blockchain.TryReplaceChain`.
 
+Para controlar a prontidão após reconexão, use
+`Blockchain.TrySynchronizeChain(blocks, finality, out changed)`: retorna `true`
+para uma cadeia idêntica ou uma candidata validada e selecionada, com `changed`
+indicando mudanças nos blocos, votos pendentes ou checkpoint. Um prefixo antigo
+retorna `false`; divergências no histórico finalizado e provas inválidas lançam
+exceção. `TryReplaceChain(blocks, finality)` retorna `true` quando há mudança.
+Use `PeerNode.BroadcastChainAsync(chain)` para enviar um snapshot consistente
+dos blocos e certificados. Receba também `FinalityVoteReceived` e valide cada
+voto com `AddFinalityVote`; as aplicações não devem confiar apenas na altura
+anunciada por um par.
+
+Para manter a identidade do nó após reinícios, use
+`NodeIdentity.LoadOrCreate("node-id.dat")` e passe o resultado para
+`new Blockchain(nodeId)` ou `new Blockchain(savedBlocks, nodeId, savedFinality)`.
+Para persistência pública simples, `BlockchainStateStore.Save/Load` grava e
+revalida blocos e finalização; não descarte `Finality` ao restaurar um snapshot. O Desktop
+guarda esse arquivo em `.privatecoin`; o DEX usa seu diretório de dados.
+Cada novo bloco registra `CreatorNodeId`, inclusive recompensas de carteira,
+stake e proof-of-stake. Esse identificador aleatório não contém IP, nome do
+computador nem chaves privadas. Ele identifica a origem declarada; não é uma
+prova de que o nó estava conectado. O arquivo é local à instalação e não deve
+acompanhar cópias públicas de `Blockchain.json`. Sincronizar uma cadeia mantém
+os identificadores dos blocos recebidos e a identidade própria do nó local.
+
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer` na versão **3** do consenso.
+O Core oferece `TokenCreate` e `TokenTransfer` desde a versão **3** do consenso;
+a versão atual é **6**.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
 permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
 maiúsculas A–Z, de 0 a 8 casas decimais e quantidade positiva em unidades
@@ -108,10 +135,10 @@ O Desktop ainda não tem formulário de criação, transferência ou exibição 
 saldos de tokens. Nenhum token é criado
 apenas ao compilar o projeto ou executar os testes.
 
-**Ativação:** clientes de consenso 3 aceitam as novas operações a partir do
+**Ativação:** clientes de consenso 6 aceitam as operações de tokens a partir do
 primeiro bloco após o gênese e preservam a validação de cadeias antigas sem
-tokens. O handshake desconecta clientes de consenso 2. A publicação exige uma
-atualização coordenada dos nós antes da primeira transação com tokens; esta
+tokens. O handshake desconecta clientes de outras versões. A publicação exige uma
+atualização coordenada dos nós antes de usar as novas regras; esta
 alteração não agenda nem executa atualização de uma rede em funcionamento.
 Veja `Tests/README.md` para executar a regressão de tokens.
 
@@ -138,7 +165,7 @@ simulação com valores fixos e saldos fictícios. Rode
 
 ### Atualizações do Desktop
 
-O botão **Buscar atualização** consulta o endereço HTTPS configurado em `UpdateManifestUrl`. A consulta também acontece silenciosamente ao iniciar o aplicativo. Quando existe uma versão superior à versão do executável, o Desktop pede confirmação, baixa o pacote ZIP, confere seu SHA-256, instala os arquivos somente depois de encerrar o processo e abre a versão nova. `Blockchain.json`, `wallets.dat`, `peers.dat` e `recovery.dat` nunca podem ser fornecidos pelo pacote e são preservados durante a cópia.
+O botão **Buscar atualização** consulta o endereço HTTPS configurado em `UpdateManifestUrl`. A consulta também acontece silenciosamente ao iniciar o aplicativo. Quando existe uma versão superior à versão do executável, o Desktop pede confirmação, baixa o pacote ZIP, confere seu SHA-256, instala os arquivos somente depois de encerrar o processo e abre a versão nova. `Blockchain.json`, `wallets.dat`, `peers.dat`, `recovery.dat`, `node-id.dat` e `finality-votes.dat`, incluindo seus arquivos de lock, nunca podem ser fornecidos pelo pacote e são preservados durante a cópia.
 
 O manifesto publicado deve ter este formato (a versão usa o formato do `AssemblyVersion`):
 
@@ -158,6 +185,8 @@ O ZIP deve colocar `PrivateCoin.Desktop.exe` e os demais arquivos publicados dir
 - A pasta oculta `%LOCALAPPDATA%\PrivateCoin\.privatecoin` guarda `Blockchain.json`, `wallets.dat` e `recovery.dat` nas instalações novas. O aplicativo também procura primeiro um `wallets.dat` já existente na antiga pasta `.privatecoin` ao lado do executável ou dentro de `PrivateCoin.Desktop`; assim, uma carteira real salva no local usado pelas versões anteriores não é ocultada por um arquivo novo criado em `%LOCALAPPDATA%`. Arquivos ainda mais antigos, salvos fora de `.privatecoin`, são migrados automaticamente na primeira abertura;
 - `.privatecoin/Blockchain.json` contém a blockchain completa, a fila de transações pendentes e o cadastro público das carteiras conhecidas pela instalação. Para cada carteira, o cadastro grava nome, todos os endereços, quantidade confirmada de tokens, garantia de validador e um identificador criptográfico de recuperação — nunca a frase nem as chaves privadas. Tudo fica em um envelope Base64 acompanhado pelo hash SHA-256 dos dados. Cada transferência validada é gravada imediatamente nesse arquivo enquanto aguarda a criação do bloco, mas só altera os saldos depois que o bloco é criado e validado. Ao abrir o arquivo, o aplicativo confere o hash, restaura as pendências e recalcula cada saldo a partir dos UTXOs confirmados, rejeitando dados inconsistentes;
 - `.privatecoin/wallets.dat` contém os nomes, os endereços e o material privado necessário para assinar pelas carteiras locais, além das garantias de validador. Os endereços gravados são conferidos contra as chaves durante a abertura. O arquivo inteiro é cifrado para o usuário atual do Windows por DPAPI e **não deve ser distribuído**;
+- `.privatecoin/node-id.dat` guarda o identificador público aleatório desta instalação, usado como origem dos novos blocos e mantido após reinícios e trocas de cadeia;
+- O `Blockchain.json` inclui o último checkpoint finalizado, seus certificados e os votos pendentes. `.privatecoin/finality-votes.dat` guarda separadamente o último voto de cada chave local para impedir assinaturas conflitantes após reinício; preserve esse arquivo nos backups do validador;
 - `peers.dat` é o catálogo público e recriável dos endereços P2P descobertos, incluindo histórico de tentativas, sucessos e falhas; ele permite reiniciar sem depender imediatamente dos seeds;
 - Para carteiras novas, as chaves são derivadas deterministicamente da frase de 12 palavras. Use **Recuperar com frase** em outra instalação depois de sincronizar o `Blockchain.json`: o identificador da frase localiza o cadastro, e a quantidade e a sequência exatas de endereços são reconstruídas e verificadas. Caso o arquivo ainda use um formato anterior, o aplicativo mantém a busca pelos endereços usados na blockchain como compatibilidade. A reconstrução criptográfica é executada em segundo plano e pode levar alguns instantes, sem travar a janela. Apagar somente `wallets.dat` não altera a blockchain nem gera outra recompensa de carteira. O antigo `recovery.dat`, quando presente, continua aceito apenas para recuperar carteiras criadas por versões anteriores.
 
@@ -239,7 +268,54 @@ cria um bloco. Para criar outra carteira com recompensa é necessário primeiro
 conectar a uma rede existente. Uma rede completamente nova precisa de um
 procedimento separado de inicialização; não existe exceção automática offline.
 
-A escolha da cadeia permanece determinística: mais blocos e, em empate, menor
-hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
-mas não estabelece finalização nem obriga nós antigos ou outros clientes a
-seguir a mesma política. Uma cadeia válida maior ainda pode substituir a local.
+A sincronização valida todos os blocos e os certificados antes de selecionar
+uma cadeia. Qualquer divergência até o último bloco finalizado é rejeitada,
+independentemente do tamanho. Acima desse checkpoint, prefere-se a candidata
+com maior altura finalizada comprovada; depois, a cadeia maior, com desempate
+pela menor hash do último bloco. Não há preferência automática pela cadeia
+menor. Uma cadeia idêntica pode acrescentar votos ou certificados, e um prefixo
+antigo deixa o nó aguardando sincronização. Pendências são revalidadas após
+mudanças; rejeitar um conflito preserva os blocos, saldos, stake e tokens locais.
+
+### Finalização por stake
+
+Cada voto assina a identidade da rede, a versão do consenso, a altura, a hash
+completa do bloco e a hash do pai. O peso de cada chave e o total ativo vêm dos
+UTXOs de stake no estado imediatamente anterior ao bloco; bloqueios ou
+desbloqueios dentro do bloco não alteram esse cálculo. Participantes das
+transações continuam contando no stake de finalização, mesmo quando excluídos
+das recompensas. Uma chave conta uma única vez. A condição é estrita:
+`stakeAssinado * 3 > stakeAtivoAnterior * 2`; exatamente 2/3 não finaliza.
+
+`NextFinalityHeight`, `GetFinalityValidators`, `CreateFinalityVote` e
+`AddFinalityVote` permitem coletar os votos. O primeiro alvo é o primeiro bloco
+com stake ativo anterior; ao ser finalizado, protege também seus ancestrais.
+Depois dele, os certificados precisam finalizar alturas consecutivas. Não é
+possível pular um pai não finalizado para usar stake criado por ele. Sem stake
+ativo ou sem quorum, os blocos continuam provisórios.
+
+Core, Desktop, DEX e explorador salvam a altura e a hash finalizadas junto dos
+certificados e votos pendentes, com escrita atômica. As assinaturas e o stake
+são revalidados após reinício. Os armazenamentos recusam sobrescrever um
+checkpoint salvo por outro mais antigo ou por um histórico conflitante.
+O Desktop mantém também `.privatecoin/finality-votes.dat`: registra o voto
+antes de publicá-lo, reutiliza-o após reinício e impede a chave local de assinar
+outro bloco na mesma altura ou voltar a uma altura anterior. Preserve esse
+registro junto do backup privado do validador; ele não acompanha cópias públicas
+da cadeia. As chaves privadas nunca integram votos ou certificados.
+
+Esse protocolo protege um checkpoint já conhecido. Uma instalação contendo
+apenas o gênese ainda precisa obter o histórico inicial e um checkpoint de
+fonte confiável. O registro local evita voto duplo nessa instalação, mas a
+segurança do quorum depende de menos de 1/3 do stake pertinente votar em
+históricos conflitantes. Não há protocolo de rodadas para recuperar
+automaticamente um quorum dividido entre propostas concorrentes.
+
+As regras usam o consenso **6**. O gênese e os blocos antigos sem `CreatorNodeId`
+mantêm suas hashes e votos originais. Snapshots anteriores do Desktop e do DEX
+podem ser carregados e revalidados, mas começam com checkpoint no gênese se
+não possuem certificados; a atualização não inventa votos para o histórico.
+O Desktop coleta assinaturas reais para as alturas elegíveis em sequência.
+A rede precisa atualizar seus nós em conjunto, pois clientes de outras versões
+são desconectados no handshake. Esta alteração não publica nem atualiza a rede
+em funcionamento.

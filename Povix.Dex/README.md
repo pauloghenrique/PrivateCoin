@@ -18,7 +18,7 @@ da fila. Só um bloco recebido e validado pode confirmar o registro.
 1. Execute o projeto ASP.NET MVC 5 em IIS/IIS Express com .NET Framework 4.8 e
    HTTPS. Restaure os pacotes NuGet de `packages.config` antes de compilar.
 2. Configure `PeerSeeds` em `Web.config` com pares **reais** da rede existente,
-   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 3
+   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 6
    e o gênese fixado no Core. Não são fornecidos endpoints fictícios.
 3. `DexListenPort` usa 4780 por padrão. Use uma porta livre; o Desktop e o
    explorer podem continuar em suas portas próprias. A criação aguarda ao menos
@@ -26,14 +26,23 @@ da fila. Só um bloco recebido e validado pode confirmar o registro.
 4. Dê à identidade do processo permissão de escrita em `App_Data`. Use **um
    processo de trabalho** por instalação, sem web garden e sem reciclagem
    sobreposta: o cache e a fila têm um único escritor. Guarde esse diretório
-   entre publicações. O arquivo `dex-network.json` contém somente a cadeia,
-   a fila e os comprovantes públicos; `dex-peers.dat` guarda pares conhecidos.
+   entre publicações. O arquivo `dex-network.json` contém a cadeia, a fila,
+   os comprovantes públicos e a finalização: altura, hash, certificados e votos
+   pendentes. `dex-peers.dat` guarda pares conhecidos.
    Cache inválido ou de outra rede interrompe o serviço, sem substituição
    silenciosa por uma cadeia vazia.
 
 Sem pares configurados o formulário continua disponível, mas não transmite
 criações. Os validadores existentes precisam incluir a operação em um bloco;
 o DEX não confirma suas próprias transações.
+
+O nó recebe votos assinados de finalização e revalida os certificados usando o
+stake ativo anterior a cada bloco. Mais de 2/3 desse stake finaliza o bloco;
+uma cadeia que altere o trecho finalizado é rejeitada, independentemente do
+tamanho. O checkpoint persiste e é revalidado após reinício. Caches de consenso
+3 a 5 podem ser carregados sem inventar certificados; começam com checkpoint no
+gênese. O estado **confirmado** do comprovante indica inclusão em bloco, que pode
+continuar provisório até receber quorum de finalização.
 
 ## Abrir o arquivo de carteiras
 

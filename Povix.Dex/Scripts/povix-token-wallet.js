@@ -146,7 +146,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 3 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 6 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||

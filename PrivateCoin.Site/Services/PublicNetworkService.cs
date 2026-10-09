@@ -14,7 +14,8 @@ namespace PrivateCoin.Site.Services
     {
         private const int LedgerPageSize = 100;
         private readonly object sync = new object();
-        private readonly Blockchain blockchain = new Blockchain();
+        private Blockchain blockchain;
+        private readonly string statePath;
         private readonly List<Transaction> pending = new List<Transaction>();
         private readonly HashSet<string> pendingIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly PeerNode node;
@@ -25,10 +26,15 @@ namespace PrivateCoin.Site.Services
             if (!int.TryParse(ConfigurationManager.AppSettings["ListenPort"], out port)) port = 4779;
             string cachePath = HostingEnvironment.MapPath("~/App_Data/peers.dat");
             if (!string.IsNullOrEmpty(cachePath)) Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+            string directory = Path.GetDirectoryName(cachePath) ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "App_Data");
+            statePath = Path.Combine(directory, "explorer-network.json");
+            string nodeId = NodeIdentity.LoadOrCreate(Path.Combine(directory, "node-id.dat"));
+            blockchain = File.Exists(statePath) ? BlockchainStateStore.Load(statePath, nodeId) : new Blockchain(nodeId);
             node = new PeerNode(port, false, cachePath);
             node.ChainReceived += ReceiveChain;
+            node.FinalityVoteReceived += ReceiveFinalityVote;
             node.TransactionReceived += ReceiveTransaction;
-            node.SynchronizationRequested += (sender, args) => node.BroadcastChainAsync(blockchain.Blocks);
+            node.SynchronizationRequested += (sender, args) => node.BroadcastChainAsync(blockchain);
             string[] seeds = (ConfigurationManager.AppSettings["PeerSeeds"] ?? string.Empty)
                 .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(value => value.Trim()).Where(value => value.Length > 0).ToArray();
@@ -117,7 +123,10 @@ namespace PrivateCoin.Site.Services
             {
                 try
                 {
-                    if (!blockchain.TryReplaceChain(args.Blocks)) return;
+                    var candidate = new Blockchain(blockchain.Blocks, blockchain.LocalNodeId, blockchain.GetFinalityState());
+                    if (!candidate.TryReplaceChain(args.Blocks, args.Finality)) return;
+                    BlockchainStateStore.Save(statePath, candidate);
+                    blockchain = candidate;
                     var valid = new List<Transaction>();
                     foreach (Transaction transaction in Blockchain.OrderByFeePriority(pending))
                     {
@@ -131,7 +140,22 @@ namespace PrivateCoin.Site.Services
                     pending.Clear();
                     pending.AddRange(valid);
                 }
-                catch (InvalidOperationException) { }
+                catch (Exception error) when (error is InvalidOperationException || error is IOException || error is UnauthorizedAccessException) { }
+            }
+        }
+
+        private void ReceiveFinalityVote(object sender, FinalityVoteReceivedEventArgs args)
+        {
+            lock (sync)
+            {
+                try
+                {
+                    var candidate = new Blockchain(blockchain.Blocks, blockchain.LocalNodeId, blockchain.GetFinalityState());
+                    candidate.AddFinalityVote(args.Vote);
+                    BlockchainStateStore.Save(statePath, candidate);
+                    blockchain = candidate;
+                }
+                catch (Exception error) when (error is InvalidOperationException || error is ArgumentException || error is System.Security.Cryptography.CryptographicException || error is IOException || error is UnauthorizedAccessException) { }
             }
         }
 

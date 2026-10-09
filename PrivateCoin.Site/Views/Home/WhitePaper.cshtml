@@ -87,11 +87,11 @@
                     <div><span>04</span><i>✓</i><strong>Confirmar</strong><small>Validadores incluem e aprovam o bloco.</small></div>
                 </div>
                 <h3 class="wp-subtitle">Integridade da cadeia</h3>
-                <p>Blocos carregam a hash do bloco anterior e a hash de seu próprio conteúdo. Essa ligação torna alterações históricas detectáveis. Ao sincronizar, um nó aceita apenas uma cadeia que passe por toda a validação local, usando a cadeia válida mais longa e um desempate determinístico.</p>
+                <p>Blocos carregam a hash do bloco anterior, a hash de seu próprio conteúdo e o identificador do nó de origem. Um bloco é finalizado após receber votos assinados de validadores com mais de 2/3 do stake ativo no estado anterior. Cada nó salva a altura e a hash desse checkpoint com seus certificados e rejeita qualquer cadeia que altere o histórico finalizado, independentemente do tamanho. O trecho ainda não finalizado pode mudar durante a sincronização.</p>
                 <div class="wp-code-card">
                     <div><span></span><span></span><span></span><small>IDENTIDADE DA REDE</small></div>
                     <code>NetworkId = povix-mainnet-v1-{genesisHash}</code>
-                    <code>ConsensusVersion = 2</code>
+                    <code>ConsensusVersion = 6</code>
                     <p>Uma identidade canônica separa redes incompatíveis antes da propagação de dados.</p>
                 </div>
             </section>

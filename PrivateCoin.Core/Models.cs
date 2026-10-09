@@ -134,6 +134,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 5)] public List<Transaction> Transactions { get; set; } = new List<Transaction>();
         [DataMember(Order = 6)] public string Hash { get; set; }
         [DataMember(Order = 7, EmitDefaultValue = false)] public List<BlockValidator> Validators { get; set; }
+        [DataMember(Order = 8, EmitDefaultValue = false)] public string CreatorNodeId { get; set; }
 
         internal string CalculateHash()
         {
@@ -143,7 +144,8 @@ namespace PrivateCoin.Core
                 ":key:" + v.PublicKey + ":vote:" + v.VoteSignature));
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
-                string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof));
+                string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof) +
+                (CreatorNodeId == null ? string.Empty : "|node:" + CreatorNodeId));
         }
     }
 

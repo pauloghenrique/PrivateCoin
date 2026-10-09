@@ -6,7 +6,7 @@ using System.Text;
 
 namespace PrivateCoin.Core
 {
-    public sealed class Blockchain
+    public sealed partial class Blockchain
     {
         public const int DecimalPlaces = 8;
         public const long OneCoin = 100000000L;
@@ -17,7 +17,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 3;
+        public const int ConsensusVersion = 6;
         public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
         public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
@@ -26,20 +26,28 @@ namespace PrivateCoin.Core
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
 
-        public Blockchain()
+        public Blockchain() : this(Crypto.NewId()) { }
+
+        public Blockchain(string localNodeId)
         {
+            if (!NodeIdentity.IsValid(localNodeId)) throw new ArgumentException("A 64-character lowercase hexadecimal node identifier is required.", nameof(localNodeId));
+            LocalNodeId = localNodeId;
             blocks.Add(CreateGenesisBlock());
         }
 
         /// <summary>Restores and validates an existing chain.</summary>
-        public Blockchain(IEnumerable<Block> existingBlocks)
+        public Blockchain(IEnumerable<Block> existingBlocks) : this(existingBlocks, Crypto.NewId()) { }
+
+        public Blockchain(IEnumerable<Block> existingBlocks, string localNodeId) : this(localNodeId)
         {
             if (existingBlocks == null) throw new ArgumentNullException(nameof(existingBlocks));
+            blocks.Clear();
             blocks.AddRange(existingBlocks);
             if (!IsValid()) throw new InvalidOperationException("The stored blockchain is invalid.");
         }
 
         public IReadOnlyList<Block> Blocks { get { lock (sync) return blocks.ToArray(); } }
+        public string LocalNodeId { get; }
 
         public Block AddBlock(IEnumerable<Transaction> transactions)
         {
@@ -48,7 +56,7 @@ namespace PrivateCoin.Core
             {
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
-                var block = new Block { Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
+                var block = new Block { Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending, CreatorNodeId = LocalNodeId };
                 Mine(block);
                 blocks.Add(block);
                 return block;
@@ -88,6 +96,7 @@ namespace PrivateCoin.Core
                     Height = height,
                     PreviousHash = blocks[blocks.Count - 1].Hash,
                     TimestampUtcTicks = reward.TimestampUtcTicks,
+                    CreatorNodeId = LocalNodeId,
                     Transactions = new[] { reward }.Concat(pending).ToList(),
                     Validators = active.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item => new BlockValidator
                     {
@@ -134,7 +143,8 @@ namespace PrivateCoin.Core
                 {
                     Height = blocks.Count,
                     PreviousHash = blocks[blocks.Count - 1].Hash,
-                    TimestampUtcTicks = reward.TimestampUtcTicks
+                    TimestampUtcTicks = reward.TimestampUtcTicks,
+                    CreatorNodeId = LocalNodeId
                 };
                 rewardBlock.Transactions.Add(reward);
                 Mine(rewardBlock);
@@ -149,25 +159,74 @@ namespace PrivateCoin.Core
         }
 
         /// <summary>
-        /// Adopts a valid chain selected by a deterministic longest-chain rule.
-        /// The tip hash breaks ties so two newly connected nodes also converge when
-        /// they were created independently at the same height.
+        /// Adopts a validated chain or new finality evidence without changing finalized history.
+        /// Prefer a higher verified checkpoint, then chain length and a deterministic tip hash.
         /// </summary>
         public bool TryReplaceChain(IEnumerable<Block> candidateBlocks)
         {
+            bool changed;
+            return TrySynchronizeChain(candidateBlocks, out changed) && changed;
+        }
+
+        public bool TryReplaceChain(IEnumerable<Block> candidateBlocks, FinalityState finality)
+        {
+            bool changed;
+            return TrySynchronizeChain(candidateBlocks, finality, out changed) && changed;
+        }
+
+        /// <summary>
+        /// Validates a candidate against the local finalized checkpoint and merges signed votes.
+        /// A valid older prefix returns false and cannot complete synchronization. Changes may
+        /// include blocks, pending finality votes or a newly verified checkpoint.
+        /// </summary>
+        public bool TrySynchronizeChain(IEnumerable<Block> candidateBlocks, out bool changed)
+            => TrySynchronizeChain(candidateBlocks, null, out changed);
+
+        public bool TrySynchronizeChain(IEnumerable<Block> candidateBlocks, FinalityState finality, out bool changed)
+        {
+            changed = false;
             if (candidateBlocks == null) throw new ArgumentNullException(nameof(candidateBlocks));
-            var candidate = new Blockchain(candidateBlocks);
+            var candidate = new Blockchain(candidateBlocks, LocalNodeId, finality);
             Block[] replacement = candidate.Blocks.ToArray();
 
             lock (sync)
             {
-                bool isBetter = replacement.Length > blocks.Count ||
-                    (replacement.Length == blocks.Count &&
-                     string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
-                if (!isBetter) return false;
-
-                blocks.Clear();
-                blocks.AddRange(replacement);
+                for (int height = 1; height <= finalizedHeight && height < replacement.Length; height++)
+                {
+                    if (replacement[height].Hash == blocks[height].Hash) continue;
+                    throw new InvalidOperationException("A cadeia recebida diverge do bloco finalizado na altura " +
+                        height.ToString(System.Globalization.CultureInfo.InvariantCulture) + ". O histórico local foi preservado.");
+                }
+                if (replacement.Length <= finalizedHeight) return false;
+                // Merge certificates through the locally trusted checkpoint, rather
+                // than trusting an incoming height/hash announcement by itself.
+                FinalityState localFinality = GetFinalityState();
+                localFinality.PendingVotes = localFinality.PendingVotes.Where(v => v.Height < replacement.Length &&
+                    v.BlockHash == replacement[v.Height].Hash).ToList();
+                var merged = new Blockchain(replacement, LocalNodeId, localFinality);
+                if (finality != null) merged.ImportFinality(finality, false);
+                bool identical = replacement.Length == blocks.Count && replacement[replacement.Length - 1].Hash == blocks[blocks.Count - 1].Hash;
+                bool preferred = merged.FinalizedHeight > finalizedHeight || replacement.Length > blocks.Count ||
+                    (replacement.Length == blocks.Count && string.CompareOrdinal(replacement[replacement.Length - 1].Hash, blocks[blocks.Count - 1].Hash) < 0);
+                if (!preferred && !identical) return false;
+                bool samePrefix = Enumerable.Range(0, Math.Min(replacement.Length, blocks.Count)).All(height => replacement[height].Hash == blocks[height].Hash);
+                if (!preferred)
+                {
+                    changed = merged.pendingFinalityVotes.Count != pendingFinalityVotes.Count ||
+                        merged.pendingFinalityVotes.Any(pair => !pendingFinalityVotes.ContainsKey(pair.Key));
+                    pendingFinalityVotes.Clear();
+                    foreach (var pair in merged.pendingFinalityVotes) pendingFinalityVotes.Add(pair.Key, pair.Value.Copy());
+                    return true;
+                }
+                if (samePrefix && replacement.Length >= blocks.Count) blocks.AddRange(replacement.Skip(blocks.Count));
+                else { blocks.Clear(); blocks.AddRange(replacement); }
+                finalizedHeight = merged.finalizedHeight;
+                finalizedHash = merged.finalizedHash;
+                certificates.Clear();
+                certificates.AddRange(merged.certificates.Select(CopyCertificate));
+                pendingFinalityVotes.Clear();
+                foreach (var pair in merged.pendingFinalityVotes) pendingFinalityVotes.Add(pair.Key, pair.Value.Copy());
+                changed = true;
                 return true;
             }
         }
@@ -314,7 +373,8 @@ namespace PrivateCoin.Core
                 for (int i = 0; i < blocks.Count; i++)
                 {
                     var block = blocks[i];
-                    if (block.Height != i || block.Hash != block.CalculateHash() || !block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal)) return false;
+                    if (block == null || (block.CreatorNodeId != null && !NodeIdentity.IsValid(block.CreatorNodeId)) ||
+                        block.Height != i || block.Hash != block.CalculateHash() || !block.Hash.StartsWith(ProofPrefix, StringComparison.Ordinal)) return false;
                     if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
                 }
                 try { ValidateWholeChain(); return true; }
@@ -616,7 +676,8 @@ namespace PrivateCoin.Core
             return block.Height.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + block.PreviousHash + "|" +
                 string.Join("|", block.Transactions.Select(item => item.Id)) + "|" +
                 string.Join("|", block.Validators.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item =>
-                    item.ValidatorId + ":" + item.RewardAddress + ":" + item.LockedAmount.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + item.IsCreator));
+                    item.ValidatorId + ":" + item.RewardAddress + ":" + item.LockedAmount.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + item.IsCreator)) +
+                (block.CreatorNodeId == null ? string.Empty : "|node:" + block.CreatorNodeId);
         }
 
         private static Block CreateGenesisBlock()

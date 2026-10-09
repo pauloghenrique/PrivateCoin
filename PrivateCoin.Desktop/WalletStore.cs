@@ -66,6 +66,9 @@ namespace PrivateCoin.Desktop
         private readonly string walletFilePath;
         private readonly string networkFilePath;
         private readonly string recoveryFilePath;
+        private readonly string nodeIdentityFilePath;
+        private string nodeId;
+        private readonly FinalityVoteJournal finalityVoteJournal;
         private readonly Dictionary<string, StoredNetworkWallet> knownNetworkWallets =
             new Dictionary<string, StoredNetworkWallet>(StringComparer.Ordinal);
 
@@ -76,6 +79,8 @@ namespace PrivateCoin.Desktop
             walletFilePath = Path.Combine(directory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
             recoveryFilePath = Path.Combine(directory, "recovery.dat");
+            nodeIdentityFilePath = Path.Combine(directory, "node-id.dat");
+            finalityVoteJournal = new FinalityVoteJournal(Path.Combine(directory, "finality-votes.dat"));
             string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
             if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
                 File.Move(previousNetworkFilePath, networkFilePath);
@@ -133,6 +138,9 @@ namespace PrivateCoin.Desktop
         public string WalletFilePath => walletFilePath;
         public bool NetworkExists => File.Exists(networkFilePath);
         public bool NetworkNeedsUpgrade { get; private set; }
+        public string NodeId => nodeId ?? (nodeId = NodeIdentity.LoadOrCreate(nodeIdentityFilePath));
+        public FinalityVote GetFinalityVote(Blockchain chain, int height, ValidatorStake validator)
+            => finalityVoteJournal.GetOrCreate(chain, height, validator);
 
         private static string FindProjectDirectory()
         {
@@ -169,6 +177,8 @@ namespace PrivateCoin.Desktop
             MoveLegacyDataFile(applicationDirectory, destinationDirectory, "Blockchain.json");
             MoveLegacyDataFile(applicationDirectory, destinationDirectory, "blockchain.json");
             MoveLegacyDataFile(applicationDirectory, destinationDirectory, "recovery.dat");
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "node-id.dat");
+            MoveLegacyDataFile(applicationDirectory, destinationDirectory, "finality-votes.dat");
 
             string hiddenDirectory = Path.Combine(applicationDirectory, DataDirectoryName);
             if (PathsEqual(hiddenDirectory, destinationDirectory)) return;
@@ -176,6 +186,8 @@ namespace PrivateCoin.Desktop
             MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "Blockchain.json");
             MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "blockchain.json");
             MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "recovery.dat");
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "node-id.dat");
+            MoveLegacyDataFile(hiddenDirectory, destinationDirectory, "finality-votes.dat");
         }
 
         private static bool PathsEqual(string left, string right)
@@ -222,23 +234,7 @@ namespace PrivateCoin.Desktop
                     ValidatorRewardAddress = wallet.ValidatorRewardAddress
                 };
             }
-            IReadOnlyDictionary<string, long> balances = blockchain.GetBalancesByAddress();
-            foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
-                wallet.TokenBalance = GetWalletBalance(wallet.Addresses, balances);
-
-            byte[] networkData = Serialize(new StoredNetworkData
-            {
-                Blocks = blockchain.Blocks.ToList(),
-                PendingTransactions = pending,
-                Wallets = knownNetworkWallets.Values.OrderBy(item => item.Id, StringComparer.Ordinal).ToList()
-            });
-            WriteJson(networkFilePath, new StoredNetwork
-            {
-                SchemaVersion = 4,
-                Data = Convert.ToBase64String(networkData),
-                Sha256 = CalculateSha256(networkData)
-            }, false);
-            NetworkNeedsUpgrade = false;
+            SaveNetwork(blockchain, pending);
             WriteJson(walletFilePath, new StoredWalletCollection
             {
                 Wallets = wallets.Select(item => new StoredWallet
@@ -253,6 +249,31 @@ namespace PrivateCoin.Desktop
                 }).ToList()
             }, true);
             SaveRecoveryCopies(wallets.Where(item => !item.IsDeterministic && !string.IsNullOrWhiteSpace(item.RecoveryPhrase)));
+        }
+
+        public void SaveNetwork(Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
+        {
+            BlockchainSnapshot snapshot = blockchain.GetSnapshot();
+            var view = new Blockchain(snapshot.Blocks, blockchain.LocalNodeId, snapshot.Finality);
+            Directory.CreateDirectory(Path.GetDirectoryName(networkFilePath));
+            using (var fileLock = new FileStream(networkFilePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                if (File.Exists(networkFilePath))
+                {
+                    List<Transaction> ignored;
+                    Blockchain saved = new WalletStore(Path.GetDirectoryName(networkFilePath)).LoadNetwork(out ignored);
+                    if (view.FinalizedHeight < saved.FinalizedHeight || view.Blocks.Count <= saved.FinalizedHeight ||
+                        view.Blocks[saved.FinalizedHeight].Hash != saved.FinalizedHash)
+                        throw new InvalidOperationException("O checkpoint finalizado salvo não pode ser substituído nem retroceder.");
+                }
+                IReadOnlyDictionary<string, long> balances = view.GetBalancesByAddress();
+                foreach (StoredNetworkWallet wallet in knownNetworkWallets.Values)
+                    wallet.TokenBalance = GetWalletBalance(wallet.Addresses, balances);
+                byte[] data = Serialize(new StoredNetworkData { Blocks = snapshot.Blocks.ToList(), Finality = snapshot.Finality,
+                    PendingTransactions = pendingTransactions.ToList(), Wallets = knownNetworkWallets.Values.OrderBy(w => w.Id, StringComparer.Ordinal).ToList() });
+                WriteJson(networkFilePath, new StoredNetwork { SchemaVersion = 5, Data = Convert.ToBase64String(data), Sha256 = CalculateSha256(data) }, false);
+                NetworkNeedsUpgrade = false;
+            }
         }
 
         public NamedWallet Recover(string phrase, string requestedName, Blockchain blockchain)
@@ -403,6 +424,7 @@ namespace PrivateCoin.Desktop
                 throw new SerializationException("O arquivo da rede está incompleto.");
 
             List<Block> blocks;
+            FinalityState finality = null;
             bool validatePublicBalances = false;
             if (!string.IsNullOrWhiteSpace(state.Data) && !string.IsNullOrWhiteSpace(state.Sha256))
             {
@@ -420,6 +442,9 @@ namespace PrivateCoin.Desktop
                     if (storedData == null || storedData.Blocks == null)
                         throw new SerializationException("Os dados da rede estão incompletos.");
                     blocks = storedData.Blocks;
+                    finality = storedData.Finality;
+                    if (state.SchemaVersion >= 5 && finality == null)
+                        throw new SerializationException("O checkpoint de finalização da rede está ausente.");
                     pendingTransactions = storedData.PendingTransactions ?? new List<Transaction>();
                     if (storedData.Wallets != null)
                     {
@@ -438,7 +463,7 @@ namespace PrivateCoin.Desktop
                     blocks = Deserialize<List<Block>>(networkData);
                     NetworkNeedsUpgrade = true;
                 }
-                NetworkNeedsUpgrade = state.SchemaVersion < 4;
+                NetworkNeedsUpgrade = state.SchemaVersion < 5;
             }
             else if (state.Blocks != null)
             {
@@ -448,7 +473,7 @@ namespace PrivateCoin.Desktop
             }
             else throw new SerializationException("O arquivo da rede está incompleto.");
 
-            var blockchain = new Blockchain(blocks);
+            var blockchain = new Blockchain(blocks, NodeId, finality);
             blockchain.ValidatePendingTransactions(pendingTransactions);
             if (validatePublicBalances)
             {
@@ -497,7 +522,7 @@ namespace PrivateCoin.Desktop
             {
                 foreach (StoredWallet item in state.Wallets)
                     loadedWallets.Add(new NamedWallet(item.Name, Wallet.FromPrivateKeys(item.PrivateKeys)));
-                blockchain = new Blockchain(state.Blocks);
+                blockchain = new Blockchain(state.Blocks, NodeId);
                 wallets = loadedWallets;
                 return true;
             }
@@ -516,7 +541,11 @@ namespace PrivateCoin.Desktop
             string directory = Path.GetDirectoryName(path);
             Directory.CreateDirectory(directory);
             string temporary = path + ".tmp";
-            File.WriteAllBytes(temporary, contents);
+            using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                output.Write(contents, 0, contents.Length);
+                output.Flush(true);
+            }
             if (File.Exists(path)) File.Replace(temporary, path, null);
             else File.Move(temporary, path);
         }
@@ -580,6 +609,7 @@ namespace PrivateCoin.Desktop
             [DataMember(Order = 1)] public List<Block> Blocks { get; set; }
             [DataMember(Order = 2)] public List<Transaction> PendingTransactions { get; set; }
             [DataMember(Order = 3, EmitDefaultValue = false)] public List<StoredNetworkWallet> Wallets { get; set; }
+            [DataMember(Order = 4, EmitDefaultValue = false)] public FinalityState Finality { get; set; }
         }
 
         [DataContract]

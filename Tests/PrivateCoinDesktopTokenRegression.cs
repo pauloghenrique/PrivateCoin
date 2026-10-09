@@ -7,6 +7,8 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
+using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -35,6 +37,8 @@ internal static class PrivateCoinDesktopTokenRegression
             chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
             chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
+            Check(chain.Blocks.Skip(1).All(block => block.CreatorNodeId == chain.LocalNodeId),
+                "wallet rewards and stake-lock blocks record their creating node");
             var desktopChain = new Blockchain(chain.Blocks);
             var commonBlocks = chain.Blocks.ToArray();
             string destination = issuer.CreateReceiveAddress(), recipientAddress = recipient.CreateReceiveAddress();
@@ -48,15 +52,25 @@ internal static class PrivateCoinDesktopTokenRegression
             using (var desktop = new PeerNode(desktopPort, false, Path.Combine(directory, "desktop-peers.json")))
             {
                 Exception synchronizationError = null;
+                string conflictingTip = null;
+                var conflictRejected = new ManualResetEvent(false);
                 desktop.ChainReceived += (sender, data) => {
-                    try { desktopChain.TryReplaceChain(data.Blocks); }
-                    catch (Exception error) { synchronizationError = error; }
+                    try { desktopChain.TryReplaceChain(data.Blocks, data.Finality); }
+                    catch (Exception error)
+                    {
+                        synchronizationError = error;
+                        if (data.Blocks.Last().Hash == conflictingTip) conflictRejected.Set();
+                    }
                 };
-                source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain.Blocks);
+                source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain);
                 source.Start(new string[0]); desktop.Start(new string[0]);
                 desktop.ConnectAsync("127.0.0.1", sourcePort).GetAwaiter().GetResult();
                 Block creationBlock = chain.AddProofOfStakeBlock(new[] { create }, validators);
-                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                Check(creationBlock.CreatorNodeId == chain.LocalNodeId && chain.IsValid(),
+                    "proof-of-stake blocks include the creating node in their hash and validator votes");
+                CheckOriginVotes(chain, creationBlock);
+                FinalityTestSupport.FinalizeAvailable(chain, validators);
+                source.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,
                     "a confirmed native DEX token appears after P2P blockchain synchronization");
                 Check(synchronizationError == null && desktopChain.IsValid(), "the Desktop adopts the validated existing blockchain");
@@ -76,7 +90,8 @@ internal static class PrivateCoinDesktopTokenRegression
 
                 Transaction another = PrepareAndSign(chain, issuer, "Outro Aurora", "AUR", 0, 123, recipientAddress);
                 chain.AddProofOfStakeBlock(new[] { another }, validators);
-                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                FinalityTestSupport.FinalizeAvailable(chain, validators);
+                source.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 2, "new confirmed creations refresh the list");
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Select(item => item.Id).Distinct().Count() == 2 &&
                     desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == another.Token.Id).Amount == 123,
@@ -87,7 +102,8 @@ internal static class PrivateCoinDesktopTokenRegression
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue,
                     "a pending transfer does not alter the confirmed balance");
                 chain.AddProofOfStakeBlock(new[] { transfer }, validators);
-                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                FinalityTestSupport.FinalizeAvailable(chain, validators);
+                source.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,
                     "a confirmed token transfer refreshes the recipient balance");
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
@@ -95,11 +111,18 @@ internal static class PrivateCoinDesktopTokenRegression
                     "the sender balance and confirmation count follow the synchronized chain");
 
                 var fork = new Blockchain(commonBlocks);
-                for (int i = 0; i < 4; i++) fork.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
+                fork.TryAddWalletCreationReward(issuer.CreateReceiveAddress(), out reward);
+                string protectedTip = desktopChain.Blocks.Last().Hash;
+                conflictingTip = fork.Blocks.Last().Hash;
                 chain = fork;
-                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
-                Wait(() => desktopChain.Blocks.Last().Hash == fork.Blocks.Last().Hash && desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,
-                    "a valid longer fork removes token records and balances absent from the adopted chain");
+                source.BroadcastChainAsync(chain).GetAwaiter().GetResult();
+                Check(conflictRejected.WaitOne(15000) && synchronizationError is InvalidOperationException,
+                    "a shorter divergent fork received through P2P is rejected");
+                Check(desktopChain.Blocks.Last().Hash == protectedTip &&
+                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 2 &&
+                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
+                    desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,
+                    "rejected forks preserve confirmed token records, sender balance and recipient balance");
             }
         }
     }
@@ -116,6 +139,30 @@ internal static class PrivateCoinDesktopTokenRegression
         }).ToArray());
     }
 
+    private static void CheckOriginVotes(Blockchain chain, Block block)
+    {
+        // Keep the negative test isolated from the chain concurrently sent by peers.
+        using (var memory = new MemoryStream())
+        {
+            var serializer = new DataContractJsonSerializer(typeof(Block[]));
+            serializer.WriteObject(memory, chain.Blocks.ToArray());
+            memory.Position = 0;
+            chain = new Blockchain((Block[])serializer.ReadObject(memory), chain.LocalNodeId);
+            block = chain.Blocks[block.Height];
+        }
+        string origin = block.CreatorNodeId, hash = block.Hash;
+        long nonce = block.Nonce;
+        try
+        {
+            block.CreatorNodeId = new string(origin[0] == 'a' ? 'b' : 'a', 64);
+            var calculate = typeof(Block).GetMethod("CalculateHash", BindingFlags.Instance | BindingFlags.NonPublic);
+            do { block.Nonce++; block.Hash = (string)calculate.Invoke(block, null); }
+            while (!block.Hash.StartsWith("000", StringComparison.Ordinal));
+            Check(!chain.IsValid(), "validator votes reject a changed creating node even after recomputing proof of work");
+        }
+        finally { block.CreatorNodeId = origin; block.Hash = hash; block.Nonce = nonce; }
+        Check(chain.IsValid(), "the original signed proof-of-stake block remains valid");
+    }
     private static int Port() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); int port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }
     private static string Hash(string value) { using (var hash = SHA256.Create()) return string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(value)).Select(item => item.ToString("x2"))); }
     private static void Check(bool value, string label) { if (!value) throw new Exception(label); checks++; Console.WriteLine("PASS " + label); }

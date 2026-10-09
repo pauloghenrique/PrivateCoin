@@ -25,6 +25,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 6)] public string[] Peers { get; set; }
         [DataMember(Order = 7)] public string NetworkId { get; set; }
         [DataMember(Order = 8)] public int ConsensusVersion { get; set; }
+        [DataMember(Order = 9, EmitDefaultValue = false)] public FinalityState Finality { get; set; }
+        [DataMember(Order = 10, EmitDefaultValue = false)] public FinalityVote FinalityVote { get; set; }
     }
 
     /// <summary>A TCP gossip node with Bitcoin-style bootstrap seeds and peer address exchange.</summary>
@@ -68,6 +70,7 @@ namespace PrivateCoin.Core
 
         public event EventHandler<TransactionReceivedEventArgs> TransactionReceived;
         public event EventHandler<ChainReceivedEventArgs> ChainReceived;
+        public event EventHandler<FinalityVoteReceivedEventArgs> FinalityVoteReceived;
         public event EventHandler SynchronizationRequested;
         public event EventHandler PeerCountChanged;
         public event EventHandler NatTraversalStatusChanged;
@@ -137,10 +140,23 @@ namespace PrivateCoin.Core
             return Broadcast(CreateMessage("transaction", transaction: transaction));
         }
 
-        public Task BroadcastChainAsync(IEnumerable<Block> blocks)
+        public Task BroadcastChainAsync(IEnumerable<Block> blocks, FinalityState finality = null)
         {
             if (blocks == null) throw new ArgumentNullException(nameof(blocks));
-            return Broadcast(CreateMessage("chain", blocks: blocks.ToArray()));
+            return Broadcast(CreateMessage("chain", blocks: blocks.ToArray(), finality: finality));
+        }
+
+        public Task BroadcastChainAsync(Blockchain blockchain)
+        {
+            if (blockchain == null) throw new ArgumentNullException(nameof(blockchain));
+            BlockchainSnapshot snapshot = blockchain.GetSnapshot();
+            return BroadcastChainAsync(snapshot.Blocks, snapshot.Finality);
+        }
+
+        public Task BroadcastFinalityVoteAsync(FinalityVote vote)
+        {
+            if (vote == null) throw new ArgumentNullException(nameof(vote));
+            return Broadcast(CreateMessage("finality-vote", finalityVote: vote));
         }
 
         public Task RequestSynchronizationAsync()
@@ -262,7 +278,8 @@ namespace PrivateCoin.Core
             return message;
         }
 
-        private static PeerMessage CreateMessage(string type, Transaction transaction = null, Block[] blocks = null)
+        private static PeerMessage CreateMessage(string type, Transaction transaction = null, Block[] blocks = null,
+            FinalityState finality = null, FinalityVote finalityVote = null)
         {
             return new PeerMessage
             {
@@ -271,7 +288,9 @@ namespace PrivateCoin.Core
                 Transaction = transaction,
                 Blocks = blocks,
                 NetworkId = Blockchain.NetworkId,
-                ConsensusVersion = Blockchain.ConsensusVersion
+                ConsensusVersion = Blockchain.ConsensusVersion,
+                Finality = finality,
+                FinalityVote = finalityVote
             };
         }
 
@@ -299,7 +318,9 @@ namespace PrivateCoin.Core
                     else if (message.Type == "transaction" && message.Transaction != null)
                         TransactionReceived?.Invoke(this, new TransactionReceivedEventArgs(message.Transaction));
                     else if (message.Type == "chain" && message.Blocks != null && message.Blocks.Length > 0)
-                        ChainReceived?.Invoke(this, new ChainReceivedEventArgs(message.Blocks));
+                        ChainReceived?.Invoke(this, new ChainReceivedEventArgs(message.Blocks, message.Finality));
+                    else if (message.Type == "finality-vote" && message.FinalityVote != null)
+                        FinalityVoteReceived?.Invoke(this, new FinalityVoteReceivedEventArgs(message.FinalityVote));
                     else if (message.Type == "sync-request")
                         SynchronizationRequested?.Invoke(this, EventArgs.Empty);
 
@@ -560,7 +581,14 @@ namespace PrivateCoin.Core
 
     public sealed class ChainReceivedEventArgs : EventArgs
     {
-        public ChainReceivedEventArgs(Block[] blocks) { Blocks = blocks; }
+        public ChainReceivedEventArgs(Block[] blocks, FinalityState finality = null) { Blocks = blocks; Finality = finality; }
         public Block[] Blocks { get; }
+        public FinalityState Finality { get; }
+    }
+
+    public sealed class FinalityVoteReceivedEventArgs : EventArgs
+    {
+        public FinalityVoteReceivedEventArgs(FinalityVote vote) { Vote = vote; }
+        public FinalityVote Vote { get; }
     }
 }

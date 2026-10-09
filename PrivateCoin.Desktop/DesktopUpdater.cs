@@ -25,7 +25,7 @@ namespace PrivateCoin.Desktop
 
     internal sealed class DesktopUpdater
     {
-        private static readonly string[] ProtectedFiles = { "Blockchain.json", "wallets.dat", "peers.dat", "recovery.dat" };
+        private static readonly string[] ProtectedFiles = { "Blockchain.json", "Blockchain.json.lock", "wallets.dat", "peers.dat", "recovery.dat", "node-id.dat", "finality-votes.dat", "finality-votes.dat.lock" };
         private readonly Uri manifestUri;
 
         public DesktopUpdater(string manifestUrl)

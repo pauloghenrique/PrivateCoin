@@ -48,7 +48,8 @@ distribuir. Não inclua Mono no instalador Windows.
   `%LOCALAPPDATA%\Programs\PrivateCoin`, permitindo o atualizador existente.
   Não precisa de Visual Studio, Mono, banco de dados ou servidor web no destino.
 - Preserva a configuração existente em atualizações. Não inclui nem apaga
-  `wallets.dat`, `Blockchain.json`, `recovery.dat`, `peers.dat` ou `.privatecoin`.
+  `wallets.dat`, `Blockchain.json`, `recovery.dat`, `peers.dat`, `node-id.dat`,
+  `finality-votes.dat`, seus arquivos de lock ou `.privatecoin`.
   Não abre portas públicas nem altera automaticamente o firewall.
 - O instalador e desinstalador aceitam `/S`. Se faltar o .NET, a elevação UAC
   continua necessária. Códigos de sucesso: 0; 3010 significa reinicialização.

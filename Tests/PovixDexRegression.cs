@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -91,7 +92,7 @@ internal static class PovixDexRegression
             using (var peer = new PeerNode(peerPort))
             {
                 Transaction received = null;
-                peer.SynchronizationRequested += (s, e) => peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                peer.SynchronizationRequested += (s, e) => peer.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                 peer.TransactionReceived += (s, e) => { if (e.Transaction.Kind == TransactionKind.TokenCreate) Interlocked.Exchange(ref received, e.Transaction); };
                 peer.Start();
                 var service = new TokenNetworkService(directory, dexPort, new string[0]);
@@ -101,7 +102,7 @@ internal static class PovixDexRegression
                     try { service.Prepare(model, PublicKeys(issuer), change, "regression"); } catch (InvalidOperationException) { blocked = true; }
                     Check(blocked, "offline creation blocked");
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
-                    peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                    peer.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "DEX synchronizes through an existing peer");
                     var sessionItems = new SessionStateItemCollection();
                     var controller = ControllerFor(service, "regression", sessionItems);
@@ -156,22 +157,41 @@ internal static class PovixDexRegression
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "funding_unavailable");
                     string state = File.ReadAllText(Path.Combine(directory, "dex-network.json"));
                     Check(!state.Contains("RSAKeyValue") || (!state.Contains("<D>") && !state.Contains("<P>")), "persisted network state contains no private keys");
+                    var chainField = typeof(TokenNetworkService).GetField("blockchain", BindingFlags.NonPublic | BindingFlags.Instance);
+                    string nodeId = ((Blockchain)chainField.GetValue(service)).LocalNodeId;
                     service.Dispose();
+                    // Isolate the offline restart from automatic reconnects on both
+                    // peers. The source knows the old listening port; the restarted
+                    // DEX has an empty peer cache until the explicit connection below.
+                    string peerCache = Path.Combine(directory, "dex-peers.dat");
+                    if (File.Exists(peerCache)) File.Move(peerCache, Path.Combine(directory, "offline-peers-backup.dat"));
+                    int oldDexPort = dexPort;
+                    do { dexPort = Port(); } while (dexPort == oldDexPort || dexPort == peerPort);
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"),
+                        state.Replace("\"ConsensusVersion\":" + Blockchain.ConsensusVersion, "\"ConsensusVersion\":3"));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(((Blockchain)chainField.GetValue(service)).LocalNodeId == nodeId &&
+                        nodeId == NodeIdentity.LoadOrCreate(Path.Combine(directory, "node-id.dat")),
+                        "DEX restores a consensus-3 snapshot while preserving its own persistent node identity");
+                    var receiveChain = typeof(TokenNetworkService).GetMethod("ReceiveChain", BindingFlags.NonPublic | BindingFlags.Instance);
+                    receiveChain.Invoke(service, new object[] { null, new ChainReceivedEventArgs(new Blockchain().Blocks.ToArray()) });
+                    Check(!service.GetNetwork().Synchronized,
+                        "an older matching prefix cannot mark the restarted DEX as synchronized");
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "pending creation restored while synchronization is required again");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
                         "an accepted submission can recover its receipt after restart while the network reconnects");
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
-                    peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                    peer.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "restarted DEX resynchronizes");
                     CheckRejection(ControllerFor(service, "regression", sessionItems), (string)conflictingDraft["draftId"], conflictingSignatures, "draft_missing");
                     chain.ValidatePendingTransactions(new[] { received });
                     var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
                     Block confirmed = chain.AddProofOfStakeBlock(new[] { received }, validators);
+                    FinalityTestSupport.FinalizeAvailable(chain, validators);
                     Check(chain.IsValid() && chain.GetTokenBalance(new[] { destination }, (string)draft["tokenId"]) == long.MaxValue, "validators confirm exact token supply in a valid block");
-                    peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                    peer.BroadcastChainAsync(chain).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "confirmed", "receipt confirms only after receiving a validated block");
                     Check(service.GetRegistration(id).BlockHash == confirmed.Hash && service.GetRegistration(id).Confirmations == 1, "receipt exposes real block hash and confirmations");
                     Check(chain.GetBalance(originalAddresses) == expectedChange && service.GetBalance(originalAddresses) == expectedChange,
@@ -180,6 +200,19 @@ internal static class PovixDexRegression
                     Check(long.Parse((string)confirmedBalance["balanceAtomic"]) == expectedChange && long.Parse((string)confirmedBalance["confirmedAtomic"]) == expectedChange &&
                         (string)confirmedBalance["reservedAtomic"] == "0" && (string)confirmedBalance["pendingIncomingAtomic"] == "0",
                         "confirmed change becomes spendable without changing the wallet keys or counting token supply as POVIX");
+                    byte[] protectedState = File.ReadAllBytes(Path.Combine(directory, "dex-network.json"));
+                    foreach (int forkLength in new[] { chain.Blocks.Count - 1, chain.Blocks.Count, chain.Blocks.Count + 1 })
+                    {
+                        var fork = new Blockchain(chain.Blocks.Take(2));
+                        while (fork.Blocks.Count < forkLength) fork.AddBlock(new Transaction[0]);
+                        receiveChain.Invoke(service, new object[] { null, new ChainReceivedEventArgs(fork.Blocks.ToArray()) });
+                        Check(((Blockchain)chainField.GetValue(service)).Blocks.Last().Hash == confirmed.Hash &&
+                            service.GetRegistration(id).Status == "confirmed" &&
+                            service.GetRegistration(id).BlockHash == confirmed.Hash &&
+                            ((Blockchain)chainField.GetValue(service)).GetTokenBalance(new[] { destination }, (string)draft["tokenId"]) == long.MaxValue &&
+                            protectedState.SequenceEqual(File.ReadAllBytes(Path.Combine(directory, "dex-network.json"))),
+                            "DEX rejects a divergent chain of length " + forkLength + " without altering confirmed receipts or the stored chain");
+                    }
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
                 }

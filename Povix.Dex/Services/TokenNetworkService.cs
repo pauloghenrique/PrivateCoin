@@ -29,25 +29,30 @@ namespace Povix.Dex.Services
         public TokenNetworkService(string dataDirectory, int port, IEnumerable<string> seeds)
         {
             Directory.CreateDirectory(dataDirectory);
+            string nodeId = NodeIdentity.LoadOrCreate(Path.Combine(dataDirectory, "node-id.dat"));
             statePath = Path.Combine(dataDirectory, "dex-network.json");
             if (File.Exists(statePath))
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
-                if (state.NetworkId != Blockchain.NetworkId || state.ConsensusVersion != Blockchain.ConsensusVersion)
+                // Legacy snapshots load without finality; peer messages require version 6.
+                if (state.NetworkId != Blockchain.NetworkId ||
+                    (state.ConsensusVersion < 3 || state.ConsensusVersion > Blockchain.ConsensusVersion))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
-                blockchain = new Blockchain(state.Blocks);
+                if (state.ConsensusVersion >= 6 && state.Finality == null) throw new InvalidOperationException("O checkpoint de finalização está ausente.");
+                blockchain = new Blockchain(state.Blocks, nodeId, state.Finality);
                 pending = state.Pending ?? new List<Transaction>();
                 submitted = state.Submitted ?? new List<SubmittedToken>();
                 blockchain.ValidatePendingTransactions(pending);
             }
             else
             {
-                blockchain = new Blockchain();
+                blockchain = new Blockchain(nodeId);
                 pending = new List<Transaction>();
                 submitted = new List<SubmittedToken>();
             }
             node = new PeerNode(port, false, Path.Combine(dataDirectory, "dex-peers.dat"));
             node.ChainReceived += ReceiveChain;
+            node.FinalityVoteReceived += ReceiveFinalityVote;
             node.TransactionReceived += ReceiveTransaction;
             node.SynchronizationRequested += (sender, args) => RelayChain();
             node.PeerCountChanged += (sender, args) => { lock (sync) { if (node.ConnectedPeerCount == 0) synchronized = false; } };
@@ -192,8 +197,10 @@ namespace Povix.Dex.Services
             {
                 lock (sync)
                 {
-                    var candidate = new Blockchain(blockchain.Blocks);
-                    if (candidate.TryReplaceChain(args.Blocks))
+                    var candidate = new Blockchain(blockchain.Blocks, blockchain.LocalNodeId, blockchain.GetFinalityState());
+                    bool changed;
+                    if (!candidate.TrySynchronizeChain(args.Blocks, args.Finality, out changed)) return;
+                    if (changed)
                     {
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
                         var valid = new List<Transaction>();
@@ -233,6 +240,22 @@ namespace Povix.Dex.Services
             { Trace.TraceWarning("DEX: transação recebida descartada ({0}).", error.GetType().Name); }
         }
 
+        private void ReceiveFinalityVote(object sender, FinalityVoteReceivedEventArgs args)
+        {
+            try
+            {
+                lock (sync)
+                {
+                    var candidate = new Blockchain(blockchain.Blocks, blockchain.LocalNodeId, blockchain.GetFinalityState());
+                    candidate.AddFinalityVote(args.Vote);
+                    Save(candidate, pending, submitted);
+                    blockchain = candidate;
+                }
+            }
+            catch (Exception error) when (IsInvalidData(error) || error is IOException || error is UnauthorizedAccessException)
+            { Trace.TraceWarning("DEX: voto de finalização rejeitado ({0}).", error.GetType().Name); }
+        }
+
         private async void RelayPending()
         {
             Transaction[] transactions;
@@ -249,9 +272,9 @@ namespace Povix.Dex.Services
 
         private async void RelayChain()
         {
-            Block[] blocks;
-            lock (sync) blocks = blockchain.Blocks.ToArray();
-            try { await node.BroadcastChainAsync(blocks).ConfigureAwait(false); }
+            Blockchain chain;
+            lock (sync) chain = blockchain;
+            try { await node.BroadcastChainAsync(chain).ConfigureAwait(false); }
             catch (Exception error) when (error is IOException || error is System.Net.Sockets.SocketException || error is ObjectDisposedException || error is OperationCanceledException)
             { Trace.TraceWarning("DEX: resposta de sincronização interrompida ({0}).", error.GetType().Name); }
         }
@@ -262,12 +285,24 @@ namespace Povix.Dex.Services
 
         private void Save(Blockchain chain, List<Transaction> transactions, List<SubmittedToken> receipts)
         {
-            var state = new NetworkState { NetworkId = Blockchain.NetworkId, ConsensusVersion = Blockchain.ConsensusVersion,
-                Blocks = chain.Blocks.ToList(), Pending = transactions, Submitted = receipts };
-            using (var stream = new MemoryStream())
+            BlockchainSnapshot snapshot = chain.GetSnapshot();
+            using (var fileLock = new FileStream(statePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
             {
-                new DataContractJsonSerializer(typeof(NetworkState)).WriteObject(stream, state);
-                AtomicFile.Write(statePath, stream.ToArray());
+                if (File.Exists(statePath))
+                {
+                    NetworkState previous = Deserialize(File.ReadAllBytes(statePath));
+                    var saved = new Blockchain(previous.Blocks, chain.LocalNodeId, previous.Finality);
+                    if (snapshot.Finality.FinalizedHeight < saved.FinalizedHeight || snapshot.Blocks.Length <= saved.FinalizedHeight ||
+                        snapshot.Blocks[saved.FinalizedHeight].Hash != saved.FinalizedHash)
+                        throw new InvalidOperationException("O checkpoint finalizado salvo não pode ser substituído nem retroceder.");
+                }
+                var state = new NetworkState { NetworkId = Blockchain.NetworkId, ConsensusVersion = Blockchain.ConsensusVersion,
+                    Blocks = snapshot.Blocks.ToList(), Finality = snapshot.Finality, Pending = transactions, Submitted = receipts };
+                using (var stream = new MemoryStream())
+                {
+                    new DataContractJsonSerializer(typeof(NetworkState)).WriteObject(stream, state);
+                    AtomicFile.Write(statePath, stream.ToArray());
+                }
             }
         }
 
@@ -298,6 +333,7 @@ namespace Povix.Dex.Services
             [DataMember] public string NetworkId { get; set; }
             [DataMember] public int ConsensusVersion { get; set; }
             [DataMember] public List<Block> Blocks { get; set; }
+            [DataMember(EmitDefaultValue = false)] public FinalityState Finality { get; set; }
             [DataMember] public List<Transaction> Pending { get; set; }
             [DataMember] public List<SubmittedToken> Submitted { get; set; }
         }

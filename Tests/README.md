@@ -13,7 +13,7 @@ mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
-  Tests/PovixDexRegression.cs
+  Tests/PovixDexRegression.cs Tests/FinalityTestSupport.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
   work/dex-regression "$(command -v node)"
 ```
@@ -91,8 +91,9 @@ em Release e execute:
 
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
-  -out:work/PrivateCoinDesktopTokenRegression.exe \
-  Tests/PrivateCoinDesktopTokenRegression.cs PrivateCoin.Desktop/TokenAmount.cs
+  -r:System.Runtime.Serialization -out:work/PrivateCoinDesktopTokenRegression.exe \
+  Tests/PrivateCoinDesktopTokenRegression.cs Tests/FinalityTestSupport.cs \
+  PrivateCoin.Desktop/TokenAmount.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
   work/PrivateCoinDesktopTokenRegression.exe work/desktop-tokens-regression
 ```
@@ -109,12 +110,53 @@ Para verificar o bloqueio durante reconexão, compile o Core e execute:
 
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -r:System.Security \
   -out:work/PrivateCoinReconnectRegression.exe \
-  Tests/PrivateCoinReconnectRegression.cs PrivateCoin.Desktop/NetworkReadiness.cs
-MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinReconnectRegression.exe
+  Tests/PrivateCoinReconnectRegression.cs Tests/FinalityTestSupport.cs \
+  PrivateCoin.Desktop/NetworkReadiness.cs \
+  PrivateCoin.Desktop/WalletStore.cs PrivateCoin.Desktop/RecoveryPhraseGenerator.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinReconnectRegression.exe \
+  work/reconnect-regression
 ```
 
 Verifica o bloqueio inicial e offline, a sincronização com cadeia idêntica,
-a invalidação de respostas antigas, a adoção de uma cadeia maior após
-reconexão e a rejeição de cadeia inválida. Não depende de WinForms nem de
-carteiras de produção.
+a invalidação de respostas antigas, a adoção de uma continuação maior e a
+rejeição de cadeias que divergem abaixo do checkpoint finalizado, menores,
+maiores e do mesmo tamanho, inclusive
+com desconexão e reconexão TCP real em loopback. Um prefixo mais curto não
+libera operações nem reescreve o histórico. Confere a identidade persistente do nó, a
+preservação da origem dos blocos na serialização e no armazenamento do Desktop,
+a cópia pública da cadeia entre instalações, hashes alteradas, compatibilidade
+legada e rejeição de cadeias inválidas. Não depende de WinForms nem de carteiras
+de produção. A regressão de tokens do Desktop também verifica a origem das
+recompensas, de stake e dos blocos proof-of-stake e a vinculação aos votos dos
+validadores, além da preservação dos tokens e saldos ao rejeitar uma cadeia
+divergente menor no trecho finalizado. A regressão do DEX verifica ainda que prefixos antigos não
+concluem a sincronização e que conflitos no trecho finalizado não alteram comprovantes
+confirmados nem o cache persistente da rede.
+
+## Regressão da finalização por stake
+
+Compile o Core em Release e use um diretório vazio para cada execução. Os
+checkpoints persistidos não podem ser sobrescritos por outro histórico de teste.
+
+```sh
+mkdir -p work/finality-regression
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -r:System.Security \
+  -out:work/PrivateCoinFinalityRegression.exe \
+  Tests/PrivateCoinFinalityRegression.cs Tests/FinalityTestSupport.cs \
+  PrivateCoin.Desktop/WalletStore.cs PrivateCoin.Desktop/RecoveryPhraseGenerator.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinFinalityRegression.exe \
+  work/finality-regression
+```
+
+Verifica o limite estrito de mais de 2/3, votos ponderados pelo stake anterior,
+rejeição de assinaturas falsas, duplicadas ou para outro bloco/pai, certificados
+sem quorum e finalização que tenta pular um pai. Confere a combinação de votos
+parciais recebidos em snapshots separados, o registro persistente contra voto
+duplo, restauração do checkpoint, rejeição de gravações antigas e preservação do
+arquivo após falha. Testa forks de todos os tamanhos contra o checkpoint,
+mudanças permitidas no trecho provisório, novos checkpoints comprovados e troca
+de votos e certificados entre dois nós TCP reais. Usa somente chaves e dados
+descartáveis.

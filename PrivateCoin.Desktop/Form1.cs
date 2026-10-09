@@ -23,6 +23,8 @@ namespace PrivateCoin.Desktop
         private bool persistenceAvailable = true;
         private bool miningInProgress;
         private bool updateCheckInProgress;
+        private bool publishingFinality;
+        private bool finalityPublicationRequested;
 
         private sealed class FeeChoice
         {
@@ -83,16 +85,16 @@ namespace PrivateCoin.Desktop
                     "POVIX", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 var recoveryWallet = new NamedWallet("Carteira temporária", new Wallet());
                 wallets.Add(recoveryWallet);
-                blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
+                blockchain = new Blockchain();
             }
             RefreshWalletList(0);
             UpdateChainSummary();
         }
 
-        private static Blockchain CreateBlockchainForWallet(Wallet wallet)
+        private Blockchain CreateBlockchainForWallet(Wallet wallet)
         {
             // Opening a wallet must not create an isolated chain or issue coins.
-            return new Blockchain();
+            return new Blockchain(walletStore.NodeId);
         }
 
         private bool IsNetworkConnected() => peerNode != null && peerNode.ConnectedPeerCount > 0;
@@ -217,7 +219,8 @@ namespace PrivateCoin.Desktop
                     Log("Carteira “" + name + "” criada com recompensa de " +
                         reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX no bloco #" +
                         rewardBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
-                    if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
+                    if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain);
+                    await PublishFinalityAsync();
                 }
                 else
                     Log("Carteira “" + name + "” criada e salva. Os 180.000 POVIX reservados para novas carteiras já foram distribuídos.", true);
@@ -338,6 +341,7 @@ namespace PrivateCoin.Desktop
                 peerNode = new PeerNode(port, enableNatTraversal, peerCachePath);
                 peerNode.TransactionReceived += PeerNodeTransactionReceived;
                 peerNode.ChainReceived += PeerNodeChainReceived;
+                peerNode.FinalityVoteReceived += PeerNodeFinalityVoteReceived;
                 peerNode.SynchronizationRequested += PeerNodeSynchronizationRequested;
                 peerNode.PeerCountChanged += PeerNodePeerCountChanged;
                 peerNode.NatTraversalStatusChanged += PeerNodePeerCountChanged;
@@ -467,7 +471,17 @@ namespace PrivateCoin.Desktop
         private void PeerNodeSynchronizationRequested(object sender, EventArgs e)
         {
             PeerNode node = peerNode;
-            if (node != null) node.BroadcastChainAsync(blockchain.Blocks);
+            if (node == null || IsDisposed) return;
+            BeginInvoke(new Action(async () =>
+            {
+                if (!ReferenceEquals(node, peerNode)) return;
+                try
+                {
+                    await node.BroadcastChainAsync(blockchain);
+                    await PublishFinalityAsync();
+                }
+                catch (Exception error) { Log("Resposta de sincronização interrompida — " + error.Message, false); }
+            }));
         }
 
         private void PeerNodeChainReceived(object sender, ChainReceivedEventArgs e)
@@ -481,14 +495,17 @@ namespace PrivateCoin.Desktop
                     bool accepted = networkReadiness.Accept(epoch,
                         () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
                         {
-                            // TryReplaceChain validates even when the chain is identical
-                            // or loses the deterministic fork-choice comparison.
-                            changed = blockchain.TryReplaceChain(e.Blocks);
-                            if (changed)
+                            // An older prefix cannot release a reconnecting node.
+                            if (!blockchain.TrySynchronizeChain(e.Blocks, e.Finality, out changed)) return false;
+                            if (changed) RemoveInvalidPendingTransactions();
+                            // Persist even an identical chain: a previous disk failure may
+                            // have advanced the in-memory checkpoint before disconnecting.
+                            if (!SavePublicState())
                             {
-                                RemoveInvalidPendingTransactions();
-                                SaveState();
+                                networkReadiness.Disconnect();
+                                throw new IOException("O checkpoint não pôde ser salvo.");
                             }
+                            return true;
                         });
                     if (!accepted) return;
                     UpdatePeerStatus();
@@ -497,9 +514,10 @@ namespace PrivateCoin.Desktop
                     {
                         Log("Blockchain sincronizada pela rede (" + e.Blocks.Length.ToString(CultureInfo.InvariantCulture) + " blocos).", true);
                         PeerNode node = peerNode;
-                        if (node != null) await node.BroadcastChainAsync(blockchain.Blocks);
+                        if (node != null) await node.BroadcastChainAsync(blockchain);
                     }
                     if (SnapshotPending().Length > 0) StartAutomaticMining();
+                    await PublishFinalityAsync();
                 }
                 catch (Exception error)
                 {
@@ -525,6 +543,71 @@ namespace PrivateCoin.Desktop
                 pendingTransactions.Clear();
                 pendingTransactions.AddRange(valid);
             }
+        }
+
+        private void PeerNodeFinalityVoteReceived(object sender, FinalityVoteReceivedEventArgs e)
+        {
+            if (IsDisposed) return;
+            BeginInvoke(new Action(async () =>
+            {
+                if (!ReferenceEquals(sender, peerNode)) return;
+                if (!networkReadiness.IsReady || e.Vote.Height >= blockchain.Blocks.Count)
+                {
+                    if (peerNode != null) await peerNode.RequestSynchronizationAsync();
+                    return;
+                }
+                try
+                {
+                    bool advanced = ExecuteNetworkOperation(() => blockchain.AddFinalityVote(e.Vote));
+                    if (!SavePublicState()) { networkReadiness.Disconnect(); return; }
+                    if (advanced)
+                    {
+                        Log("Bloco #" + blockchain.FinalizedHeight.ToString(CultureInfo.InvariantCulture) +
+                            " finalizado com mais de 2/3 do stake ativo anterior.", true);
+                        UpdateChainSummary();
+                        if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain);
+                    }
+                    await PublishFinalityAsync();
+                }
+                catch (Exception error) { Log("Voto de finalização rejeitado — " + error.Message, false); }
+            }));
+        }
+
+        private async Task PublishFinalityAsync()
+        {
+            if (publishingFinality) { finalityPublicationRequested = true; return; }
+            if (!persistenceAvailable || !networkReadiness.IsReady || !IsNetworkConnected()) return;
+            publishingFinality = true;
+            try
+            {
+                do
+                {
+                    finalityPublicationRequested = false;
+                    while (networkReadiness.IsReady && IsNetworkConnected())
+                    {
+                        int height = blockchain.NextFinalityHeight;
+                        if (height < 0) break;
+                        foreach (ValidatorStake stake in blockchain.GetFinalityValidators(height))
+                        {
+                            NamedWallet owner = wallets.FirstOrDefault(w => w.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress));
+                            if (owner == null) continue;
+                            ValidatorStake signer = owner.Wallet.CreateValidatorStake(stake.RewardAddress, stake.LockedAmount);
+                            if (signer.PublicKey != stake.PublicKey) continue;
+                            FinalityVote vote = ExecuteNetworkOperation(() => walletStore.GetFinalityVote(blockchain, height, signer));
+                            ExecuteNetworkOperation(() => blockchain.AddFinalityVote(vote));
+                            if (!SavePublicState()) { networkReadiness.Disconnect(); return; }
+                            PeerNode node = peerNode;
+                            if (node != null) await node.BroadcastFinalityVoteAsync(vote);
+                            if (blockchain.FinalizedHeight >= height) break;
+                        }
+                        if (blockchain.FinalizedHeight < height) break;
+                        UpdateChainSummary();
+                        if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain);
+                    }
+                } while (finalityPublicationRequested && networkReadiness.IsReady && IsNetworkConnected());
+            }
+            catch (Exception error) { Log("Não foi possível publicar o voto de finalização — " + error.Message, false); }
+            finally { publishingFinality = false; }
         }
 
         private void ValidateAndQueue(Transaction transaction, string source)
@@ -598,7 +681,8 @@ namespace PrivateCoin.Desktop
                         "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
                         " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     SaveState();
-                    if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
+                    if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain);
+                    await PublishFinalityAsync();
                     UpdateChainSummary();
                 }
             }
@@ -699,7 +783,8 @@ namespace PrivateCoin.Desktop
                 Block lockBlock = ExecuteNetworkOperation(() => blockchain.AddBlock(new[] { lockTransaction }));
                 selected.ActivateValidator(amount, rewardAddress);
                 SaveState();
-                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
+                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain);
+                _ = PublishFinalityAsync();
                 UpdateWalletSummary();
                 Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
                     " POVIX bloqueados globalmente no bloco #" + lockBlock.Height.ToString(CultureInfo.InvariantCulture) + ".", true);
@@ -735,7 +820,8 @@ namespace PrivateCoin.Desktop
                 Block unlockBlock = ExecuteNetworkOperation(() => blockchain.AddBlock(new[] { unlockTransaction }));
                 selected.DeactivateValidator();
                 SaveState();
-                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain.Blocks);
+                if (peerNode != null) _ = peerNode.BroadcastChainAsync(blockchain);
+                _ = PublishFinalityAsync();
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
                     " POVIX desbloqueados globalmente no bloco #" + unlockBlock.Height.ToString(CultureInfo.InvariantCulture) +
@@ -775,11 +861,18 @@ namespace PrivateCoin.Desktop
             unlockStakeButton.Enabled = selected != null && selected.IsValidator;
         }
 
-        private void SaveState()
+        private bool SaveState()
         {
-            if (!persistenceAvailable) return;
-            try { walletStore.Save(wallets, blockchain, SnapshotPending()); }
-            catch (Exception error) { Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false); }
+            if (!persistenceAvailable) return false;
+            try { walletStore.Save(wallets, blockchain, SnapshotPending()); return true; }
+            catch (Exception error) { Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false); return false; }
+        }
+
+        private bool SavePublicState()
+        {
+            if (!persistenceAvailable) return false;
+            try { walletStore.SaveNetwork(blockchain, SnapshotPending()); return true; }
+            catch (Exception error) { Log("Não foi possível salvar o checkpoint da rede: " + error.Message, false); return false; }
         }
 
         private Transaction[] SnapshotPending()
@@ -793,6 +886,7 @@ namespace PrivateCoin.Desktop
             int pendingCount = pending.Length;
             chainStatusLabel.Text = "Blocos: " + blockchain.Blocks.Count.ToString(CultureInfo.InvariantCulture) +
                 "   |   Pendentes: " + pendingCount.ToString(CultureInfo.InvariantCulture) +
+                "   |   Finalizado: " + blockchain.FinalizedHeight.ToString(CultureInfo.InvariantCulture) +
                 "   |   Cadeia: " + (blockchain.IsValid() ? "válida" : "inválida");
             int selectedFeeIndex = feeComboBox.SelectedIndex < 0 ? 1 : feeComboBox.SelectedIndex;
             feeComboBox.BeginUpdate();

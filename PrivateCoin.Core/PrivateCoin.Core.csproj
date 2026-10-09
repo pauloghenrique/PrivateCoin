@@ -51,9 +51,13 @@
   <ItemGroup>
     <Compile Include="Blockchain.cs" />
     <Compile Include="BlockchainQueryApi.cs" />
+    <Compile Include="BlockchainStateStore.cs" />
     <Compile Include="Crypto.cs" />
     <Compile Include="DeterministicRsa.cs" />
     <Compile Include="Models.cs" />
+    <Compile Include="Finality.cs" />
+    <Compile Include="FinalityVoteJournal.cs" />
+    <Compile Include="NodeIdentity.cs" />
     <Compile Include="PeerAddressBook.cs" />
     <Compile Include="PeerNode.cs" />
     <Compile Include="ProofOfStake.cs" />
