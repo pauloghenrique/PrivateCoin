@@ -103,12 +103,16 @@ após a confirmação. Enquanto a transação está pendente, o UTXO inteiro pod
 estar reservado: a tela separa disponível, confirmado, reservado e valores a
 receber. O troco pendente não pode ser gasto até sua confirmação.
 
-O botão de gerar endereço de recebimento ainda cria uma chave local, salva
-cifrada **antes** da assinatura. O backup atualizado preserva todas as
-carteiras da coleção e modifica apenas a selecionada. A revisão pede seu
-download. Esse backup inclui as chaves novas de recebimento que não existem no
-`wallets.dat` original nem podem ser recuperadas apenas pela frase antiga.
-Use o backup atualizado para restaurar a carteira no DEX em outro navegador.
+Ao abrir a carteira, um destino vazio é preenchido com seu primeiro endereço
+já salvo. O botão **Usar endereço da minha carteira** usa esse mesmo endereço,
+sem gerar uma chave exclusiva do navegador. Assim, o `wallets.dat` original
+reconhece tanto os tokens emitidos quanto o troco em POVIX após a confirmação.
+Um destino informado explicitamente é preservado. Se pertencer a outra
+carteira, a revisão avisa que a movimentação pelo DEX exige também a chave
+desse destino, além da autorização do criador.
+
+O backup atualizado preserva todas as carteiras da coleção; a revisão pede
+seu download. Use-o para restaurar a carteira no DEX em outro navegador.
 Não apague o armazenamento local antes de guardá-lo. Evite usar a mesma
 carteira simultaneamente em instalações diferentes: uma transação concorrente
 pode consumir seu UTXO.
@@ -171,6 +175,15 @@ aparece sem saldo nas chaves abertas e seu endereço foi gerado no navegador,
 abra o `.povixwallet` atualizado daquela criação. Tokens reservados por envios
 pendentes aguardam a confirmação. Alterações dos campos e da taxa atualizam
 a revisão pelos eventos `input` e `change`.
+Para cada token, a tela mostra os endereços que receberam a emissão, seu
+saldo confirmado atual e se suas chaves estão na carteira aberta. Esses dados
+vêm das saídas e dos UTXOs da blockchain. Um endereço sem chave pode ter saldo
+confirmado, mas esse valor não é somado ao disponível da carteira. Se o
+`wallets.dat` original mostrar zero porque o destino foi gerado em uma versão
+anterior do DEX, bloqueie a carteira, abra o `.povixwallet` baixado antes de
+assinar aquela criação e selecione a mesma carteira. Esse backup contém a
+chave de recebimento e permite assinar o gasto do saldo real. A correção das
+novas criações não altera os destinos de transações já confirmadas.
 O envio só usa tokens e POVIX confirmados disponíveis nas chaves dessa
 carteira. Se a criação enviou o token a outra carteira, o criador não pode
 gastar o saldo dela. Se o endereço de recebimento foi gerado pelo DEX, use

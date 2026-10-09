@@ -26,8 +26,11 @@ repetição idempotente, reinício, confirmação proof-of-stake e preservação
 chaves de endereços gerados no navegador.
 
 A regressão do formulário executa o script real de criação com a carteira
-Web Crypto e respostas HTTP de teste: a preparação deve escolher um endereço
-da carteira importada sem adicionar uma chave para o troco, exibir seu valor
+Web Crypto e respostas HTTP de teste: abrir a carteira com destino vazio e
+usar o botão de recebimento devem escolher um endereço já importado, sem
+adicionar uma chave exclusiva do navegador. Um destino externo é preservado
+e seu efeito sobre a movimentação é explicado na revisão. A preparação deve
+escolher um endereço da carteira importada para o troco, exibir seu valor
 exato na revisão e distinguir saldo reservado de saldo disponível. Na rede
 local real, também confere os valores retornados pela ação MVC de saldo e
 pelo comprovante. Após a confirmação, os mesmos endereços do arquivo original
@@ -52,6 +55,16 @@ os controles também pelo evento `change`, e que token não selecionado, quantid
 inválido, POVIX insuficiente, ausência de saldo do token, saldo reservado e
 quantidade acima do disponível não preparam nem assinam uma transferência.
 A validação nativa dos campos também expõe o motivo na própria página.
+
+Simula também um arquivo original do Desktop com as chaves do criador e da
+taxa, mas sem a chave do endereço que recebeu os tokens. A consulta real da
+blockchain retorna zero disponível e identifica o saldo confirmado naquele
+endereço; a preparação não pode gastar esse saldo sem sua chave. O formulário
+real abre essa carteira incompleta, mostra o diagnóstico e, ao abrir o backup
+atualizado com a chave de recebimento, recupera o saldo disponível e assina a
+transferência com Web Crypto. Ter emitido o token não acrescenta saldo sem
+UTXOs próprios. Um endereço com chave presente e saldo já gasto recebe um
+diagnóstico diferente de chave ausente.
 
 A preparação e o envio passam também pelas ações MVC reais, usando contextos
 HTTP de teste e a coleção de sessão do ASP.NET. Confere que a preparação grava

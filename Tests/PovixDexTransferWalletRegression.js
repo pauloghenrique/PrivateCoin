@@ -30,7 +30,7 @@ node('transfer-app').dataset = { networkUrl: '/network', balanceUrl: '/balance',
     prepareUrl: '/prepare', submitUrl: '/submit', receiptUrl: '/tokens/movimentacao/__id__', networkId: fixture.networkId, tokenId: fixture.expected.TokenId };
 node('Amount').value = ''; node('DestinationAddress').value = '';
 const submissions = [];
-let preparations = 0, nativeBalance = null, tokenBalance = '9223372036854775807', tokenConfirmed = tokenBalance;
+let preparations = 0, nativeBalance = null, tokenBalance = null, tokenConfirmed = null;
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-transfer.js'), 'utf8'), {
     window: { PovixTokenWallet: wallet }, document, URL, URLSearchParams,
     location: { origin: 'https://dex.test', assign(url) { redirected = url; } },
@@ -42,8 +42,13 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
         else if (url === '/balance') {
             const native = (BigInt(fixture.draft.povixChangeAtomic) + BigInt(fixture.draft.feeAtomic)).toString();
             result = { balanceAtomic: nativeBalance == null ? native : nativeBalance, confirmedAtomic: native, reservedAtomic: '0', pendingIncomingAtomic: '0' };
-        } else if (url === '/tokens') result = [{ tokenId: fixture.expected.TokenId, name: fixture.expected.Name, symbol: fixture.expected.Symbol,
-            decimals: fixture.expected.Decimals, creatorAddress: fixture.expected.CreatorAddress, balanceAtomic: tokenBalance, confirmedAtomic: tokenConfirmed }];
+        } else if (url === '/tokens') {
+            const metadata = wallet.addresses().includes(fixture.incompleteToken.receivingAddresses[0].address) ? fixture.tokens[0] : fixture.incompleteToken;
+            result = [{ ...metadata, balanceAtomic: tokenBalance == null ? metadata.balanceAtomic : tokenBalance,
+                confirmedAtomic: tokenConfirmed == null ? metadata.confirmedAtomic : tokenConfirmed,
+                receivingAddresses: metadata.receivingAddresses.map(item => ({ ...item,
+                    confirmedAtomic: tokenConfirmed == null ? item.confirmedAtomic : tokenConfirmed })) }];
+        }
         else if (url === '/history') result = [];
         else if (url === '/prepare') {
             const body = new URLSearchParams(options.body);
@@ -66,13 +71,31 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
 
 (async () => {
     assert.equal(node('prepare-transfer').disabled, true);
-    const bytes = new TextEncoder().encode(JSON.stringify(fixture.wallet));
-    node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.buffer }];
-    node('wallet-password').value = 'dex-test-password-only';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
-    assert.equal(wallet.isUnlocked(), false, 'wallet selection must be explicit');
-    node('wallet-choice').value = '0';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
+    async function open(record) {
+        const bytes = new TextEncoder().encode(JSON.stringify(record));
+        node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.buffer }];
+        node('wallet-password').value = 'dex-test-password-only';
+        await node('wallet-form').listeners.submit({ preventDefault() {} });
+        assert.equal(wallet.isUnlocked(), false, 'wallet selection must be explicit');
+        node('wallet-choice').value = '0';
+        await node('wallet-form').listeners.submit({ preventDefault() {} });
+        await refresh();
+    }
+    await open(fixture.incompleteWallet);
+    assert(node('token-balance').textContent.includes('Disponível: 0,00000000'));
+    assert(node('transfer-hint').textContent.includes('wallets.dat'));
+    const receivingText = () => node('token-receiving-addresses').children.map(item => item.textContent).join(' ');
+    assert(receivingText().includes(fixture.incompleteToken.receivingAddresses[0].address));
+    assert(receivingText().includes('Chave ausente'));
+    assert(receivingText().includes(wallet.formatAtomic(fixture.incompleteToken.receivingAddresses[0].confirmedAtomic, fixture.expected.Decimals)));
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('.povixwallet'));
+    node('wallet-lock').listeners.click();
+    assert.equal(receivingText(), '', 'locking the wallet removes the previous issuance diagnostics');
+    await open(fixture.wallet);
+    assert(node('token-balance').textContent.includes(wallet.formatAtomic(fixture.tokens[0].balanceAtomic, fixture.expected.Decimals)));
+    assert(receivingText().includes('Chave presente'));
+    console.log('PASS original Desktop keys show zero and the missing issuance key; reopening the updated backup restores spendable tokens before signing');
     await refresh();
     assert.equal(node('app-message').textContent, '');
     assert.equal(node('TokenId').value, fixture.expected.TokenId);
@@ -100,7 +123,8 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert(node('transfer-hint').textContent.includes('Revise a movimentação'));
     tokenBalance = '0'; tokenConfirmed = '0'; nativeBalance = null; await refresh();
     await node('transfer-form').listeners.submit({ preventDefault() {} });
-    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('.povixwallet'));
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('envios já realizados'));
+    assert(!node('app-message').textContent.includes('chave desse endereço não está'), 'an owned address with no remaining tokens is not a missing-key diagnosis');
     tokenConfirmed = '9223372036854775807'; await refresh();
     await node('transfer-form').listeners.submit({ preventDefault() {} });
     assert.equal(preparations, 0); assert(node('app-message').textContent.includes('reservado'));

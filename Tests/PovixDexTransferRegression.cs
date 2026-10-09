@@ -34,6 +34,32 @@ internal static partial class PovixDexRegression
             var items = new SessionStateItemCollection();
             var controller = TransferControllerFor(service, "transfer-owner", items);
             var model = new TokenTransferViewModel { TokenId = tokenId, Amount = "1,23456789", DestinationAddress = destination, FeePriority = 2 };
+            object incompleteWallet;
+            Dictionary<string, object> incompleteToken;
+            string receivingAddress = creation.Outputs.Single(output => output.AssetId == tokenId).OneTimeAddress;
+            string[] originalKeys = issuer.ExportPrivateKeys().Where(xml => {
+                using (var rsa = new RSACryptoServiceProvider()) {
+                    rsa.PersistKeyInCsp = false; rsa.FromXmlString(xml);
+                    using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(rsa.ToXmlString(false)))).Replace("-", "").ToLowerInvariant() != receivingAddress;
+                }
+            }).ToArray();
+            using (var desktopOriginal = Wallet.FromPrivateKeys(originalKeys))
+            {
+                incompleteWallet = EncryptedWallet(desktopOriginal);
+                incompleteToken = (Dictionary<string, object>)((object[])Json.DeserializeObject(Json.Serialize(service.GetCreatedTokens(PublicKeys(desktopOriginal)))))[0];
+                var receiving = (Dictionary<string, object>)((object[])incompleteToken["receivingAddresses"])[0];
+                Check((string)incompleteToken["balanceAtomic"] == "0" && (string)incompleteToken["confirmedAtomic"] == "0" &&
+                    service.GetBalance(desktopOriginal.OwnedOneTimeAddresses.ToArray()) > 0 &&
+                    (string)receiving["address"] == receivingAddress && !(bool)receiving["owned"] && long.Parse((string)receiving["confirmedAtomic"]) == long.MaxValue,
+                    "original Desktop keys reveal the missing issuance key without crediting another address as spendable");
+                var unavailable = TransferData(TransferControllerFor(service, "desktop-original", new SessionStateItemCollection()).Prepare(model,
+                    TransportKeys(desktopOriginal), desktopOriginal.OwnedOneTimeAddresses.First()));
+                Check((string)unavailable["code"] == "preparation_invalid" && !unavailable.ContainsKey("draftId"),
+                    "creator and POVIX fee keys cannot spend issued tokens without their receiving key");
+            }
+            var restoredReceiving = (Dictionary<string, object>)((object[])((Dictionary<string, object>)list[0])["receivingAddresses"])[0];
+            Check((bool)restoredReceiving["owned"] && long.Parse((string)restoredReceiving["confirmedAtomic"]) == long.MaxValue,
+                "updated wallet keys recover the real confirmed token balance and its receiving address");
             var blocked = TransferData(controller.Prepare(model, TransportKeys(recipient), destination));
             Check(controller.Response.StatusCode == 400 && (string)blocked["code"] == "creator_required", "DEX preparation rejects a wallet that did not create the token");
             controller = TransferControllerFor(service, "transfer-owner", items);
@@ -41,7 +67,8 @@ internal static partial class PovixDexRegression
             var draft = TransferData(controller.Prepare(model, TransportKeys(issuer), addresses[0]));
             Check(items.Dirty && (string)draft["tokenId"] == tokenId && long.Parse((string)draft["amountAtomic"]) == amount,
                 "MVC transfer preparation retains its session and converts the requested token amount exactly");
-            File.WriteAllText(Path.Combine(directory, "transfer-fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft,
+            File.WriteAllText(Path.Combine(directory, "transfer-fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), incompleteWallet, incompleteToken,
+                tokens = list, draft,
                 expected = new { TokenId = tokenId, Amount = model.Amount, DestinationAddress = destination, Name = creation.Token.Name,
                     Symbol = creation.Token.Symbol, Decimals = creation.Token.Decimals, CreatorAddress = draft["creatorAddress"], FeeAtomic = draft["feeAtomic"] },
                 changeAddress = addresses[0], networkId = Blockchain.NetworkId }));
@@ -80,6 +107,10 @@ internal static partial class PovixDexRegression
             Check(chain.IsValid() && chain.GetTokenBalance(addresses, tokenId) == long.MaxValue - amount && chain.GetTokenBalance(new[] { destination }, tokenId) == amount &&
                 chain.GetBalance(addresses) == beforePovix - receipt.Fee && service.GetBalance(addresses) == beforePovix - receipt.Fee,
                 "confirmed movement conserves the token and deducts only the POVIX fee from the original wallet");
+            var movedToken = (Dictionary<string, object>)((object[])Json.DeserializeObject(Json.Serialize(service.GetCreatedTokens(PublicKeys(issuer)))))[0];
+            var movedReceiving = (Dictionary<string, object>)((object[])movedToken["receivingAddresses"])[0];
+            Check((string)movedReceiving["confirmedAtomic"] == "0" && long.Parse((string)movedToken["balanceAtomic"]) == long.MaxValue - amount,
+                "issuance diagnostics read current unspent outputs after transfer rather than the original issued quantity");
             Check(service.GetTransferReceipt(transactionId).BlockHash == confirmed.Hash && service.GetTransferReceipt(transactionId).Confirmations == 1 &&
                 ((object[])Json.DeserializeObject(Json.Serialize(service.GetTransferHistory(PublicKeys(issuer), tokenId)))).Length == 1,
                 "confirmed receipt and movement history expose real chain data");
