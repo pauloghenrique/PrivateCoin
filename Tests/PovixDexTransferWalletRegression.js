@@ -10,12 +10,12 @@ global.localStorage = { getItem: key => storage.get(key) || null, setItem: (key,
 vm.runInThisContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-wallet.js'), 'utf8'));
 const wallet = global.PovixTokenWallet;
 const nodes = new Map();
-let backupDownloads = 0, refresh, redirected;
+let backupDownloads = 0, refresh, redirected, selectedPriority = '2';
 const node = id => {
     if (!nodes.has(id)) nodes.set(id, {
         value: '', files: [], dataset: {}, listeners: {}, options: [], hidden: false, textContent: '', checked: false, children: [],
         classList: { toggle() {} }, addEventListener(type, listener) { this.listeners[type] = listener; },
-        querySelector(selector) { return { value: selector.includes('FeePriority') ? '2' : 'test-csrf' }; },
+        querySelector(selector) { return { value: selector.includes('FeePriority') ? selectedPriority : 'test-csrf' }; },
         replaceChildren(...children) { this.children = children; this.options = children; if (children[0] && children[0].value != null) this.value = children[0].value; },
         add(option) { this.options.push(option); }, reportValidity() { return true; }, scrollIntoView() {},
         appendChild(child) { this.children.push(child); }, click() { backupDownloads++; }
@@ -28,9 +28,9 @@ const document = { getElementById: node, querySelectorAll: () => [], createEleme
 global.document = document;
 node('transfer-app').dataset = { networkUrl: '/network', balanceUrl: '/balance', tokensUrl: '/tokens', historyUrl: '/history',
     prepareUrl: '/prepare', submitUrl: '/submit', receiptUrl: '/tokens/movimentacao/__id__', networkId: fixture.networkId, tokenId: fixture.expected.TokenId };
-node('Amount').value = fixture.expected.Amount; node('DestinationAddress').value = fixture.expected.DestinationAddress;
+node('Amount').value = ''; node('DestinationAddress').value = '';
 const submissions = [];
-let preparations = 0;
+let preparations = 0, nativeBalance = null, tokenBalance = '9223372036854775807', tokenConfirmed = tokenBalance;
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-transfer.js'), 'utf8'), {
     window: { PovixTokenWallet: wallet }, document, URL, URLSearchParams,
     location: { origin: 'https://dex.test', assign(url) { redirected = url; } },
@@ -41,9 +41,9 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
         if (url === '/network') result = { CanCreate: true, PeerCount: 2, Height: 10, Fees: ['1', fixture.expected.FeeAtomic, '4'] };
         else if (url === '/balance') {
             const native = (BigInt(fixture.draft.povixChangeAtomic) + BigInt(fixture.draft.feeAtomic)).toString();
-            result = { balanceAtomic: native, confirmedAtomic: native, reservedAtomic: '0', pendingIncomingAtomic: '0' };
+            result = { balanceAtomic: nativeBalance == null ? native : nativeBalance, confirmedAtomic: native, reservedAtomic: '0', pendingIncomingAtomic: '0' };
         } else if (url === '/tokens') result = [{ tokenId: fixture.expected.TokenId, name: fixture.expected.Name, symbol: fixture.expected.Symbol,
-            decimals: fixture.expected.Decimals, creatorAddress: fixture.expected.CreatorAddress, balanceAtomic: '9223372036854775807', confirmedAtomic: '9223372036854775807' }];
+            decimals: fixture.expected.Decimals, creatorAddress: fixture.expected.CreatorAddress, balanceAtomic: tokenBalance, confirmedAtomic: tokenConfirmed }];
         else if (url === '/history') result = [];
         else if (url === '/prepare') {
             const body = new URLSearchParams(options.body);
@@ -77,6 +77,40 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert.equal(node('app-message').textContent, '');
     assert.equal(node('TokenId').value, fixture.expected.TokenId);
     assert.equal(node('prepare-transfer').disabled, false);
+    node('TokenId').value = ''; node('TokenId').listeners.change();
+    assert.equal(node('prepare-transfer').disabled, false);
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('Selecione um token'));
+    node('TokenId').value = fixture.expected.TokenId; node('TokenId').listeners.change();
+    node('transfer-form').listeners.invalid();
+    assert(node('app-message').textContent.includes('quantidade'));
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('quantidade'));
+    node('Amount').value = fixture.expected.Amount;
+    node('transfer-form').listeners.change();
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('endereço'));
+    node('DestinationAddress').value = fixture.expected.DestinationAddress;
+    nativeBalance = '1'; await refresh();
+    selectedPriority = '4'; node('transfer-form').listeners.change();
+    assert.equal(node('prepare-transfer').disabled, false);
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('taxa selecionada'));
+    selectedPriority = '1'; node('transfer-form').listeners.change();
+    assert(node('transfer-hint').textContent.includes('Revise a movimentação'));
+    tokenBalance = '0'; tokenConfirmed = '0'; nativeBalance = null; await refresh();
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('.povixwallet'));
+    tokenConfirmed = '9223372036854775807'; await refresh();
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('reservado'));
+    tokenBalance = '1'; await refresh();
+    await node('transfer-form').listeners.submit({ preventDefault() {} });
+    assert.equal(preparations, 0); assert(node('app-message').textContent.includes('saldo disponível do token'));
+    tokenBalance = '9223372036854775807'; selectedPriority = '2'; await refresh();
+    node('transfer-form').listeners.change();
+    assert.equal(node('prepare-transfer').disabled, false);
+    console.log('PASS review control validates missing token, amount, destination, selected fee, absent token keys, reserved tokens and excessive amounts without a silent disabled button');
     const addresses = wallet.addresses();
     await node('transfer-form').listeners.submit({ preventDefault() {} });
     assert.equal(node('app-message').textContent, ''); assert.equal(preparations, 1);

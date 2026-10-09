@@ -163,6 +163,14 @@ chave que assinou a primeira entrada da criação (da qual deriva o
 identificador do token) e mostra o saldo confirmado e o disponível.
 
 Escolha o token, a quantidade, o endereço de destino e a prioridade da taxa.
+O botão de revisão fica disponível quando a carteira está aberta e a rede
+está pronta. Ao clicar, a tela valida a seleção do token, os campos e os dois saldos,
+mostrando a causa precisa se faltar quantidade, destino, taxa ou saldo livre.
+O saldo em POVIX paga a taxa; ele não substitui o saldo do token. Se o token
+aparece sem saldo nas chaves abertas e seu endereço foi gerado no navegador,
+abra o `.povixwallet` atualizado daquela criação. Tokens reservados por envios
+pendentes aguardam a confirmação. Alterações dos campos e da taxa atualizam
+a revisão pelos eventos `input` e `change`.
 O envio só usa tokens e POVIX confirmados disponíveis nas chaves dessa
 carteira. Se a criação enviou o token a outra carteira, o criador não pode
 gastar o saldo dela. Se o endereço de recebimento foi gerado pelo DEX, use

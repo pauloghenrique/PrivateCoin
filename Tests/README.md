@@ -46,6 +46,13 @@ saldo, repetição após falha temporária, histórico/comprovante e recuperaç�
 após reinício. As transferências normais de proprietários continuam válidas
 pelo consenso existente fora dessa tela do DEX.
 
+O formulário começa com quantidade e destino vazios, como na tela real.
+Confere que o clique de revisão explica o problema, que mudar a taxa atualiza
+os controles também pelo evento `change`, e que token não selecionado, quantidade vazia, destino
+inválido, POVIX insuficiente, ausência de saldo do token, saldo reservado e
+quantidade acima do disponível não preparam nem assinam uma transferência.
+A validação nativa dos campos também expõe o motivo na própria página.
+
 A preparação e o envio passam também pelas ações MVC reais, usando contextos
 HTTP de teste e a coleção de sessão do ASP.NET. Confere que a preparação grava
 a sessão (necessário para conservar seu cookie), que outra requisição com a
