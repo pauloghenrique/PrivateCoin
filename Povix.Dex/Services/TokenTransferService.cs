@@ -20,7 +20,7 @@ namespace Povix.Dex.Services
             {
                 var keys = new HashSet<string>(publicKeys, StringComparer.Ordinal);
                 var addresses = new HashSet<string>(publicKeys.Select(AddressFor), StringComparer.Ordinal);
-                var creations = blockchain.Blocks.SelectMany(block => block.Transactions).Concat(blockchain.GetApprovedTokenCreations(pending)).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
+                var creations = blockchain.Blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
                     keys.Contains(tx.Inputs[0].PublicKey)).ToArray();
                 var receivingAddresses = creations.SelectMany(tx => tx.Outputs.Where(output => output.AssetId == tx.Token.Id))
                     .Select(output => output.OneTimeAddress);
@@ -62,7 +62,7 @@ namespace Povix.Dex.Services
                 if (drafts.Count + transferDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) >= 5)
                     throw new TokenOperationException("draft_limit", "Há preparações em andamento. Aguarde alguns minutos e tente novamente.");
                 Transaction creation = FindCreation(model.TokenId);
-                if (creation == null) throw new TokenOperationException("token_unconfirmed", "O token precisa ter sua criação confirmada por validação ou bloco.");
+                if (creation == null) throw new TokenOperationException("token_unconfirmed", "O token precisa ter sua criação confirmada em bloco.");
                 string creatorKey = creation.Inputs[0].PublicKey;
                 if (!publicKeys.Contains(creatorKey, StringComparer.Ordinal))
                     throw new TokenOperationException("creator_required", "Somente a carteira que criou este token pode movimentá-lo nesta tela.");
@@ -152,7 +152,7 @@ namespace Povix.Dex.Services
                     DestinationAddress = destination.OneTimeAddress, ChangeOutputs = transaction.Outputs.Skip(1).Select(output =>
                         new TransactionOutput { Amount = output.Amount, AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress }).ToArray(),
                     Status = block != null ? "confirmed" : pending.Any(tx => tx.Id == id) ?
-                        blockchain.HasValidTransactionApproval(transaction, pending) ? "confirmed" : "pending" : "rejected",
+                        blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected",
                     ValidationCount = (block != null || pending.Any(tx => tx.Id == id) && blockchain.HasValidTransactionApproval(transaction, pending)) &&
                         (transaction.TransactionApproval != null || block?.TransactionValidations?.Any(proof => proof.TransactionId == id) == true) ? 1 : 0, BlockHeight = block?.Height,
                     BlockHash = block?.Hash, Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1, PeerCount = node.ConnectedPeerCount };
@@ -175,7 +175,7 @@ namespace Povix.Dex.Services
         }
 
         private Transaction FindCreation(string tokenId) => blockchain.Blocks.SelectMany(block => block.Transactions)
-            .Concat(blockchain.GetApprovedTokenCreations(pending)).FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token.Id == tokenId);
+            .FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token.Id == tokenId);
         private static string AddressFor(string publicKey)
         {
             using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(publicKey))).Replace("-", "").ToLowerInvariant();

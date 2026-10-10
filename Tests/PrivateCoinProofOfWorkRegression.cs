@@ -37,15 +37,15 @@ internal static class PrivateCoinProofOfWorkRegression
                 var common = Clone(chain.Blocks);
                 Transaction tx = payer.CreateTransaction(chain, new Transaction[0], recipient.CreateReceiveAddress(), 12345, 7);
                 Reject(() => chain.AddProofOfStakeBlock(new Transaction[0], validators), "empty consensus blocks are rejected");
-                Reject(() => chain.AddProofOfStakeBlock(new[] { tx }, validators), "partial consensus batches are rejected");
-                Check(chain.Blocks.Count == common.Count && Blockchain.SelectValidationBatch(new[] { tx }).Count == 0,
-                    "fewer than 20 transactions remain pending without adding a block");
+                Reject(() => chain.AddProofOfStakeBlock(new[] { tx }, validators), "unapproved operations are rejected");
+                Check(chain.Blocks.Count == common.Count && Blockchain.SelectValidationBatch(new[] { tx }).Count == 1,
+                    "one operation is selected without adding a block until approval and mining");
                 Block block = batches.Confirm(chain, new[] { tx }, validators);
-                Check(chain.IsValid() && block.ConsensusVersion == Blockchain.ConsensusVersion && block.Transactions.Count == 21,
-                    "20 signed operations plus settlement produce a valid hybrid block");
+                Check(chain.IsValid() && block.ConsensusVersion == Blockchain.ConsensusVersion && block.Transactions.Count == 2,
+                    "one signed operation plus settlement produces a valid hybrid block");
                 Check(block.Validators.Single(v => v.IsCreator).ValidatorId == ProofOfStake.SelectCreator(validators, block.PreviousHash, block.Height).ValidatorId,
                     "locked stake independently determines the block creator");
-                Check(block.Validators.Count == 2 && block.TransactionValidations.Count == 20 && ProofOfWork.MeetsTarget(block.Hash),
+                Check(block.Validators.Count == 2 && block.TransactionValidations.Count == 1 && ProofOfWork.MeetsTarget(block.Hash),
                     "both signed stake proofs and proof of work are mandatory");
                 Check(block.Transactions[0].Outputs.Sum(o => o.Amount) == ProofOfStake.GetBlockReward(block.Height) && block.Transactions.Skip(1).Sum(item => item.GetValidationFeeOutput().Amount) == block.Transactions.Skip(1).Sum(item => item.Fee),
                     "scheduled reward and all fees are conserved");
@@ -82,7 +82,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 batches.Confirm(chain, new Transaction[0], validators);
                 batches.Confirm(chain, new Transaction[0], validators);
                 Check(chain.GetConfirmations(tx.Id) == 3 && chain.GetConfirmationWork(tx.Id) == 3 * ProofOfWork.WorkPerBlock,
-                    "confirmations and confirmation work grow with subsequent complete batches");
+                    "confirmations and confirmation work grow with subsequent individual blocks");
                 Check(!chain.TryReplaceChain(luckyBlocks), "a shorter fork with lucky zeros cannot defeat greater cumulative work");
                 bool changed;
                 Check(chain.TrySynchronizeChain(Clone(chain.Blocks), out changed) && !changed, "an identical validated chain completes synchronization");

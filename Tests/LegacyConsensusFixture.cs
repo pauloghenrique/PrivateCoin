@@ -49,10 +49,20 @@ internal static class LegacyConsensusFixture
     }
     public static Block SelfBlock(Blockchain chain, Transaction operation)
     {
-        var batch = new List<Transaction> { operation };
-        while (batch.Count < Blockchain.ValidationsPerBlock)
-            batch.Add(chain.CreateWalletCreationTransaction("self-fixture-" + Guid.NewGuid().ToString("N"), batch));
-        return chain.AddBlock(batch);
+        return SelfBlock(chain, new[] { operation });
+    }
+    public static Block SelfBlock(Blockchain chain, IEnumerable<Transaction> operations)
+    {
+        Block last = null;
+        foreach (Transaction operation in operations) last = chain.AddBlock(new[] { operation });
+        return last;
+    }
+    public static Block FundBatch(Blockchain chain, params string[] addresses)
+    {
+        Block last = null;
+        foreach (string address in addresses)
+            last = chain.AddBlock(new[] { chain.CreateWalletCreationTransaction(address, new Transaction[0]) });
+        return last;
     }
     public static Block Lock(Blockchain chain, Transaction tx)
     {
@@ -60,6 +70,29 @@ internal static class LegacyConsensusFixture
             PreviousHash = chain.Blocks.Last().Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks,
             Transactions = new List<Transaction> { tx } };
         Mine(block); chain.TryReplaceChain(chain.Blocks.Concat(new[] { block })); return block;
+    }
+    public static Block ConfirmApprovedLegacy(Blockchain chain, IEnumerable<Transaction> transactions,
+        IEnumerable<ValidatorStake> validators, int version)
+    {
+        var operations = OrderByFeePriority(transactions).ToList();
+        if (operations.Count != ValidationsPerBlock || version < 11 || version > 14)
+            throw new InvalidOperationException("Historical approval fixtures require 20 operations in v11-v14.");
+        var active = validators.ToArray();
+        var parent = chain.Blocks.Last(); int height = chain.Blocks.Count;
+        var creator = ProofOfStake.SelectCreator(active, parent.Hash, height);
+        var rewards = ProofOfStake.DistributeReward(height, creator, active.Where(item => item.ValidatorId != creator.ValidatorId));
+        var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
+        reward.Outputs.AddRange(rewards.Select(item => new TransactionOutput { Amount = item.Amount, OneTimeAddress = item.RewardAddress }));
+        reward.Id = Id(reward);
+        var block = new Block { ConsensusVersion = version, Height = height, PreviousHash = parent.Hash,
+            TimestampUtcTicks = reward.TimestampUtcTicks, Transactions = new[] { reward }.Concat(operations).ToList(),
+            TransactionValidations = operations.Select(tx => tx.TransactionApproval.Proof).ToList(),
+            Validators = active.Select(item => new BlockValidator { ValidatorId = item.ValidatorId,
+                RewardAddress = item.RewardAddress, LockedAmount = item.LockedAmount, PublicKey = item.PublicKey,
+                IsCreator = item.ValidatorId == creator.ValidatorId, OwnedAddresses = item.OwnedAddresses.OrderBy(address => address, StringComparer.Ordinal).ToList() }).ToList() };
+        Resign(block, active); Mine(block);
+        if (!chain.TryReplaceChain(chain.Blocks.Concat(new[] { block }))) throw new Exception("Invalid historical approval fixture");
+        return block;
     }
         public static Block Confirm(Blockchain chain, IEnumerable<Transaction> transactions, IEnumerable<ValidatorStake> validators, int consensusVersion = ConsensusVersion)
         {

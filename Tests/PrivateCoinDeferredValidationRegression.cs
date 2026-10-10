@@ -15,15 +15,16 @@ internal static class PrivateCoinDeferredValidationRegression
             {
                 var chain = new Blockchain(); var queued = new List<Transaction>();
                 string owner = creator.CreateReceiveAddress(), reward = validator.CreateReceiveAddress();
-                queued.Add(chain.CreateWalletCreationTransaction(owner, queued));
-                queued.Add(chain.CreateWalletCreationTransaction(reward, queued));
-                queued.Add(validator.CreateStakeLockTransaction(chain, queued, reward, Blockchain.OneCoin, 0));
+                LegacyConsensusFixture.FundBatch(chain, owner, reward);
+                LegacyConsensusFixture.SelfBlock(chain, validator.CreateStakeLockTransaction(chain, new Transaction[0], reward, Blockchain.OneCoin, 0));
+                for (int i = 0; i < 3; i++) queued.Add(chain.CreateWalletCreationTransaction("deferred-" + i, queued));
                 var token = creator.CreateTokenTransaction(chain, queued, "Deferred", "DEF", 0, 100, owner, 3);
                 queued.Add(token);
+                int height = chain.Blocks.Count;
                 var readiness = new NetworkReadiness(); long epoch = readiness.Epoch;
                 foreach (var tx in queued.AsEnumerable().Reverse()) readiness.Defer(epoch, tx);
                 readiness.Defer(epoch, token);
-                Check(readiness.TakeDeferred(epoch).Length == 0 && chain.Blocks.Count == 1,
+                Check(readiness.TakeDeferred(epoch).Length == 0 && chain.Blocks.Count == height,
                     "receiving creation before synchronization cannot validate or create a block");
                 Check(readiness.Accept(epoch, () => true, () => chain.IsValid()), "a valid synchronized chain releases received operations");
                 var received = Blockchain.OrderByFeePriority(readiness.TakeDeferred(epoch)).ToList();
@@ -32,10 +33,10 @@ internal static class PrivateCoinDeferredValidationRegression
                 chain.ValidatePendingTransactions(received);
                 token.TransactionApproval = chain.CreateTransactionApproval(token, received,
                     new[] { validator.CreateValidatorStake(reward, Blockchain.OneCoin) });
-                Check(chain.HasValidTransactionApproval(token, received) && chain.Blocks.Count == 1 &&
-                    chain.GetSpendableBalance(new[] { reward }, received) == 3 &&
-                    chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, received) == Blockchain.WalletCreationReward - 3,
-                    "a received token creation is approved and its exact fee paid after synchronization without a block");
+                Check(chain.HasValidTransactionApproval(token, received) && chain.Blocks.Count == height &&
+                    chain.GetSpendableBalance(validator.OwnedOneTimeAddresses, received) == 5 * Blockchain.OneCoin &&
+                    chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, received) == 0,
+                    "received creation is approved after synchronization and waits for a block before its fee or change is paid");
                 readiness.Disconnect(); epoch = readiness.Epoch;
                 readiness.Defer(epoch - 1, token); readiness.Defer(epoch, token); readiness.Disconnect();
                 epoch = readiness.Epoch; readiness.Accept(epoch, () => true, () => true);

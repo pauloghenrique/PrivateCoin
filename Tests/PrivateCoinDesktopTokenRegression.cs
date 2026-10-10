@@ -58,17 +58,15 @@ internal static class PrivateCoinDesktopTokenRegression
                 source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain.Blocks);
                 source.Start(new string[0]); desktop.Start(new string[0]);
                 desktop.ConnectAsync("127.0.0.1", sourcePort).GetAwaiter().GetResult();
+                Wait(() => source.ConnectedPeerCount == 1 && desktop.ConnectedPeerCount == 1, "both Desktop peers complete the consensus handshake");
                 Transaction receivedCreation = null;
                 desktop.TransactionReceived += (sender, data) => { if (data.Transaction.Id == create.Id) Interlocked.Exchange(ref receivedCreation, data.Transaction); };
                 create.TransactionApproval = chain.CreateTransactionApproval(create, new[] { create }, validators);
                 source.BroadcastAsync(create).GetAwaiter().GetResult();
                 Wait(() => receivedCreation != null, "Desktop receives the signed creation approval over P2P before its block");
-                var immediate = desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedCreation }).Single();
-                Check(immediate.Amount == long.MaxValue && immediate.CreationHeight == null && immediate.Confirmations == 0 && immediate.ValidationCount == 1 && desktopChain.Blocks.Count == commonBlocks.Length,
-                    "Desktop lists the confirmed token and its exact supply without inventing a creation block");
-                Check(TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedCreation }).Single().Amount == long.MaxValue &&
-                    TokenWalletOperations.GetBalances(desktopChain, recipient, new[] { receivedCreation }).Count == 0,
-                    "the Desktop wallet list includes approved creations only for their actual owner before a block");
+                Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedCreation }).Count == 0 &&
+                    TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedCreation }).Count == 0 && desktopChain.Blocks.Count == commonBlocks.Length,
+                    "approved creation stays outside the Desktop registry until its block");
                 string validProof = receivedCreation.TransactionApproval.Proof.Signature;
                 try
                 {
@@ -77,9 +75,8 @@ internal static class PrivateCoinDesktopTokenRegression
                         "the Desktop does not expose token supply from a forged approval");
                 }
                 finally { receivedCreation.TransactionApproval.Proof.Signature = validProof; }
-                Transaction beforeBlock = TokenWalletOperations.CreateTransfer(desktopChain, issuer, new[] { receivedCreation }, create.Token.Id, recipientAddress, 1, 1);
-                Check(beforeBlock.Inputs.Any(input => input.TransactionId == create.Id) && desktopChain.Blocks.Count == commonBlocks.Length,
-                    "the Desktop can sign a movement of an approved creation before its creation block");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, issuer, new[] { receivedCreation }, create.Token.Id, recipientAddress, 1, 1),
+                    "the Desktop cannot spend tokens before their creation block");
                 Block creationBlock = batches.Confirm(chain, new[] { create }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,
@@ -155,13 +152,13 @@ internal static class PrivateCoinDesktopTokenRegression
                 int blocksBeforeMovement = desktopChain.Blocks.Count;
                 source.BroadcastAsync(transfer).GetAwaiter().GetResult();
                 Wait(() => receivedMovement != null, "Desktop receives token movement approval before the block");
-                Check(desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == 543210 &&
-                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
+                Check(desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == 0 &&
+                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue &&
                     desktopChain.Blocks.Count == blocksBeforeMovement,
-                    "Desktop updates recipient and sender balances from validation without creating a block");
-                Check(TokenWalletOperations.GetBalances(desktopChain, recipient, new[] { receivedMovement }).Single(token => token.Id == create.Token.Id).Amount == 543210 &&
-                    TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedMovement }).Single().Amount == long.MaxValue - 543210,
-                    "the Desktop wallet list follows approved movement balances before the block");
+                    "approved movements preserve block-confirmed recipient and sender balances");
+                Check(TokenWalletOperations.GetAvailableBalance(desktopChain, issuer, new[] { receivedMovement }, create.Token.Id) == 0 &&
+                    TokenWalletOperations.GetBalances(desktopChain, recipient, new[] { receivedMovement }).All(token => token.Id != create.Token.Id),
+                    "the Desktop reserves pending token inputs without releasing receiver or change outputs");
                 batches.Confirm(chain, new[] { transfer }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,

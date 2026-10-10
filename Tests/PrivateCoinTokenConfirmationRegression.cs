@@ -13,71 +13,77 @@ internal static class PrivateCoinTokenConfirmationRegression
         var serializer = new DataContractSerializer(typeof(List<Transaction>));
         using (var stream = new MemoryStream()) { serializer.WriteObject(stream, values); stream.Position = 0; return (List<Transaction>)serializer.ReadObject(stream); }
     }
+    static void Reject(Action action, string label)
+    {
+        try { action(); } catch (InvalidOperationException) { Check(true, label); return; } catch (ArgumentException) { Check(true, label); return; }
+        throw new Exception("Expected rejection: " + label);
+    }
     public static int Main()
     {
         try
         {
-            using (var creator = new Wallet()) using (var first = new Wallet()) using (var second = new Wallet())
+            using (var creator = new Wallet()) using (var receiver = new Wallet()) using (var first = new Wallet()) using (var second = new Wallet())
             {
-                var chain = new Blockchain(); var pending = new List<Transaction>();
-                string owner = creator.CreateReceiveAddress(), a = first.CreateReceiveAddress(), b = second.CreateReceiveAddress();
-                foreach (string address in new[] { owner, a, b }) pending.Add(chain.CreateWalletCreationTransaction(address, pending));
-                pending.Add(first.CreateStakeLockTransaction(chain, pending, a, Blockchain.WalletCreationReward, 0));
-                pending.Add(second.CreateStakeLockTransaction(chain, pending, b, Blockchain.WalletCreationReward, 0));
-                var validators = new[] { first.CreateValidatorStake(a, Blockchain.WalletCreationReward), second.CreateValidatorStake(b, Blockchain.WalletCreationReward) };
-                var token = creator.CreateTokenTransaction(chain, pending, "Troco", "TRO", 0, 100, owner, 7); pending.Add(token);
-                Check(chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, pending) == 0,
-                    "before approval token creation reserves funding without claiming its change");
-                token.TransactionApproval = chain.CreateTransactionApproval(token, pending, validators.Take(1));
-                Check(chain.HasValidTransactionApproval(token, pending) && chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, pending) == Blockchain.WalletCreationReward - 7 &&
-                    chain.GetSpendableBalance(first.OwnedOneTimeAddresses, pending) == 7 && chain.Blocks.Count == 1,
-                    "approval deducts only the exact chosen fee and immediately returns the rest to the original wallet without a block");
-                Check(new Blockchain(chain.Blocks).GetSpendableBalance(creator.OwnedOneTimeAddresses, Copy(pending)) == Blockchain.WalletCreationReward - 7,
-                    "restart preserves immediately spendable token creation change");
-                var forged = Copy(pending); forged.Single(tx => tx.Id == token.Id).TransactionApproval.Proof.Signature = Convert.ToBase64String(new byte[256]);
-                Check(chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, forged) == 0,
-                    "forged approval cannot release token creation change");
-                var entry = chain.GetTokenBalances(creator.OwnedOneTimeAddresses, pending).Single();
-                Check(chain.GetTokens(pending).Single().Id == token.Token.Id && entry.Amount == 100 && entry.CreationHeight == null && entry.Confirmations == 0 && entry.ValidationCount == 1,
-                    "validated creation registers real token supply without inventing a block or block confirmations");
-                Check(chain.GetTokens(forged).Count == 0 && chain.GetRegisteredTokenOutputs(creator.OwnedOneTimeAddresses, forged).Count == 0,
-                    "forged approval cannot confirm token registration or mint spendable assets");
-                var stake = creator.CreateStakeLockTransaction(chain, pending, owner, Blockchain.OneCoin, 0); pending.Add(stake);
-                Check(stake.Inputs.Single().TransactionId == token.Id && chain.GetActiveValidators(pending).Count == 3 && chain.Blocks.Count == 1,
-                    "the exact returned change can lock collateral immediately without a block");
-                var payment = creator.CreateTokenTransferTransaction(chain, pending, token.Token.Id, new string('e', 64), 30, 5); pending.Add(payment);
-                payment.TransactionApproval = chain.CreateTransactionApproval(payment, pending, validators.Take(1));
-                Check(chain.HasValidTransactionApproval(payment, pending) && chain.GetSpendableBalance(first.OwnedOneTimeAddresses, pending) == 12 &&
-                    chain.GetSpendableTokenOutputs(new[] { new string('e', 64) }, pending, token.Token.Id).Sum(output => output.Output.Amount) == 30,
-                    "a confirmed creation funds an actual signed token movement and pays its validator fee without a block");
-                Check(chain.GetTokenBalances(new[] { new string('e', 64) }, pending).Single().Amount == 30 &&
-                    chain.GetTokenBalances(creator.OwnedOneTimeAddresses, pending).Single().Amount == 70,
-                    "approval immediately updates recipient and sender token balances");
-                var forgedMovement = Copy(pending);
-                forgedMovement.Single(tx => tx.Id == payment.Id).TransactionApproval.Proof.Signature = Convert.ToBase64String(new byte[256]);
-                Check(chain.GetSpendableTokenOutputs(new[] { new string('e', 64) }, forgedMovement, token.Token.Id).Count == 0,
-                    "forged movement approval cannot release recipient assets");
-                var followupPending = Copy(pending);
-                var followup = creator.CreateTokenTransferTransaction(chain, followupPending, token.Token.Id, new string('f', 64), 20, 5);
-                followupPending.Add(followup);
-                followup.TransactionApproval = chain.CreateTransactionApproval(followup, followupPending, validators.Take(1));
-                Check(followup.Inputs.Any(input => input.TransactionId == payment.Id) && chain.HasValidTransactionApproval(followup, followupPending) &&
-                    chain.GetSpendableTokenOutputs(new[] { new string('f', 64) }, followupPending, token.Token.Id).Sum(output => output.Output.Amount) == 20 && chain.Blocks.Count == 1,
-                    "approved movement change funds another signed token movement before any block");
-                while (pending.Count < 20) pending.Add(chain.CreateWalletCreationTransaction("change-batch-" + pending.Count, pending));
-                var block = chain.AddProofOfStakeBlock(chain.SelectApprovedValidationBatch(pending), validators);
-                Check(chain.IsValid() && block.ConsensusVersion == Blockchain.ConsensusVersion && chain.Blocks.Count == 2 && chain.GetTokenBalance(new[] { new string('e', 64) }, token.Token.Id) == 30,
-                    "a later complete batch includes the registered creation and confirms its token movement");
-                var historical = chain.Blocks.ToList(); historical.Last().ConsensusVersion = 12;
-                LegacyConsensusFixture.Resign(historical.Last(), validators); LegacyConsensusFixture.Mine(historical.Last());
-                Check(new Blockchain(historical).IsValid(), "historical v12 rules restore without changing their native change policy");
-                historical.Last().ConsensusVersion = 13;
-                LegacyConsensusFixture.Resign(historical.Last(), validators); LegacyConsensusFixture.Mine(historical.Last());
-                Check(new Blockchain(historical).IsValid(), "historical v13 rules restore before immediate token movements");
-                Check(chain.GetBalancesByAddress().Values.Sum() == 15 * Blockchain.WalletCreationReward + ProofOfStake.GetBlockReward(block.Height),
-                    "immediate change and fee credits preserve native supply without duplicate payments");
+                var chain = new Blockchain();
+                string owner = creator.CreateReceiveAddress(), destination = receiver.CreateReceiveAddress(), a = first.CreateReceiveAddress(), b = second.CreateReceiveAddress();
+                LegacyConsensusFixture.FundBatch(chain, owner, destination, a, b);
+                LegacyConsensusFixture.SelfBlock(chain, new[] {
+                    first.CreateStakeLockTransaction(chain, new Transaction[0], a, Blockchain.OneCoin, 0),
+                    second.CreateStakeLockTransaction(chain, new Transaction[0], b, Blockchain.OneCoin, 0) });
+                var validators = new[] { first.CreateValidatorStake(a, Blockchain.OneCoin), second.CreateValidatorStake(b, Blockchain.OneCoin) };
+                using (var batches = new ValidationBatchFixture(chain))
+                {
+                    int height = chain.Blocks.Count;
+                    long validatorBefore = chain.GetSpendableBalance(first.OwnedOneTimeAddresses, new Transaction[0]);
+                    var token = creator.CreateTokenTransaction(chain, new Transaction[0], "Blocos", "BLO", 0, 100, owner, 7);
+                    var pending = new List<Transaction> { token };
+                    token.TransactionApproval = chain.CreateTransactionApproval(token, pending, validators.Take(1));
+                    Check(chain.HasValidTransactionApproval(token, pending) && chain.Blocks.Count == height && chain.GetTokens(pending).Count == 0,
+                        "approval waits for the block before registering token supply");
+                    Check(chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, pending) == 0 &&
+                        chain.GetSpendableBalance(first.OwnedOneTimeAddresses, pending) == validatorBefore &&
+                        chain.GetSpendableTokenOutputs(creator.OwnedOneTimeAddresses, pending, token.Token.Id).Count == 0,
+                        "approved creation keeps funding reserved and does not release change, tokens or validator fees");
+                    Reject(() => creator.CreateTokenTransferTransaction(chain, pending, token.Token.Id, destination, 30, 5),
+                        "an approved creation cannot fund a transfer before the block");
+                    var restored = new Blockchain(chain.Blocks); var saved = Copy(pending);
+                    Check(restored.HasValidTransactionApproval(saved[0], saved) && restored.GetTokens(saved).Count == 0 && restored.GetSpendableBalance(creator.OwnedOneTimeAddresses, saved) == 0,
+                        "restart preserves pending approval without confirming its assets");
+                    var forged = Copy(pending); forged[0].TransactionApproval.Proof.Signature = Convert.ToBase64String(new byte[256]);
+                    Check(!chain.HasValidTransactionApproval(forged[0], forged) && chain.GetTokens(forged).Count == 0,
+                        "forged approval cannot register a token");
+                    Block creationBlock = batches.Confirm(chain, pending, validators);
+                    Check(chain.IsValid() && creationBlock.ConsensusVersion == 15 && chain.GetTokenBalance(creator.OwnedOneTimeAddresses, token.Token.Id) == 100 &&
+                        chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, new Transaction[0]) == Blockchain.WalletCreationReward - 7,
+                        "creation block registers exact token supply and returns the original native change");
+                    var entry = chain.GetTokenBalances(creator.OwnedOneTimeAddresses).Single();
+                    Check(entry.CreationHeight == creationBlock.Height && entry.Confirmations == 1 && entry.ValidationCount == 1,
+                        "creation metadata identifies its actual block and confirmation");
+                    var transfer = creator.CreateTokenTransferTransaction(chain, new Transaction[0], token.Token.Id, destination, 30, 5);
+                    pending = new List<Transaction> { transfer };
+                    long feeBefore = chain.GetSpendableBalance(first.OwnedOneTimeAddresses, new Transaction[0]);
+                    transfer.TransactionApproval = chain.CreateTransactionApproval(transfer, pending, validators.Take(1));
+                    Check(chain.HasValidTransactionApproval(transfer, pending) && chain.GetTokenBalances(receiver.OwnedOneTimeAddresses, pending).Single().Amount == 0 &&
+                        chain.GetTokenBalances(creator.OwnedOneTimeAddresses, pending).Single().Amount == 100 &&
+                        chain.GetSpendableBalance(first.OwnedOneTimeAddresses, pending) == feeBefore,
+                        "approved movement preserves confirmed ownership and waits to pay its fee");
+                    Check(chain.GetSpendableTokenOutputs(receiver.OwnedOneTimeAddresses, pending, token.Token.Id).Count == 0 &&
+                        chain.GetSpendableTokenOutputs(creator.OwnedOneTimeAddresses, pending, token.Token.Id).Count == 0,
+                        "pending movement reserves sender inputs without releasing recipient or change outputs");
+                    Reject(() => creator.CreateTokenTransferTransaction(chain, pending, token.Token.Id, destination, 20, 1),
+                        "pending movement change cannot be spent twice");
+                    saved = Copy(pending); restored = new Blockchain(chain.Blocks);
+                    Check(restored.HasValidTransactionApproval(saved[0], saved) && restored.GetTokenBalance(receiver.OwnedOneTimeAddresses, token.Token.Id) == 0,
+                        "movement approval survives restart while its balance remains unconfirmed");
+                    Block movementBlock = batches.Confirm(chain, pending, validators);
+                    Check(chain.IsValid() && chain.GetConfirmations(transfer.Id) == 1 && movementBlock.Transactions.Any(tx => tx.Id == transfer.Id) &&
+                        chain.GetTokenBalance(receiver.OwnedOneTimeAddresses, token.Token.Id) == 30 && chain.GetTokenBalance(creator.OwnedOneTimeAddresses, token.Token.Id) == 70,
+                        "movement block updates both wallets without changing total token supply");
+                    Check(new Blockchain(chain.Blocks).GetTokenBalance(receiver.OwnedOneTimeAddresses, token.Token.Id) == 30,
+                        "confirmed token ownership restores independently of the pending queue");
+                }
             }
-            Console.WriteLine(checks + " token confirmation checks passed"); return 0;
+            Console.WriteLine(checks + " block token confirmation checks passed"); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }

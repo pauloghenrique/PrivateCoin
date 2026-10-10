@@ -111,7 +111,7 @@
                 <p class="wp-section-number">05 — CONSENSO E VALIDADORES</p>
                 <h2>Garantia econômica.<br />Prova de trabalho.</h2>
                 <p>Participantes bloqueiam POVIX em uma transação de garantia (<em>StakeLock</em>). A seleção do criador do próximo bloco é ponderada pelo valor bloqueado e usa a hash anterior e a altura do bloco como semente verificável.</p>
-                <p>Transferências e operações de tokens aguardam em uma fila ordenada pela maior taxa. Cada bloco reúne exatamente 20 operações distintas: transferências validadas e criações de carteira. Por exemplo, 18 transferências e 2 carteiras completam um bloco. Transferências exigem provas individuais assinadas pelos validadores; criar uma carteira conta uma vez, sem taxa nem validação por tokens bloqueados. Lotes formados somente por carteiras podem ser confirmados com prova de trabalho sem stake. Lotes menores ficam na fila. As taxas remuneram esses validadores separadamente da recompensa pela criação e confirmação do bloco.</p>
+                <p>Transferências e operações de tokens aguardam em uma fila ordenada pela maior taxa. Cada bloco confirma uma única operação: criação de carteira, transferência, criação ou movimentação de token, bloqueio ou desbloqueio de garantia. Transferências exigem provas individuais assinadas pelos validadores; criar uma carteira conta uma vez, sem taxa nem validação por tokens bloqueados. Criações de carteira e operações de garantia têm blocos próprios com prova de trabalho sem exigir stake. Saldos, tokens, taxas e garantias só são efetivados após o bloco. As taxas remuneram esses validadores separadamente da recompensa pela criação e confirmação do bloco.</p>
                 <p>O stake escolhe o criador e os validadores assinam as provas. O bloco também precisa de uma hash SHA-256 que cumpra o alvo de mineração. Cada nó verifica a prova, as garantias, as assinaturas, os gastos e a emissão antes de considerar seu trabalho acumulado.</p>
                 <p>Não há checkpoint nem finalização irreversível. Uma cadeia válida com mais trabalho pode reorganizar o histórico e reduzir confirmações. Seis confirmações são uma referência, sem garantia absoluta. O alvo atual é fixo, com 12 bits de dificuldade, e não oferece a resistência econômica da rede Bitcoin.</p>
                 <div class="wp-split-card">
@@ -128,7 +128,7 @@
             <section id="economia" class="wp-section">
                 <p class="wp-section-number">06 — ECONOMIA DO POVIX</p>
                 <h2>Oferta limitada a 18 milhões.</h2>
-                <p>O protocolo combina 180.000 POVIX de distribuição inicial — 6 POVIX para cada uma das primeiras 30.000 carteiras — com 17.820.000 POVIX destinados às recompensas de consenso. Os 6 POVIX da distribuição inicial ficam disponíveis ao criar a carteira, sem esperar o lote de 20 operações. O comprovante da criação entra na contagem do lote sem emitir essa recompensa novamente.</p>
+                <p>O protocolo combina 180.000 POVIX de distribuição inicial — 6 POVIX para cada uma das primeiras 30.000 carteiras — com 17.820.000 POVIX destinados às recompensas de consenso. Os 6 POVIX da distribuição inicial ficam disponíveis após o bloco de criação da carteira. Cada criação tem seu próprio bloco e a recompensa é emitida uma única vez.</p>
                 <div class="wp-emission-chart">
                     <div class="wp-chart-axis"><span>3,61</span><span>2,80</span><span>1,50</span><span>1,00</span></div>
                     <div class="wp-chart-bars">

@@ -217,8 +217,8 @@ namespace PrivateCoin.Desktop
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
-                Log("Carteira “" + name + "” criada e salva. O registro conta como uma operação na fila de 20, sem aprovação por tokens bloqueados. " +
-                    (registration.Outputs[0].Amount > 0 ? "Os 6 POVIX já estão disponíveis para transferência." : "A distribuição promocional terminou."), true);
+                Log("Carteira “" + name + "” criada e salva. O registro será confirmado em um bloco próprio, sem aprovação por tokens bloqueados. " +
+                    (registration.Outputs[0].Amount > 0 ? "Os 6 POVIX estarão disponíveis após a confirmação em bloco." : "A distribuição promocional terminou."), true);
                 if (peerNode != null)
                 {
                     await peerNode.BroadcastAsync(registration);
@@ -333,7 +333,7 @@ namespace PrivateCoin.Desktop
             Log("Carteira " + wallet.Name + ": transferência de token validada e salva (" + ShortId(transaction.Id) + ").", true);
             UpdateChainSummary();
             BeginInvoke(new Action(StartAutomaticMining));
-            string result = "Transação: " + transaction.Id + "\n\nTransferência salva na fila local. Aguarde a aprovação de um validador; ela será incluída posteriormente em um lote de 20 operações.";
+            string result = "Transação: " + transaction.Id + "\n\nTransferência salva na fila local. Aguarde a aprovação de um validador; ela será confirmada em um bloco próprio.";
             try
             {
                 PeerNode node = peerNode;
@@ -608,7 +608,7 @@ namespace PrivateCoin.Desktop
                     pendingTransactions[index] = transaction;
                 }
                 SaveState();
-                Log(source + ": movimentação aprovada por carteira com tokens bloqueados; taxa creditada e aguardando lote de 20.", true);
+                Log(source + ": movimentação aprovada por carteira com tokens bloqueados; saldo e taxa aguardam confirmação em bloco.", true);
                 BeginInvoke(new Action(StartAutomaticMining));
                 return true;
             }
@@ -665,8 +665,7 @@ namespace PrivateCoin.Desktop
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Criação de bloco iniciada após reunir " +
-                        batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões) pendente(s).", true);
+                    Log("Criação de bloco iniciada para a operação " + ShortId(batch[0].Id) + ".", true);
 
                     Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && activeValidators.Length < 2 ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
@@ -685,7 +684,7 @@ namespace PrivateCoin.Desktop
                             "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
                             " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     }
-                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com 20 operações validadas: " + ShortId(block.Hash) + ".", true);
+                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com uma operação validada: " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -693,7 +692,7 @@ namespace PrivateCoin.Desktop
             }
             catch (Exception error)
             {
-                Log("Mineração cancelada: o lote não passou na validação — " + error.Message, false);
+                Log("Mineração cancelada: a operação não passou na validação — " + error.Message, false);
                 RemoveInvalidPendingTransactions();
             }
             finally
@@ -703,7 +702,7 @@ namespace PrivateCoin.Desktop
                 Transaction[] nextBatch = blockchain.SelectApprovedValidationBatch(remaining).ToArray();
                 miningStatusLabel.Text = nextBatch.Length > 0 && !nextBatch.All(Blockchain.IsSelfValidatedOperation) && EligibleValidators(nextBatch).Length < 2
                     ? "Aguardando 2 validadores sem participação na transferência"
-                    : "Validações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "/" + Blockchain.ValidationsPerBlock.ToString(CultureInfo.InvariantCulture);
+                    : "Operações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "  |  Uma operação por bloco";
                 UpdateChainSummary();
                 if (!IsDisposed && nextBatch.Length > 0 && (nextBatch.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(nextBatch).Length >= 2))
                     BeginInvoke(new Action(StartAutomaticMining));
@@ -724,7 +723,7 @@ namespace PrivateCoin.Desktop
                 if (approval == null) continue;
                 transaction.TransactionApproval = approval;
                 SaveState();
-                Log("Movimentação validada; taxa transferida ao validador, sem criar bloco: " + ShortId(transaction.Id) + ".", true);
+                Log("Movimentação validada; saldo e taxa aguardam o bloco: " + ShortId(transaction.Id) + ".", true);
                 if (peerNode != null) await peerNode.BroadcastAsync(transaction);
             }
         }
@@ -734,7 +733,7 @@ namespace PrivateCoin.Desktop
             Transaction[] batch = transactions.ToArray();
             ValidatorStake[] eligible = blockchain.GetActiveValidators(batch).ToArray();
             return wallets.Where(item => eligible.Any(stake => item.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress)) &&
-                    !batch.Where(tx => !Blockchain.IsSelfValidatedOperation(tx)).Any(item.Wallet.IsParticipant))
+                    !batch.Any(item.Wallet.IsParticipant))
                 .Select(item =>
                 {
                     ValidatorStake stake = eligible.Single(value => item.Wallet.OwnedOneTimeAddresses.Contains(value.RewardAddress));
@@ -816,10 +815,9 @@ namespace PrivateCoin.Desktop
                 SaveState();
                 if (peerNode != null) _ = peerNode.BroadcastAsync(lockTransaction);
                 UpdateWalletSummary();
-                Log("Validador ativado com " + coins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " POVIX bloqueados. Operação validada e incluída na fila de 20, sem criar bloco.", true);
-                if (wallets.Count(item => item.IsValidator) >= 2 && SnapshotPending().Length > 0)
-                    BeginInvoke(new Action(StartAutomaticMining));
+                Log("Bloqueio de " + coins.ToString("N8", CultureInfo.CurrentCulture) +
+                    " POVIX aguarda seu próprio bloco. O validador será ativado após a confirmação em bloco.", true);
+                BeginInvoke(new Action(StartAutomaticMining));
             }
             catch (Exception error)
             {
@@ -853,7 +851,7 @@ namespace PrivateCoin.Desktop
                 if (peerNode != null) _ = peerNode.BroadcastAsync(unlockTransaction);
                 UpdateWalletSummary();
                 Log(unlockedCoins.ToString("N8", CultureInfo.CurrentCulture) +
-                    " POVIX desbloqueados. Operação validada e incluída na fila de 20. A carteira não participa mais da validação de blocos.", true);
+                    " POVIX aguardam desbloqueio em bloco. A operação terá seu próprio bloco.", true);
             }
             catch (Exception error)
             {
@@ -888,9 +886,13 @@ namespace PrivateCoin.Desktop
             validatorStatusLabel.ForeColor = lockedStake == 0
                 ? UiTheme.Muted
                 : UiTheme.Success;
-            stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator;
-            activateValidatorButton.Enabled = selected != null && !selected.IsValidator;
-            unlockStakeButton.Enabled = selected != null && selected.IsValidator;
+            bool collateralPending = selected != null && SnapshotPending().Any(transaction =>
+                (transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock) &&
+                selected.Wallet.IsParticipant(transaction));
+            if (collateralPending) validatorStatusLabel.Text += "  |  Alteração aguardando bloco";
+            stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator && !collateralPending;
+            activateValidatorButton.Enabled = selected != null && !selected.IsValidator && !collateralPending;
+            unlockStakeButton.Enabled = selected != null && selected.IsValidator && !collateralPending;
         }
 
         private void RefreshValidatorState()
