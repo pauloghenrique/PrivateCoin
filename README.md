@@ -215,34 +215,36 @@ Esses identificadores são separação de protocolo, não atestado do binário. 
 
 ### Validação de transações e taxas
 
-`SelectValidationBatch` seleciona as 20 operações com maior taxa e retorna um
-lote vazio quando existem menos de 20. Cada operação conta uma vez; criações
-e transferências de tokens e registros de carteiras também participam dessa fila.
-Por exemplo, 18 transferências e 2 carteiras criadas completam um bloco. Horário e identificador
-desempatam taxas iguais. As operações restantes continuam pendentes.
+`SelectApprovedValidationBatch` seleciona 20 operações validadas, por taxa,
+horário e identificador, respeitando as dependências. Cada operação conta uma
+vez: transferências, criações/movimentações de tokens, carteiras e garantias.
+Com menos de 20, nenhum bloco é criado.
 
-`AddProofOfStakeBlock` exige exatamente 20 transações distintas. Registros de carteira não exigem prova individual nem pagam taxa. Um validador
-elegível é selecionado por transferência ou operação de token, ponderado pela garantia, usando a hash
-anterior, a altura e o identificador da transação. Ele valida e assina essa
-operação, vinculando a taxa ao seu endereço de recompensa. O bloco registra
-essas provas em `TransactionValidations`, cobertas pelo hash e pelos votos
-dos validadores do bloco. O nó verifica as assinaturas, a ordem, a quantidade
-e o pagamento integral de cada taxa ao restaurar ou sincronizar a cadeia.
+Transferências de POVIX e operações de tokens recebem uma `TransactionApproval`
+assinada por uma carteira com garantia bloqueada. A prova identifica a garantia,
+um bloco ancestral e o endereço do validador; o remetente e o destinatário não
+podem aprovar sua própria operação. O Desktop aprova e propaga a operação antes
+do bloco. O DEX exibe **Validada**, com zero confirmações e sem hash de bloco.
+Carteiras e bloqueios/desbloqueios continuam validados sem essa assinatura e
+sem taxa individual.
 
-A transação de liquidação contém primeiro as parcelas da recompensa de
-consenso, sem taxas, e depois um pagamento por operação assinada ao seu validador.
-Registros de carteiras não geram pagamentos de taxa.
-Criar ou confirmar o bloco concede somente a parcela da recompensa já
-prevista. Um mesmo participante pode também validar transações, mas só recebe
-suas taxas mediante as respectivas provas assinadas. Os valores e fases da
-recompensa e sua divisão de 30%/70% permanecem iguais.
+Assim que a aprovação é aceita, a taxa escolhida fica disponível para a carteira
+que validou. Seu crédito usa o identificador da movimentação e o índice seguinte
+às saídas declaradas (`Outputs.Count`), sem alterar a assinatura do remetente.
+Esse crédito pode financiar outra operação antes do bloco. Repetições e reinícios
+preservam um único crédito; a confirmação conserva a mesma referência e não paga
+a taxa novamente. Recebimentos comuns, tokens e troco aguardam o bloco.
 
-Novos blocos usam `ConsensusVersion = 10`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9 e permite sua extensão em v10; uma cadeia não pode voltar para
-uma versão anterior após a transição. Caches do DEX v3/v4/v7/v8/v9 são revalidados antes
-da migração. Pares que anunciam outras versões são desconectados; os nós e os
-clientes do DEX precisam atualizar juntos. A versão anunciada nunca substitui
-a validação dos dados.
+O bloco inclui as 20 operações e suas provas, cobertas pelo hash e pelos votos.
+Sua transação de recompensa contém somente a emissão prevista, sem taxas.
+As fases, os valores e a divisão de 30%/70% da recompensa permanecem iguais.
+Após o fim da emissão, as taxas continuam pertencendo aos validadores das operações.
+
+Novos blocos usam `ConsensusVersion = 11`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10, preservando as regras antigas de pagamento de taxas,
+e permite sua extensão em v11 sem voltar a uma versão anterior. Caches DEX
+v3/v4/v7/v8/v9/v10 são revalidados antes da migração. Nós e clientes DEX devem
+atualizar juntos; a versão anunciada nunca substitui a validação dos dados.
 
 `AddProofOfStakeBlock` continua sendo a entrada para produzir um bloco de
 consenso: exige exatamente 20 transações distintas, garantias globais válidas,

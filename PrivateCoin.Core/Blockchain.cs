@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 10;
+        public const int ConsensusVersion = 11;
+        private const int SelfValidatedVersion = 10;
         private const int LegacyImmediateVersion = 9;
         private const int LegacyWalletBatchVersion = 8;
         private const int LegacyHybridVersion = 7;
@@ -75,24 +76,21 @@ namespace PrivateCoin.Core
                 if (pending.Count != ValidationsPerBlock || pending.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != ValidationsPerBlock)
                     throw new InvalidOperationException("A consensus block requires exactly 20 distinct validated transactions.");
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending, false).ToArray();
-                ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(BuildSelfValidatedUtxo(BuildUtxo(), pending)), pending, false).ToArray();
+                ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(BuildImmediateUtxo(BuildUtxo(), pending, blocks)), pending, false).ToArray();
                 if (!SameStakeSet(active, globallyEligible))
                     throw new InvalidOperationException("The proposed validators do not match the globally locked collateral set.");
                 if (active.Length < 2) throw new InvalidOperationException("At least two active validators are required to create and confirm a block.");
+                var replay = BuildUtxo();
+                foreach (Transaction transaction in pending)
+                {
+                    if (RequiresLockedTokenApproval(transaction)) ValidateTransactionApproval(transaction, replay, blocks);
+                    Apply(transaction, replay, false, RequiresLockedTokenApproval(transaction));
+                }
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
                 ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
                 IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
-                var validations = pending.Where(transaction => !IsSelfValidatedOperation(transaction)).Select(transaction =>
-                {
-                    ValidatorStake validator = SelectTransactionValidator(active, transaction, blocks[blocks.Count - 1].Hash, height);
-                    return new TransactionValidation
-                    {
-                        TransactionId = transaction.Id, ValidatorId = validator.ValidatorId,
-                        RewardAddress = validator.RewardAddress, PublicKey = validator.PublicKey,
-                        Signature = validator.CreateVote(CreateTransactionValidationPayload(transaction, blocks[blocks.Count - 1].Hash, height, validator.RewardAddress))
-                    };
-                }).ToList();
+                var validations = pending.Where(RequiresLockedTokenApproval).Select(transaction => transaction.TransactionApproval.Proof).ToList();
                 var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
                 foreach (ValidatorReward share in rewards)
                     reward.Outputs.Add(new TransactionOutput
@@ -100,8 +98,6 @@ namespace PrivateCoin.Core
                         Amount = share.Amount,
                         OneTimeAddress = share.RewardAddress
                     });
-                foreach (TransactionValidation validation in validations)
-                    reward.Outputs.Add(new TransactionOutput { Amount = pending.Single(tx => tx.Id == validation.TransactionId).Fee, OneTimeAddress = validation.RewardAddress });
                 reward.Id = reward.CalculateId();
                 var block = new Block
                 {
@@ -127,7 +123,7 @@ namespace PrivateCoin.Core
                     record.PublicKey = validator.PublicKey;
                     record.VoteSignature = validator.CreateVote(votePayload);
                 }
-                ValidateProofOfStakeBlock(block, block.PreviousHash, BuildUtxo());
+                ValidateProofOfStakeBlock(block, block.PreviousHash, BuildUtxo(), blocks);
                 Mine(block);
                 blocks.Add(block);
                 return block;
@@ -205,10 +201,27 @@ namespace PrivateCoin.Core
                 transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock);
         }
 
-        private static Dictionary<string, UnspentOutput> BuildSelfValidatedUtxo(IDictionary<string, UnspentOutput> confirmed, IEnumerable<Transaction> transactions)
+        public static bool RequiresLockedTokenApproval(Transaction transaction)
+        {
+            return transaction != null && transaction.Inputs.Count > 0 &&
+                (transaction.Kind == TransactionKind.Transfer || transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer);
+        }
+
+        private static Dictionary<string, UnspentOutput> BuildImmediateUtxo(IDictionary<string, UnspentOutput> confirmed,
+            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null)
         {
             var result = new Dictionary<string, UnspentOutput>(confirmed, StringComparer.Ordinal);
-            foreach (Transaction transaction in OrderByFeePriority(transactions).Where(IsSelfValidatedOperation)) Apply(transaction, result, false);
+            foreach (Transaction transaction in OrderByFeePriority(transactions))
+            {
+                if (transaction.Id == stopBefore) break;
+                if (IsSelfValidatedOperation(transaction)) Apply(transaction, result, false);
+                else
+                {
+                    bool approved = IsValidTransactionApproval(transaction, result, history);
+                    foreach (TransactionInput input in transaction.Inputs) result.Remove(Key(input.TransactionId, input.OutputIndex));
+                    if (approved) AddValidationFee(transaction, result);
+                }
+            }
             return result;
         }
 
@@ -219,7 +232,7 @@ namespace PrivateCoin.Core
             {
                 var pending = pendingTransactions.ToList();
                 ValidateTransactions(pending);
-                return StakesFromUtxo(BuildSelfValidatedUtxo(BuildUtxo(), pending));
+                return StakesFromUtxo(BuildImmediateUtxo(BuildUtxo(), pending, blocks));
             }
         }
 
@@ -310,7 +323,8 @@ namespace PrivateCoin.Core
             while (remaining.Count > 0)
             {
                 var unresolved = new HashSet<string>(remaining.Where(item => item != null).Select(item => item.Id), StringComparer.Ordinal);
-                Transaction ready = remaining.FirstOrDefault(item => item != null && !item.Inputs.Any(input => unresolved.Contains(input.TransactionId)));
+                Transaction ready = remaining.FirstOrDefault(item => item != null && !item.Inputs.Any(input => unresolved.Contains(input.TransactionId)) &&
+                    (item.TransactionApproval == null || !unresolved.Contains(item.TransactionApproval.CollateralTransactionId)));
                 if (ready == null) throw new InvalidOperationException("Missing operation or cyclic transaction dependencies.");
                 result.Add(ready);
                 remaining.Remove(ready);
@@ -356,7 +370,8 @@ namespace PrivateCoin.Core
             lock (sync)
             {
                 var utxo = BuildUtxo();
-                foreach (Transaction transaction in OrderByFeePriority(pendingTransactions)) Apply(transaction, utxo, false);
+                foreach (Transaction transaction in OrderByFeePriority(pendingTransactions))
+                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
                 return utxo.Values.Where(x => wanted.Contains(x.Output.OneTimeAddress)).ToArray();
             }
         }
@@ -376,7 +391,7 @@ namespace PrivateCoin.Core
                 ValidateTransactions(pending);
                 var reserved = new HashSet<string>(pending.SelectMany(transaction => transaction.Inputs)
                     .Select(input => Key(input.TransactionId, input.OutputIndex)), StringComparer.Ordinal);
-                return BuildSelfValidatedUtxo(BuildUtxo(), pending).Values.Where(item => wanted.Contains(item.Output.OneTimeAddress) &&
+                return BuildImmediateUtxo(BuildUtxo(), pending, blocks).Values.Where(item => wanted.Contains(item.Output.OneTimeAddress) &&
                     item.TransactionKind != TransactionKind.StakeLock && item.Output.AssetId == null &&
                     !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
             }
@@ -406,7 +421,8 @@ namespace PrivateCoin.Core
             lock (sync)
             {
                 var utxo = BuildUtxo();
-                foreach (Transaction transaction in OrderByFeePriority(pendingTransactions)) Apply(transaction, utxo, false);
+                foreach (Transaction transaction in OrderByFeePriority(pendingTransactions))
+                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
                 var balances = new Dictionary<string, long>(StringComparer.Ordinal);
                 foreach (UnspentOutput item in utxo.Values.Where(item => item.Output.AssetId == null))
                 {
@@ -482,7 +498,7 @@ namespace PrivateCoin.Core
                 }
                 if ((transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock) && transaction.Fee != 0)
                     throw new InvalidOperationException("Self-validated collateral operations do not charge validator fees.");
-                Apply(transaction, utxo, false);
+                Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
             }
         }
 
@@ -504,7 +520,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -513,22 +529,24 @@ namespace PrivateCoin.Core
                 {
                     if (block.ConsensusVersion < LegacyImmediateVersion && (tx.Kind == TransactionKind.WalletDistribution || tx.WalletDistributionId != null))
                         throw new InvalidOperationException("Immediate wallet distributions require consensus version 9.");
+                    if (block.ConsensusVersion < ConsensusVersion && tx.TransactionApproval != null)
+                        throw new InvalidOperationException("Token creation approvals require consensus version 11.");
                     if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
                 }
                 if (block.TransactionValidations != null && (block.ConsensusVersion == 0 || block.Validators == null || block.Validators.Count == 0))
                     throw new InvalidOperationException("Unexpected transaction validation proofs.");
-                if (block.ConsensusVersion >= ConsensusVersion && (block.Validators == null || block.Validators.Count == 0))
+                if (block.ConsensusVersion >= SelfValidatedVersion && (block.Validators == null || block.Validators.Count == 0))
                 {
                     ValidateBatch(block.Transactions);
                     if (block.Transactions.Any(tx => !IsSelfValidatedOperation(tx))) throw new InvalidOperationException("Unsigned blocks can contain only self-validated operations.");
                 }
-                if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.ConsensusVersion < ConsensusVersion && (block.Validators == null || block.Validators.Count == 0) &&
+                if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.ConsensusVersion < SelfValidatedVersion && (block.Validators == null || block.Validators.Count == 0) &&
                     block.Transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate) && !block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))
                     throw new InvalidOperationException("Unsigned wallet batches cannot include other operations.");
                 int regularTransactionIndex = 0;
                 if (block.Validators != null && block.Validators.Count > 0)
                 {
-                    ValidateProofOfStakeBlock(block, blocks[blockIndex - 1].Hash, utxo);
+                    ValidateProofOfStakeBlock(block, blocks[blockIndex - 1].Hash, utxo, blocks.Take(blockIndex).ToList());
                     validatorIssued = checked(validatorIssued + ProofOfStake.GetBlockReward(block.Height));
                     regularTransactionIndex = 1;
                 }
@@ -541,7 +559,7 @@ namespace PrivateCoin.Core
                     distributions.Add(distribution.Id, distribution);
                     regularTransactionIndex = 1;
                 }
-                else if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate || (block.ConsensusVersion >= ConsensusVersion && IsSelfValidatedOperation(tx))))
+                else if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate || (block.ConsensusVersion >= SelfValidatedVersion && IsSelfValidatedOperation(tx))))
                 {
                     ValidateBatch(block.Transactions);
                 }
@@ -570,25 +588,25 @@ namespace PrivateCoin.Core
                     if (operation.Kind == TransactionKind.WalletDistribution) throw new InvalidOperationException("Distribution cannot be included in a regular batch.");
                     if (operation.Kind == TransactionKind.WalletCreate)
                     {
-                        if (block.ConsensusVersion >= LegacyImmediateVersion && (block.ConsensusVersion < ConsensusVersion || operation.WalletDistributionId != null)) ValidateWalletReceipt(operation, distributions, counted);
+                        if (block.ConsensusVersion >= LegacyImmediateVersion && (block.ConsensusVersion < SelfValidatedVersion || operation.WalletDistributionId != null)) ValidateWalletReceipt(operation, distributions, counted);
                         else
                         {
                             if (operation.WalletDistributionId != null) throw new InvalidOperationException("Unexpected wallet receipt in legacy consensus.");
-                            if (!distributionAddresses.Add(operation.Outputs[0].OneTimeAddress) && block.ConsensusVersion >= ConsensusVersion) throw new InvalidOperationException("Duplicate wallet distribution address.");
+                            if (!distributionAddresses.Add(operation.Outputs[0].OneTimeAddress) && block.ConsensusVersion >= SelfValidatedVersion) throw new InvalidOperationException("Duplicate wallet distribution address.");
                         }
                     }
-                    if (block.ConsensusVersion >= ConsensusVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee != 0)
+                    if (block.ConsensusVersion >= SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee != 0)
                         throw new InvalidOperationException("Self-validated collateral operations cannot charge validator fees.");
-                    if (block.ConsensusVersion < ConsensusVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
+                    if (block.ConsensusVersion < SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
                         throw new InvalidOperationException("Historical collateral operations require their original minimum fee.");
                     ValidateWalletIssuance(operation, ref issued);
-                    Apply(block.Transactions[transactionIndex], utxo, false);
+                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ConsensusVersion && RequiresLockedTokenApproval(operation));
                 }
             }
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
         }
 
-        private static void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo)
+        private static void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo, IList<Block> history)
         {
             if (block.Transactions.Count == 0) throw new InvalidOperationException("A proof-of-stake block must contain its reward.");
             BlockValidator[] records = block.Validators.ToArray();
@@ -596,7 +614,7 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
                 item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
-            var collateral = block.ConsensusVersion >= ConsensusVersion ? BuildSelfValidatedUtxo(utxo, block.Transactions.Skip(1)) : utxo;
+            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history) : utxo;
             foreach (BlockValidator record in records)
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
@@ -613,10 +631,10 @@ namespace PrivateCoin.Core
                 (transfers.Length != ValidationsPerBlock || transfers.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != ValidationsPerBlock ||
                 !transfers.Select(item => item.Id).SequenceEqual(OrderByFeePriority(transfers).Select(item => item.Id), StringComparer.Ordinal)))
                 throw new InvalidOperationException("A consensus block requires 20 distinct transactions in fee priority order.");
-            ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(collateral), transfers, block.ConsensusVersion < ConsensusVersion).ToArray();
+            ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(collateral), transfers, block.ConsensusVersion < SelfValidatedVersion).ToArray();
             if (!SameStakeSet(stakes, globallyEligible))
                 throw new InvalidOperationException("The validator proof does not contain the global eligible collateral set.");
-            if (ExcludeTransactionParticipants(stakes, transfers, block.ConsensusVersion < ConsensusVersion).Count() != stakes.Length)
+            if (ExcludeTransactionParticipants(stakes, transfers, block.ConsensusVersion < SelfValidatedVersion).Count() != stakes.Length)
                 throw new InvalidOperationException("A transfer sender or receiver cannot create or confirm its block.");
             ValidatorStake expectedCreator = ProofOfStake.SelectCreator(stakes, previousHash, block.Height);
             BlockValidator recordedCreator = records.Single(item => item.IsCreator);
@@ -627,8 +645,8 @@ namespace PrivateCoin.Core
             Transaction reward = block.Transactions[0];
             if (block.ConsensusVersion >= LegacySignedVersion)
             {
-                ValidateTransactionFees(block, transfers, stakes, previousHash, expected);
-                Apply(reward, utxo, true);
+                ValidateTransactionFees(block, transfers, stakes, previousHash, expected, utxo, history);
+                if (block.ConsensusVersion < ConsensusVersion || reward.Outputs.Count > 0) Apply(reward, utxo, true);
                 return;
             }
             long fees = transfers.Aggregate(0L, (total, transaction) => checked(total + transaction.Fee));
@@ -642,6 +660,116 @@ namespace PrivateCoin.Core
                 if (reward.Outputs[index].Amount != checked(expected[index].Amount + (expected[index].IsCreator ? fees : 0)) || reward.Outputs[index].OneTimeAddress != expected[index].RewardAddress)
                     throw new InvalidOperationException("The validator reward distribution is incorrect.");
             Apply(reward, utxo, true);
+        }
+
+        /// <summary>Approves one movement with owned locked collateral and credits its fee, without adding a block.</summary>
+        public TransactionApproval CreateTransactionApproval(Transaction transaction, IEnumerable<Transaction> pendingTransactions,
+            IEnumerable<ValidatorStake> localValidators)
+        {
+            if (!RequiresLockedTokenApproval(transaction)) throw new ArgumentException("A movement requiring a fee is required.", nameof(transaction));
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            if (localValidators == null) throw new ArgumentNullException(nameof(localValidators));
+            lock (sync)
+            {
+                var pending = pendingTransactions.Where(tx => tx.Id != transaction.Id).Concat(new[] { transaction }).ToList();
+                ValidateTransactions(pending);
+                var collateral = BuildImmediateUtxo(BuildUtxo(), pending, blocks);
+                ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(collateral), new[] { transaction }, false).ToArray();
+                ValidatorStake[] owned = localValidators.Where(local => globallyEligible.Any(global =>
+                    global.ValidatorId == local.ValidatorId && global.PublicKey == local.PublicKey &&
+                    global.RewardAddress == local.RewardAddress && global.LockedAmount == local.LockedAmount)).ToArray();
+                if (owned.Length == 0) return null;
+                Block anchor = blocks.Last();
+                ValidatorStake validator = SelectTransactionValidator(owned, transaction, anchor.Hash, anchor.Height + 1);
+                UnspentOutput locked = collateral.Values.Single(item => item.TransactionKind == TransactionKind.StakeLock &&
+                    item.ValidatorPublicKey == validator.PublicKey && item.ValidatorRewardAddress == validator.RewardAddress);
+                var validation = new TransactionApproval { AnchorHeight = anchor.Height, AnchorHash = anchor.Hash,
+                    CollateralTransactionId = locked.TransactionId, CollateralOutputIndex = locked.OutputIndex,
+                    Proof = new TransactionValidation { TransactionId = transaction.Id, ValidatorId = validator.ValidatorId,
+                        RewardAddress = validator.RewardAddress, PublicKey = validator.PublicKey } };
+                validation.Proof.Signature = validator.CreateVote(CreateTransactionApprovalPayload(transaction, validation));
+                var approved = new Transaction { Id = transaction.Id, TimestampUtcTicks = transaction.TimestampUtcTicks,
+                    Inputs = transaction.Inputs, Outputs = transaction.Outputs, Fee = transaction.Fee, Kind = transaction.Kind,
+                    Token = transaction.Token, TransactionApproval = validation };
+                var candidate = pending.Where(tx => tx.Id != transaction.Id).Concat(new[] { approved }).ToList();
+                if (!IsValidTransactionApproval(approved, BuildImmediateUtxo(BuildUtxo(), candidate, blocks, transaction.Id), blocks)) return null;
+                return validation;
+            }
+        }
+
+        public bool HasValidTransactionApproval(Transaction transaction, IEnumerable<Transaction> pendingTransactions)
+        {
+            if (!RequiresLockedTokenApproval(transaction) || transaction.TransactionApproval == null) return false;
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            lock (sync)
+            {
+                try
+                {
+                    var pending = pendingTransactions.Where(tx => tx.Id != transaction.Id).Concat(new[] { transaction }).ToList();
+                    ValidateTransactions(pending);
+                    ValidateTransactionApproval(transaction, BuildImmediateUtxo(BuildUtxo(), pending, blocks, transaction.Id), blocks);
+                    return true;
+                }
+                catch (Exception error) when (error is InvalidOperationException || error is ArgumentException || error is FormatException ||
+                    error is CryptographicException || error is OverflowException) { return false; }
+            }
+        }
+
+        /// <summary>Excludes unapproved movements and operations depending on them.</summary>
+        public IReadOnlyList<Transaction> SelectApprovedValidationBatch(IEnumerable<Transaction> pendingTransactions)
+        {
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            lock (sync)
+            {
+                Transaction[] pending = OrderByFeePriority(pendingTransactions).ToArray();
+                ValidateTransactions(pending);
+                var blocked = new HashSet<string>(StringComparer.Ordinal);
+                var ready = new List<Transaction>();
+                foreach (Transaction transaction in pending)
+                {
+                    if ((RequiresLockedTokenApproval(transaction) && !HasValidTransactionApproval(transaction, pending)) ||
+                        transaction.Inputs.Any(input => blocked.Contains(input.TransactionId))) blocked.Add(transaction.Id);
+                    else ready.Add(transaction);
+                }
+                return SelectValidationBatch(ready);
+            }
+        }
+
+        private static string CreateTransactionApprovalPayload(Transaction transaction, TransactionApproval validation)
+        {
+            return NetworkId + "|transaction-approval-v11|" + transaction.Id + "|" +
+                validation.AnchorHeight.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + validation.AnchorHash + "|" +
+                validation.CollateralTransactionId + "|" + validation.CollateralOutputIndex.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" +
+                validation.Proof.RewardAddress;
+        }
+
+        private static void ValidateTransactionApproval(Transaction transaction, IDictionary<string, UnspentOutput> collateral, IList<Block> history)
+        {
+            TransactionApproval validation = transaction.TransactionApproval;
+            TransactionValidation proof = validation?.Proof;
+            UnspentOutput locked;
+            if (!RequiresLockedTokenApproval(transaction) || validation == null || proof == null ||
+                transaction.Inputs.Any(input => !collateral.ContainsKey(Key(input.TransactionId, input.OutputIndex))) ||
+                validation.AnchorHeight < 0 || validation.AnchorHeight >= history.Count ||
+                history[validation.AnchorHeight].Hash != validation.AnchorHash ||
+                !collateral.TryGetValue(Key(validation.CollateralTransactionId, validation.CollateralOutputIndex), out locked) ||
+                locked.TransactionKind != TransactionKind.StakeLock || locked.Output.Amount <= 0 ||
+                proof.TransactionId != transaction.Id || proof.PublicKey != locked.ValidatorPublicKey ||
+                proof.RewardAddress != locked.ValidatorRewardAddress || proof.ValidatorId != Crypto.Sha256(proof.PublicKey))
+                throw new InvalidOperationException("A movement requires a valid approval backed by locked tokens.");
+            var validator = new ValidatorStake(proof.ValidatorId, proof.RewardAddress, locked.Output.Amount,
+                locked.ValidatorOwnedAddresses, proof.PublicKey, null);
+            if (!ExcludeTransactionParticipants(new[] { validator }, new[] { transaction }, false).Any() ||
+                !ProofOfStake.VerifyVote(proof.PublicKey, CreateTransactionApprovalPayload(transaction, validation), proof.Signature))
+                throw new InvalidOperationException("Invalid movement validator signature or participation.");
+        }
+
+        private static bool IsValidTransactionApproval(Transaction transaction, IDictionary<string, UnspentOutput> utxo, IList<Block> history)
+        {
+            if (transaction.TransactionApproval == null) return false;
+            try { ValidateTransactionApproval(transaction, utxo, history); return true; }
+            catch (Exception error) when (error is InvalidOperationException || error is ArgumentException || error is FormatException ||
+                error is CryptographicException || error is OverflowException) { return false; }
         }
 
         private static ValidatorStake SelectTransactionValidator(IEnumerable<ValidatorStake> validators,
@@ -658,16 +786,36 @@ namespace PrivateCoin.Core
         }
 
         private static void ValidateTransactionFees(Block block, Transaction[] transactions, ValidatorStake[] stakes,
-            string previousHash, IReadOnlyList<ValidatorReward> rewards)
+            string previousHash, IReadOnlyList<ValidatorReward> rewards, IDictionary<string, UnspentOutput> collateral, IList<Block> history)
         {
             Transaction reward = block.Transactions[0];
-            Transaction[] signedTransactions = transactions.Where(tx => block.ConsensusVersion >= ConsensusVersion ? !IsSelfValidatedOperation(tx) : block.ConsensusVersion < LegacyWalletBatchVersion || tx.Kind != TransactionKind.WalletCreate).ToArray();
+            if (block.ConsensusVersion >= ConsensusVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
+                reward.TransactionApproval != null || reward.WalletDistributionId != null || reward.ValidatorPublicKey != null ||
+                reward.ValidatorRewardAddress != null || reward.ValidatorOwnedAddresses != null))
+                throw new InvalidOperationException("Invalid scheduled block reward.");
+            Transaction[] signedTransactions = transactions.Where(tx => block.ConsensusVersion >= SelfValidatedVersion ? !IsSelfValidatedOperation(tx) : block.ConsensusVersion < LegacyWalletBatchVersion || tx.Kind != TransactionKind.WalletCreate).ToArray();
             if (block.TransactionValidations == null || block.TransactionValidations.Count != signedTransactions.Length ||
-                reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != rewards.Count + signedTransactions.Length)
+                reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != rewards.Count + (block.ConsensusVersion >= ConsensusVersion ? 0 : signedTransactions.Length))
                 throw new InvalidOperationException("Invalid transaction validation proofs or fee settlement.");
             for (int index = 0; index < rewards.Count; index++)
                 if (reward.Outputs[index].Amount != rewards[index].Amount || reward.Outputs[index].OneTimeAddress != rewards[index].RewardAddress)
                     throw new InvalidOperationException("The block reward must not include transaction fees.");
+            if (block.ConsensusVersion >= ConsensusVersion)
+            {
+                var replay = new Dictionary<string, UnspentOutput>(collateral, StringComparer.Ordinal);
+                foreach (Transaction operation in transactions)
+                {
+                    if (RequiresLockedTokenApproval(operation))
+                    {
+                        ValidateTransactionApproval(operation, replay, history);
+                        TransactionValidation proof = block.TransactionValidations.SingleOrDefault(item => item.TransactionId == operation.Id);
+                        if (proof == null || proof.ProofPayload() != operation.TransactionApproval.Proof.ProofPayload())
+                            throw new InvalidOperationException("The fee must belong to the approving locked validator.");
+                    }
+                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation));
+                }
+                return;
+            }
             for (int index = 0; index < signedTransactions.Length; index++)
             {
                 Transaction transaction = signedTransactions[index];
@@ -731,13 +879,16 @@ namespace PrivateCoin.Core
                 {
                     foreach (var input in transaction.Inputs) result.Remove(Key(input.TransactionId, input.OutputIndex));
                     AddOutputs(transaction, result);
+                    if (block.ConsensusVersion >= ConsensusVersion && RequiresLockedTokenApproval(transaction)) AddValidationFee(transaction, result);
                 }
             return result;
         }
 
-        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint)
+        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false)
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
+            if (transaction.TransactionApproval != null && !RequiresLockedTokenApproval(transaction))
+                throw new InvalidOperationException("Only fee-paying movements may carry an approval.");
             if (transaction.WalletDistributionId != null && transaction.Kind != TransactionKind.WalletCreate)
                 throw new InvalidOperationException("Only wallet receipts may reference a distribution.");
             if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution)
@@ -834,6 +985,7 @@ namespace PrivateCoin.Core
             if (allowMint && transaction.Fee != 0) throw new InvalidOperationException("A reward transaction cannot declare a fee.");
             foreach (string id in used) utxo.Remove(id);
             AddOutputs(transaction, utxo);
+            if (includeValidationFee) AddValidationFee(transaction, utxo);
         }
 
         private static void AddAssetAmount(IDictionary<string, long> amounts, string assetId, long amount)
@@ -896,6 +1048,15 @@ namespace PrivateCoin.Core
                     ValidatorPublicKey = i == 0 ? transaction.ValidatorPublicKey : null,
                     ValidatorRewardAddress = i == 0 ? transaction.ValidatorRewardAddress : null,
                     ValidatorOwnedAddresses = i == 0 ? transaction.ValidatorOwnedAddresses : null });
+        }
+
+        private static void AddValidationFee(Transaction transaction, IDictionary<string, UnspentOutput> utxo)
+        {
+            TransactionOutput fee = transaction.GetValidationFeeOutput();
+            if (fee == null) throw new InvalidOperationException("Missing validated fee credit.");
+            int index = transaction.Outputs.Count;
+            utxo.Add(Key(transaction.Id, index), new UnspentOutput { TransactionId = transaction.Id,
+                OutputIndex = index, Output = fee, TransactionKind = TransactionKind.Transfer });
         }
 
         private static string Key(string transactionId, int outputIndex) => transactionId + ":" + outputIndex;

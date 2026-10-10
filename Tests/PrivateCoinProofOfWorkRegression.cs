@@ -47,7 +47,7 @@ internal static class PrivateCoinProofOfWorkRegression
                     "locked stake independently determines the block creator");
                 Check(block.Validators.Count == 2 && block.TransactionValidations.Count == 20 && ProofOfWork.MeetsTarget(block.Hash),
                     "both signed stake proofs and proof of work are mandatory");
-                Check(block.Transactions[0].Outputs.Sum(o => o.Amount) == ProofOfStake.GetBlockReward(block.Height) + block.Transactions.Skip(1).Sum(item => item.Fee),
+                Check(block.Transactions[0].Outputs.Sum(o => o.Amount) == ProofOfStake.GetBlockReward(block.Height) && block.Transactions.Skip(1).Sum(item => item.GetValidationFeeOutput().Amount) == block.Transactions.Skip(1).Sum(item => item.Fee),
                     "scheduled reward and all fees are conserved");
                 Check(chain.GetConfirmations(tx.Id) == 1 && chain.GetConfirmationWork(tx.Id) == ProofOfWork.WorkPerBlock,
                     "inclusion gives one confirmation and its required work");
@@ -73,7 +73,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 Reject(() => new Blockchain(malformed), "malformed peer data is rejected");
                 var lowerVersion = Clone(chain.Blocks); lowerVersion.Last().ConsensusVersion = 4;
                 LegacyConsensusFixture.Mine(lowerVersion.Last());
-                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v10 to v4");
+                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v11 to v4");
                 Reject(() => chain.AddProofOfStakeBlock(block.Transactions.Skip(1), new[] { validators[0] }), "a miner cannot omit eligible locked stake");
 
                 var luckyBlocks = Clone(chain.Blocks);

@@ -70,6 +70,23 @@ namespace PrivateCoin.Core
     }
 
     [DataContract]
+    public sealed class TransactionApproval
+    {
+        [DataMember(Order = 1)] public int AnchorHeight { get; set; }
+        [DataMember(Order = 2)] public string AnchorHash { get; set; }
+        [DataMember(Order = 3)] public string CollateralTransactionId { get; set; }
+        [DataMember(Order = 4)] public int CollateralOutputIndex { get; set; }
+        [DataMember(Order = 5)] public TransactionValidation Proof { get; set; }
+
+        internal string ProofPayload()
+        {
+            return AnchorHeight.ToString(CultureInfo.InvariantCulture) + ":" + AnchorHash + ":" +
+                CollateralTransactionId + ":" + CollateralOutputIndex.ToString(CultureInfo.InvariantCulture) + ":" +
+                (Proof == null ? string.Empty : Proof.ProofPayload());
+        }
+    }
+
+    [DataContract]
     public sealed class TransactionInput
     {
         [DataMember(Order = 1)] public string TransactionId { get; set; }
@@ -103,6 +120,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 10, EmitDefaultValue = false)] public TokenDefinition Token { get; set; }
         [DataMember(Order = 11, EmitDefaultValue = false)] public string WalletDistributionId { get; set; }
 
+        [DataMember(Order = 12, EmitDefaultValue = false)] public TransactionApproval TransactionApproval { get; set; }
+
         internal string SigningPayload()
         {
             var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture));
@@ -135,6 +154,13 @@ namespace PrivateCoin.Core
         private static void AppendField(StringBuilder value, string field)
         {
             value.Append('|').Append(field == null ? -1 : field.Length).Append(':').Append(field);
+        }
+
+        /// <summary>The approval commits the fee output at the index immediately after the creator's outputs.</summary>
+        public TransactionOutput GetValidationFeeOutput()
+        {
+            return TransactionApproval?.Proof == null || Fee <= 0 ? null :
+                new TransactionOutput { Amount = Fee, OneTimeAddress = TransactionApproval.Proof.RewardAddress };
         }
 
         internal string CalculateId()
@@ -172,7 +198,9 @@ namespace PrivateCoin.Core
         {
             return ConsensusVersion == 0 && TransactionValidations == null ? string.Empty :
                 "|consensus:" + ConsensusVersion.ToString(CultureInfo.InvariantCulture) + "|transaction-validations|" +
-                string.Join("|", (TransactionValidations ?? new List<TransactionValidation>()).Select(item => item == null ? string.Empty : item.ProofPayload()));
+                string.Join("|", (TransactionValidations ?? new List<TransactionValidation>()).Select(item => item == null ? string.Empty : item.ProofPayload())) +
+                (ConsensusVersion >= 11 ? "|transaction-approvals|" + string.Join("|", Transactions.Select(tx =>
+                    tx.TransactionApproval == null ? string.Empty : tx.TransactionApproval.ProofPayload())) : string.Empty);
         }
     }
 

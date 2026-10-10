@@ -142,15 +142,17 @@ namespace Povix.Dex.Services
             {
                 Block block = blockchain.Blocks.FirstOrDefault(item => item.Transactions.Any(tx => tx.Id == id));
                 var record = submitted.FirstOrDefault(item => item.Transaction.Id == id);
-                var transaction = record?.Transaction;
-                if (transaction == null || transaction.Kind != TransactionKind.TokenTransfer) return null;
+                var transaction = block?.Transactions.FirstOrDefault(tx => tx.Id == id) ??
+                    pending.FirstOrDefault(tx => tx.Id == id) ?? record?.Transaction;
+                if (record == null || transaction == null || transaction.Kind != TransactionKind.TokenTransfer) return null;
                 var destination = transaction.Outputs[0];
                 var token = FindCreation(destination.AssetId)?.Token ?? record.Token;
                 if (token == null) return null;
                 return new TokenTransferReceiptViewModel { TransactionId = id, Token = token, Amount = destination.Amount, Fee = transaction.Fee,
                     DestinationAddress = destination.OneTimeAddress, ChangeOutputs = transaction.Outputs.Skip(1).Select(output =>
                         new TransactionOutput { Amount = output.Amount, AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress }).ToArray(),
-                    Status = block != null ? "confirmed" : pending.Any(tx => tx.Id == id) ? "pending" : "rejected", BlockHeight = block?.Height,
+                    Status = block != null ? "confirmed" : pending.Any(tx => tx.Id == id) ?
+                        blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected", BlockHeight = block?.Height,
                     BlockHash = block?.Hash, Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1, PeerCount = node.ConnectedPeerCount };
             }
         }

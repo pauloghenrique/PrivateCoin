@@ -548,13 +548,27 @@ namespace PrivateCoin.Desktop
 
         private bool ValidateAndQueue(Transaction transaction, string source)
         {
-            lock (pendingSync)
+            Transaction[] snapshot = SnapshotPending();
+            Transaction existing = snapshot.FirstOrDefault(tx => tx.Id == transaction?.Id);
+            if (existing != null)
             {
-                if (transaction != null && !string.IsNullOrEmpty(transaction.Id) && pendingIds.Contains(transaction.Id))
+                if (blockchain.HasValidTransactionApproval(existing, snapshot) ||
+                    !blockchain.HasValidTransactionApproval(transaction, snapshot)) return false;
+                lock (pendingSync)
                 {
-                    Log(source + ": transação duplicada ignorada (" + ShortId(transaction.Id) + ").", false);
-                    return false;
+                    int index = pendingTransactions.FindIndex(tx => tx.Id == transaction.Id);
+                    if (index < 0) return false;
+                    pendingTransactions[index] = transaction;
                 }
+                SaveState();
+                Log(source + ": movimentação aprovada por carteira com tokens bloqueados; taxa creditada e aguardando lote de 20.", true);
+                BeginInvoke(new Action(StartAutomaticMining));
+                return true;
+            }
+            if (transaction?.TransactionApproval != null && !blockchain.HasValidTransactionApproval(transaction, snapshot))
+            {
+                Log(source + ": comprovante de validação da movimentação rejeitado.", false);
+                return false;
             }
 
             try
@@ -591,7 +605,8 @@ namespace PrivateCoin.Desktop
                 RecoverWalletCreationReceipts();
                 while (true)
                 {
-                    Transaction[] batch = Blockchain.SelectValidationBatch(SnapshotPending()).ToArray();
+                    await ApprovePendingTransactions();
+                    Transaction[] batch = blockchain.SelectApprovedValidationBatch(SnapshotPending()).ToArray();
                     if (batch.Length == 0) break;
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
@@ -638,13 +653,32 @@ namespace PrivateCoin.Desktop
             {
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
-                Transaction[] nextBatch = Blockchain.SelectValidationBatch(remaining).ToArray();
+                Transaction[] nextBatch = blockchain.SelectApprovedValidationBatch(remaining).ToArray();
                 miningStatusLabel.Text = nextBatch.Length > 0 && !nextBatch.All(Blockchain.IsSelfValidatedOperation) && EligibleValidators(nextBatch).Length < 2
                     ? "Aguardando 2 validadores sem participação na transferência"
                     : "Validações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "/" + Blockchain.ValidationsPerBlock.ToString(CultureInfo.InvariantCulture);
                 UpdateChainSummary();
                 if (!IsDisposed && nextBatch.Length > 0 && (nextBatch.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(nextBatch).Length >= 2))
                     BeginInvoke(new Action(StartAutomaticMining));
+            }
+        }
+
+        private async Task ApprovePendingTransactions()
+        {
+            foreach (Transaction transaction in SnapshotPending().Where(Blockchain.RequiresLockedTokenApproval))
+            {
+                Transaction[] pending = SnapshotPending();
+                if (blockchain.HasValidTransactionApproval(transaction, pending)) continue;
+                ValidatorStake[] active = blockchain.GetActiveValidators(pending).ToArray();
+                ValidatorStake[] owned = wallets.Where(wallet => !wallet.Wallet.IsParticipant(transaction))
+                    .SelectMany(wallet => active.Where(stake => wallet.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress))
+                        .Select(stake => wallet.Wallet.CreateValidatorStake(stake.RewardAddress, stake.LockedAmount))).ToArray();
+                TransactionApproval approval = ExecuteNetworkOperation(() => blockchain.CreateTransactionApproval(transaction, pending, owned));
+                if (approval == null) continue;
+                transaction.TransactionApproval = approval;
+                SaveState();
+                Log("Movimentação validada; taxa transferida ao validador, sem criar bloco: " + ShortId(transaction.Id) + ".", true);
+                if (peerNode != null) await peerNode.BroadcastAsync(transaction);
             }
         }
 
