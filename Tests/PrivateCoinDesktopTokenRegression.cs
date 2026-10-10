@@ -31,8 +31,8 @@ internal static class PrivateCoinDesktopTokenRegression
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
             LegacyConsensusFixture.Fund(chain, firstAddress);
             LegacyConsensusFixture.Fund(chain, secondAddress);
-            chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
-            chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
+            LegacyConsensusFixture.SelfBlock(chain, first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 0));
+            LegacyConsensusFixture.SelfBlock(chain, second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 0));
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
             using (var batches = new ValidationBatchFixture(chain))
             {

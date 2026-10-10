@@ -17,7 +17,7 @@ internal static class LegacyConsensusFixture
     private static string Vote(ValidatorStake stake, string payload) => (string)typeof(ValidatorStake).GetMethod("CreateVote", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(stake, new object[] { payload });
     public static void Mine(Block block) => Call("Mine", block);
     private static IEnumerable<Transaction> OrderByFeePriority(IEnumerable<Transaction> txs) => Blockchain.OrderByFeePriority(txs);
-    private static IEnumerable<ValidatorStake> ExcludeTransactionParticipants(IEnumerable<ValidatorStake> stakes, IEnumerable<Transaction> txs) => (IEnumerable<ValidatorStake>)Call("ExcludeTransactionParticipants", stakes, txs);
+    private static IEnumerable<ValidatorStake> ExcludeTransactionParticipants(IEnumerable<ValidatorStake> stakes, IEnumerable<Transaction> txs) => (IEnumerable<ValidatorStake>)Call("ExcludeTransactionParticipants", stakes, txs, true);
     private static bool SameStakeSet(IEnumerable<ValidatorStake> left, IEnumerable<ValidatorStake> right) => (bool)Call("SameStakeSet", left, right);
     private static ValidatorStake SelectTransactionValidator(IEnumerable<ValidatorStake> stakes, Transaction tx, string parent, int height) => (ValidatorStake)Call("SelectTransactionValidator", stakes, tx, parent, height);
     private static string CreateTransactionValidationPayload(Transaction tx, string parent, int height, string address) => (string)Call("CreateTransactionValidationPayload", tx, parent, height, address);
@@ -26,8 +26,10 @@ internal static class LegacyConsensusFixture
     {
         if (chain.Blocks.Last().ConsensusVersion >= 8)
         {
-            chain.CreateWalletCreationTransaction(address, new Transaction[0]);
-            return chain.Blocks.Last();
+            var batch = new List<Transaction> { chain.CreateWalletCreationTransaction(address, new Transaction[0]) };
+            while (batch.Count < Blockchain.ValidationsPerBlock)
+                batch.Add(chain.CreateWalletCreationTransaction("fixture-" + Guid.NewGuid().ToString("N"), batch));
+            return chain.AddBlock(batch);
         }
         var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
         reward.Outputs.Add(new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = address });
@@ -38,6 +40,13 @@ internal static class LegacyConsensusFixture
         Mine(block);
         if (!chain.TryReplaceChain(chain.Blocks.Concat(new[] { block }))) throw new Exception("Invalid legacy funding fixture");
         return block;
+    }
+    public static Block SelfBlock(Blockchain chain, Transaction operation)
+    {
+        var batch = new List<Transaction> { operation };
+        while (batch.Count < Blockchain.ValidationsPerBlock)
+            batch.Add(chain.CreateWalletCreationTransaction("self-fixture-" + Guid.NewGuid().ToString("N"), batch));
+        return chain.AddBlock(batch);
     }
     public static Block Lock(Blockchain chain, Transaction tx)
     {

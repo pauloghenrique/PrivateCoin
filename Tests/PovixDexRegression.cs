@@ -82,8 +82,8 @@ internal static partial class PovixDexRegression
             long originalBalance = chain.GetBalance(originalAddresses);
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
             LegacyConsensusFixture.Fund(chain, firstAddress); LegacyConsensusFixture.Fund(chain, secondAddress);
-            chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
-            chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 1) });
+            LegacyConsensusFixture.SelfBlock(chain, first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 0));
+            LegacyConsensusFixture.SelfBlock(chain, second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, Blockchain.OneCoin, 0));
             Check(chain.IsValid(), "existing test chain contains confirmed funds and validator collateral");
             using (var batches = new ValidationBatchFixture(chain))
             {
@@ -168,17 +168,22 @@ internal static partial class PovixDexRegression
                     legacyCache["ConsensusVersion"] = 4;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v9 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v10 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 7;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v9 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v10 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 8;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v8 cache preserves pending creation during the v9 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v8 cache preserves pending creation during the v10 upgrade");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 9;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v9 cache preserves pending creation during the v10 upgrade");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,

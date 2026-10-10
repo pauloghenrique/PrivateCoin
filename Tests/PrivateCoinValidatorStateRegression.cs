@@ -33,12 +33,14 @@ internal static class PrivateCoinValidatorStateRegression
                 wallets.Add(a); wallets.Add(b); wallets.Add(c);
                 const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
                 formType.GetField("wallets", fields).SetValue(form, wallets);
+                formType.GetField("pendingSync", fields).SetValue(form, new object());
+                formType.GetField("pendingTransactions", fields).SetValue(form, new List<Transaction>());
                 formType.GetField("blockchain", fields).SetValue(form, chain);
                 MethodInfo refresh = formType.GetMethod("RefreshValidatorState", fields);
                 refresh.Invoke(form, null);
                 Check(!(bool)named.GetProperty("IsValidator").GetValue(c), "inactive wallets remain inactive without throwing");
-                chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
-                chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, 2 * Blockchain.OneCoin, 1) });
+                LegacyConsensusFixture.SelfBlock(chain, first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 0));
+                LegacyConsensusFixture.SelfBlock(chain, second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, 2 * Blockchain.OneCoin, 0));
                 refresh.Invoke(form, null); refresh.Invoke(form, null);
                 Check((long)named.GetProperty("LockedStake").GetValue(a) == Blockchain.OneCoin &&
                     (long)named.GetProperty("LockedStake").GetValue(b) == 2 * Blockchain.OneCoin,
@@ -49,7 +51,7 @@ internal static class PrivateCoinValidatorStateRegression
                 refresh.Invoke(form, null);
                 Check(!(bool)named.GetProperty("IsValidator").GetValue(a) && !(bool)named.GetProperty("IsValidator").GetValue(b),
                     "reorganization removes obsolete metadata for every local validator");
-                chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, 2 * Blockchain.OneCoin, 1) });
+                LegacyConsensusFixture.SelfBlock(chain, first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, 2 * Blockchain.OneCoin, 0));
                 refresh.Invoke(form, null);
                 Check((long)named.GetProperty("LockedStake").GetValue(a) == 2 * Blockchain.OneCoin &&
                     (string)named.GetProperty("ValidatorRewardAddress").GetValue(a) == firstAddress,

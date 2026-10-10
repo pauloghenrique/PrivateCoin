@@ -155,13 +155,19 @@ namespace PrivateCoin.Core
 
         public Transaction CreateStakeUnlockTransaction(Blockchain chain, string rewardAddress, long fee)
         {
+            return CreateStakeUnlockTransaction(chain, Enumerable.Empty<Transaction>(), rewardAddress, fee);
+        }
+
+        public Transaction CreateStakeUnlockTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions, string rewardAddress, long fee)
+        {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
+            chain.ValidatePendingTransactions(pendingTransactions);
             RSACryptoServiceProvider key;
             if (!keys.TryGetValue(rewardAddress, out key)) throw new InvalidOperationException("The validator address is not owned by this wallet.");
-            UnspentOutput collateral = chain.GetUnspentOutputs(new[] { rewardAddress })
+            UnspentOutput collateral = chain.GetUnspentOutputs(new[] { rewardAddress }, pendingTransactions)
                 .SingleOrDefault(item => item.TransactionKind == TransactionKind.StakeLock);
             if (collateral == null) throw new InvalidOperationException("No globally locked collateral exists for this validator.");
-            if (fee < Blockchain.TransferFeeStep || fee >= collateral.Output.Amount)
+            if (fee < 0 || fee >= collateral.Output.Amount)
                 throw new ArgumentOutOfRangeException(nameof(fee));
 
             var transaction = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Kind = TransactionKind.StakeUnlock };
@@ -189,7 +195,7 @@ namespace PrivateCoin.Core
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (string.IsNullOrWhiteSpace(destinationOneTimeAddress)) throw new ArgumentException("Destination is required.", nameof(destinationOneTimeAddress));
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
-            if (fee < Blockchain.TransferFeeStep) throw new ArgumentOutOfRangeException(nameof(fee), "The minimum transaction fee is one atomic unit.");
+            if (fee < 0 || (kind != TransactionKind.StakeLock && fee < Blockchain.TransferFeeStep)) throw new ArgumentOutOfRangeException(nameof(fee), "The minimum transaction fee is one atomic unit.");
 
             var selected = new List<UnspentOutput>();
             long total = 0;
@@ -212,6 +218,7 @@ namespace PrivateCoin.Core
                 transaction.Outputs.Add(new TransactionOutput { Amount = total - required, OneTimeAddress = CreateReceiveAddress() });
             if (kind == TransactionKind.StakeLock)
                 transaction.ValidatorOwnedAddresses = selected.Select(item => item.Output.OneTimeAddress)
+                    .Concat(transaction.Outputs.Select(output => output.OneTimeAddress))
                     .Concat(new[] { validatorRewardAddress }).Distinct(StringComparer.Ordinal)
                     .OrderBy(item => item, StringComparer.Ordinal).ToList();
 
