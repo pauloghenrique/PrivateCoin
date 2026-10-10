@@ -263,3 +263,11 @@ verifica que operações recebidas durante a sincronização sejam validadas dep
 sem criar bloco, e que desconexões descartem mensagens de uma conexão antiga.
 A regressão DEX altera a fila entre cotação e preparação e verifica a taxa escolhida,
 a verificação no navegador, a devolução do troco e os caches históricos v11.
+
+## Confirmação da criação por validação (consenso v13)
+
+`PrivateCoinTokenConfirmationRegression.cs`, com `LegacyConsensusFixture.cs`, verifica
+registro e quantidade imediatamente disponíveis, prova falsa, restart, transferência
+real dos tokens antes do bloco, inclusão posterior sem duplicação e histórico v12.
+A regressão DEX confirma o comprovante, a listagem e a preparação de movimentação
+antes de qualquer bloco. A tela Desktop usa o mesmo estado validado e exibe “Sem bloco”.

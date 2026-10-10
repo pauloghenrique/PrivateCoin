@@ -56,6 +56,14 @@ internal static class PrivateCoinDesktopTokenRegression
                 source.SynchronizationRequested += (sender, data) => source.BroadcastChainAsync(chain.Blocks);
                 source.Start(new string[0]); desktop.Start(new string[0]);
                 desktop.ConnectAsync("127.0.0.1", sourcePort).GetAwaiter().GetResult();
+                Transaction receivedCreation = null;
+                desktop.TransactionReceived += (sender, data) => { if (data.Transaction.Id == create.Id) Interlocked.Exchange(ref receivedCreation, data.Transaction); };
+                create.TransactionApproval = chain.CreateTransactionApproval(create, new[] { create }, validators);
+                source.BroadcastAsync(create).GetAwaiter().GetResult();
+                Wait(() => receivedCreation != null, "Desktop receives the signed creation approval over P2P before its block");
+                var immediate = desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedCreation }).Single();
+                Check(immediate.Amount == long.MaxValue && immediate.CreationHeight == null && immediate.Confirmations == 0 && immediate.ValidationCount == 1 && desktopChain.Blocks.Count == commonBlocks.Length,
+                    "Desktop lists the confirmed token and its exact supply without inventing a creation block");
                 Block creationBlock = batches.Confirm(chain, new[] { create }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,

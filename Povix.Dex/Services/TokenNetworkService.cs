@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11 && state.ConsensusVersion != 12))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -189,7 +189,7 @@ namespace Povix.Dex.Services
                     pending.FirstOrDefault(item => item.Id == transactionId) ?? submitted.FirstOrDefault(item => item.Transaction.Id == transactionId)?.Transaction;
                 if (transaction == null || transaction.Kind != TransactionKind.TokenCreate) return null;
                 string status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ?
-                    blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected";
+                    blockchain.HasValidTransactionApproval(transaction, pending) ? "confirmed" : "pending" : "rejected";
                 string waitingReason = null;
                 if (status == "pending")
                 {
@@ -206,6 +206,8 @@ namespace Povix.Dex.Services
                     PovixOutputs = transaction.Outputs.Where(output => output.AssetId == null).Select(output =>
                         new TransactionOutput { Amount = output.Amount, OneTimeAddress = output.OneTimeAddress }).ToArray(),
                     Status = status, WaitingReason = waitingReason,
+                    ValidationCount = status == "confirmed" && (transaction.TransactionApproval != null ||
+                        block?.TransactionValidations?.Any(proof => proof.TransactionId == transactionId) == true) ? 1 : 0,
                     BlockHeight = block?.Height, BlockHash = block?.Hash, PeerCount = node.ConnectedPeerCount,
                     Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1 };
             }

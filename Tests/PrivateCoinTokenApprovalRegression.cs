@@ -49,8 +49,8 @@ internal static class PrivateCoinTokenApprovalRegression
             var ordered = Blockchain.OrderByFeePriority(pending).ToList();
             Check(ordered.FindIndex(tx => tx.Id == approval.CollateralTransactionId) < ordered.FindIndex(tx => tx.Id == creation.Id),
                 "the approving collateral is included before its high-fee token operation");
-            Check(chain.GetTokenBalances(new[] { c }).Count == 0 && chain.GetSpendableBalance(issuer.OwnedOneTimeAddresses, pending) == Blockchain.WalletCreationReward - creation.Fee,
-                "approval returns exactly native funds minus the chosen fee while token confirmation still awaits its block");
+            Check(chain.GetTokens(pending).Count == 1 && chain.GetSpendableTokenOutputs(new[] { c }, pending, creation.Token.Id).Sum(output => output.Output.Amount) == 100000 && chain.GetSpendableBalance(issuer.OwnedOneTimeAddresses, pending) == Blockchain.WalletCreationReward - creation.Fee,
+                "approval confirms the token supply and returns native funds minus the chosen fee without waiting for a block");
             var restarted = new Blockchain(Copy(chain.Blocks.ToList())); var restoredPending = Copy(pending);
             Check(restarted.HasValidTransactionApproval(restoredPending.Single(tx => tx.Id == originalId), restoredPending),
                 "pending approval survives serialization and restart without a block");

@@ -17,10 +17,10 @@ namespace PrivateCoin.Core
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
             if (fee < Blockchain.TransferFeeStep || fee > Blockchain.MaximumTransferFee) throw new ArgumentOutOfRangeException(nameof(fee));
             if (!IsAddress(tokenId) || !IsAddress(destinationAddress) || !IsAddress(changeAddress)) throw new ArgumentException("Invalid transfer address or token identifier.");
-            if (!chain.GetTokens().Any(token => token.Id == tokenId)) throw new ArgumentException("Token is not confirmed.");
+            var queue = pending.ToArray();
+            if (!chain.GetTokens(queue).Any(token => token.Id == tokenId)) throw new ArgumentException("Token is not confirmed.");
             var keys = publicKeys.Distinct(StringComparer.Ordinal).ToDictionary(Crypto.Sha256, key => key, StringComparer.Ordinal);
             if (!keys.ContainsKey(changeAddress)) throw new ArgumentException("Change must belong to the signing wallet.");
-            var queue = pending.ToArray();
             var funding = Select(chain.GetSpendableOutputs(keys.Keys, queue), fee, "Insufficient POVIX for the transaction fee.");
             var tokens = Select(chain.GetSpendableTokenOutputs(keys.Keys, queue, tokenId), amount, "Insufficient token balance.");
             var selected = funding.Concat(tokens).ToArray();

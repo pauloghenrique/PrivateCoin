@@ -94,7 +94,7 @@ namespace Povix.Dex.Controllers
             var registration = ValidId(id) ? MvcApplication.TokenNetwork?.GetRegistration(id) : null;
             if (registration == null) return HttpNotFound();
             return Json(new { status = registration.Status, waitingReason = registration.WaitingReason, blockHeight = registration.BlockHeight,
-                blockHash = registration.BlockHash, confirmations = registration.Confirmations,
+                blockHash = registration.BlockHash, confirmations = registration.Confirmations, validations = registration.ValidationCount,
                 peerCount = registration.PeerCount }, JsonRequestBehavior.AllowGet);
         }
 
