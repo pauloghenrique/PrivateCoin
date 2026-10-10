@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -78,11 +78,14 @@ namespace Povix.Dex.Services
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input =>
                     input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 var pendingIds = new HashSet<string>(pending.Select(tx => tx.Id), StringComparer.Ordinal);
+                var available = new HashSet<string>(blockchain.GetSpendableOutputs(addresses, pending).Select(item =>
+                    item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 long reservedAmount = confirmed.Where(item => item.TransactionKind != TransactionKind.StakeLock &&
                     reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .Sum(item => item.Output.Amount);
                 long incoming = blockchain.GetUnspentOutputs(addresses, pending).Where(item => item.Output.AssetId == null &&
-                    item.TransactionKind != TransactionKind.StakeLock && pendingIds.Contains(item.TransactionId)).Sum(item => item.Output.Amount);
+                    item.TransactionKind != TransactionKind.StakeLock && pendingIds.Contains(item.TransactionId) &&
+                    !available.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture))).Sum(item => item.Output.Amount);
                 return new {
                     balanceAtomic = blockchain.GetSpendableBalance(addresses, pending).ToString(CultureInfo.InvariantCulture),
                     confirmedAtomic = confirmed.Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
@@ -171,13 +174,14 @@ namespace Povix.Dex.Services
             {
                 Block block = blockchain.Blocks.FirstOrDefault(item => item.Transactions.Any(tx => tx.Id == transactionId));
                 Transaction transaction = block?.Transactions.FirstOrDefault(tx => tx.Id == transactionId) ??
-                    submitted.FirstOrDefault(item => item.Transaction.Id == transactionId)?.Transaction;
+                    pending.FirstOrDefault(item => item.Id == transactionId) ?? submitted.FirstOrDefault(item => item.Transaction.Id == transactionId)?.Transaction;
                 if (transaction == null || transaction.Kind != TransactionKind.TokenCreate) return null;
                 return new TokenRegistrationViewModel { TransactionId = transaction.Id, Token = transaction.Token,
                     Fee = transaction.Fee, DestinationAddress = transaction.Outputs.First(output => output.AssetId == transaction.Token.Id).OneTimeAddress,
                     PovixOutputs = transaction.Outputs.Where(output => output.AssetId == null).Select(output =>
                         new TransactionOutput { Amount = output.Amount, OneTimeAddress = output.OneTimeAddress }).ToArray(),
-                    Status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ? "pending" : "rejected",
+                    Status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ?
+                        blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected",
                     BlockHeight = block?.Height, BlockHash = block?.Hash, PeerCount = node.ConnectedPeerCount,
                     Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1 };
             }
@@ -231,8 +235,19 @@ namespace Povix.Dex.Services
                 lock (sync)
                 {
                     Transaction transaction = args.Transaction;
-                    if (transaction == null || pending.Count >= MaximumPending || pending.Any(tx => tx.Id == transaction.Id) ||
-                        blockchain.Blocks.Any(block => block.Transactions.Any(tx => tx.Id == transaction.Id))) return;
+                    if (transaction == null || blockchain.Blocks.Any(block => block.Transactions.Any(tx => tx.Id == transaction.Id))) return;
+                    Transaction existing = pending.FirstOrDefault(tx => tx.Id == transaction.Id);
+                    if (existing != null)
+                    {
+                        if (blockchain.HasValidTransactionApproval(existing, pending) ||
+                            !blockchain.HasValidTransactionApproval(transaction, pending)) return;
+                        var approved = pending.Select(tx => tx.Id == transaction.Id ? transaction : tx).ToList();
+                        Save(blockchain, approved, submitted);
+                        pending = approved;
+                        return;
+                    }
+                    if (pending.Count >= MaximumPending) return;
+                    if (transaction.TransactionApproval != null && !blockchain.HasValidTransactionApproval(transaction, pending)) return;
                     blockchain.ValidatePendingTransactions(pending.Concat(new[] { transaction }));
                     var next = pending.Concat(new[] { transaction }).ToList();
                     Save(blockchain, next, submitted);

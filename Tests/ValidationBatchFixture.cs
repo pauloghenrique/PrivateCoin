@@ -22,6 +22,9 @@ internal sealed class ValidationBatchFixture : IDisposable
         var batch = transactions.ToList();
         while (batch.Count < Blockchain.ValidationsPerBlock)
             batch.Add(filler.CreateTransaction(chain, batch, destination, 1, 1));
+        foreach (Transaction creation in batch.Where(Blockchain.RequiresLockedTokenApproval))
+            if (!chain.HasValidTransactionApproval(creation, batch))
+                creation.TransactionApproval = chain.CreateTransactionApproval(creation, batch, validators);
         return chain.AddProofOfStakeBlock(batch, validators);
     }
 

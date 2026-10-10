@@ -101,6 +101,15 @@ internal static partial class PovixDexRegression
                 "receipt exposes exact token and POVIX change under original wallet keys");
             Check(service.SubmitTransferAsync(draftId, signatures, creatorSignature, "transfer-owner").GetAwaiter().GetResult() == transactionId, "movement retry is idempotent");
             RejectTransfer(TransferControllerFor(service, "transfer-owner", items), (string)conflicts["draftId"], conflictingSignatures, conflictingAuthorization, "funding_unavailable");
+            long validatorBalance = service.GetBalance(new[] { validators[0].RewardAddress });
+            int heightBeforeApproval = chain.Blocks.Count;
+            propagated.TransactionApproval = chain.CreateTransactionApproval(propagated, new[] { propagated }, validators.Take(1));
+            peer.BroadcastAsync(propagated).GetAwaiter().GetResult();
+            Wait(() => service.GetTransferReceipt(transactionId).Status == "validated", "token movement receipt receives its separate locked-token approval");
+            Check(chain.Blocks.Count == heightBeforeApproval && service.GetTransferReceipt(transactionId).Confirmations == 0 &&
+                service.GetTransferReceipt(transactionId).BlockHash == null &&
+                service.GetBalance(new[] { validators[0].RewardAddress }) == validatorBalance + propagated.Fee,
+                "validated token movement immediately credits its fee without a block or confirmations");
             Block confirmed = batches.Confirm(chain, new[] { propagated }, validators);
             peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
             Wait(() => service.GetTransferReceipt(transactionId).Status == "confirmed", "movement receipt confirms only after a validated block");

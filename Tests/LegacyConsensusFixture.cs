@@ -55,7 +55,7 @@ internal static class LegacyConsensusFixture
             Transactions = new List<Transaction> { tx } };
         Mine(block); chain.TryReplaceChain(chain.Blocks.Concat(new[] { block })); return block;
     }
-        public static Block Confirm(Blockchain chain, IEnumerable<Transaction> transactions, IEnumerable<ValidatorStake> validators)
+        public static Block Confirm(Blockchain chain, IEnumerable<Transaction> transactions, IEnumerable<ValidatorStake> validators, int consensusVersion = ConsensusVersion)
         {
             if (transactions == null) throw new ArgumentNullException(nameof(transactions));
             if (validators == null) throw new ArgumentNullException(nameof(validators));
@@ -97,7 +97,7 @@ internal static class LegacyConsensusFixture
                 reward.Id = Id(reward);
                 var block = new Block
                 {
-                    ConsensusVersion = ConsensusVersion,
+                    ConsensusVersion = consensusVersion,
                     TransactionValidations = validations,
                     Height = height,
                     PreviousHash = blocks[blocks.Count - 1].Hash,

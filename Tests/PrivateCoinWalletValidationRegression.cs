@@ -75,7 +75,8 @@ internal static class PrivateCoinWalletValidationRegression
                 "19 validated operations do not form a block");
             Reject(() => chain.AddBlock(pending), "a partial unsigned batch is rejected");
             pending.Add(chain.CreateWalletCreationTransaction("twentieth-wallet", pending));
-            var batch = Blockchain.SelectValidationBatch(pending).ToArray();
+            payment.TransactionApproval = chain.CreateTransactionApproval(payment, pending, new[] { first.CreateValidatorStake(a, Blockchain.OneCoin) });
+            var batch = chain.SelectApprovedValidationBatch(pending).ToArray();
             Check(batch.Length == 20, "wallet creation, locks and transfers each count toward 20");
             Reject(() => chain.AddBlock(batch), "a mixed transfer batch cannot bypass stake approval");
             var validators = new[] { first.CreateValidatorStake(a, Blockchain.OneCoin), second.CreateValidatorStake(b, 2 * Blockchain.OneCoin) };
@@ -88,7 +89,7 @@ internal static class PrivateCoinWalletValidationRegression
                 "exactly 20 operations form the first valid block plus reward settlement");
             Check(block.TransactionValidations.Count == 1 && block.TransactionValidations[0].TransactionId == payment.Id,
                 "only the transfer needs an individual proof from a staked validator");
-            Check(block.Transactions[0].Outputs.Last().Amount == 37 && block.Transactions[0].Outputs.Last().OneTimeAddress == block.TransactionValidations[0].RewardAddress,
+            Check(payment.GetValidationFeeOutput().Amount == 37 && payment.GetValidationFeeOutput().OneTimeAddress == block.TransactionValidations[0].RewardAddress,
                 "the transfer validator receives the chosen fee");
             ValidatorStake creator = validators.Single(v => v.ValidatorId == block.Validators.Single(record => record.IsCreator).ValidatorId);
             var rewards = ProofOfStake.DistributeReward(block.Height, creator, validators.Where(v => v.ValidatorId != creator.ValidatorId));

@@ -239,3 +239,16 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinPendingLedgerRegress
 Confere a propagação ordenada de criação, bloqueio e transferência dependente,
 as garantias e reservas no peer receptor e a ausência de blocos com menos de 20
 operações. Usa somente carteiras e arquivos descartáveis.
+
+## Aprovação e taxa imediata (consenso v11)
+
+`PrivateCoinTokenApprovalRegression.cs`, compilado com `LegacyConsensusFixture.cs`
+e referência ao Core, verifica aprovação antes do bloco, garantia real, assinatura,
+crédito imediatamente utilizável, gasto da taxa em outra transferência, ausência
+de pagamento duplicado na confirmação, conservação da emissão, restauração e
+histórico v10. A regressão DEX também verifica propagação da aprovação, estado
+`validated` sem bloco, saldo da taxa, repetição, reinício e reorganização.
+
+Execute `node Tests/PovixApprovalStatusRegression.js` para verificar as transições
+do comprovante real entre pendente, validado, confirmado e reorganizado, inclusive
+a remoção da hash antiga e a indicação de taxa já transferida.

@@ -70,7 +70,7 @@ namespace PrivateCoin.Core
             OutputAmount = outputAmount;
             Fee = transaction.Fee;
             IssuedAmount = issuedAmount;
-            Outputs = transaction.Outputs.Select(output => new LedgerOutput(output.OneTimeAddress, output.Amount, output.AssetId)).ToArray();
+            Outputs = transaction.Outputs.Concat(transaction.GetValidationFeeOutput() == null ? new TransactionOutput[0] : new[] { transaction.GetValidationFeeOutput() }).Select(output => new LedgerOutput(output.OneTimeAddress, output.Amount, output.AssetId)).ToArray();
         }
 
         public int BlockHeight { get; }
@@ -145,6 +145,8 @@ namespace PrivateCoin.Core
                     });
                     long outputAmount = transaction.Outputs.Where(output => output.AssetId == null).Aggregate(0L,
                         (total, output) => checked(total + output.Amount));
+                    TransactionOutput feeCredit = block.ConsensusVersion >= 11 ? transaction.GetValidationFeeOutput() : null;
+                    if (feeCredit != null) outputAmount = checked(outputAmount + feeCredit.Amount);
                     LedgerEntryType type = LedgerEntryType.Transfer;
                     long issuedAmount = 0;
                     if (transactionIndex == 0 && IsProofOfStakeBlock(block))
@@ -163,6 +165,7 @@ namespace PrivateCoin.Core
                         inputAmount, outputAmount, issuedAmount, snapshot.Length - block.Height));
                     for (int outputIndex = 0; outputIndex < transaction.Outputs.Count; outputIndex++)
                         knownOutputs.Add(OutputKey(transaction.Id, outputIndex), transaction.Outputs[outputIndex].AssetId == null ? transaction.Outputs[outputIndex].Amount : 0);
+                    if (feeCredit != null) knownOutputs.Add(OutputKey(transaction.Id, transaction.Outputs.Count), feeCredit.Amount);
                 }
             }
             return entries.AsEnumerable().Reverse().Skip(offset).Take(limit).ToArray();

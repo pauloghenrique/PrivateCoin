@@ -94,7 +94,8 @@ internal static partial class PovixDexRegression
             {
                 Transaction received = null;
                 peer.SynchronizationRequested += (s, e) => peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
-                peer.TransactionReceived += (s, e) => { if (e.Transaction.Kind == TransactionKind.TokenCreate) Interlocked.Exchange(ref received, e.Transaction); };
+                peer.TransactionReceived += (s, e) => { if (e.Transaction.Kind == TransactionKind.TokenCreate &&
+                    (received?.TransactionApproval == null || e.Transaction.TransactionApproval != null)) Interlocked.Exchange(ref received, e.Transaction); };
                 peer.Start();
                 var service = new TokenNetworkService(directory, dexPort, new string[0]);
                 try
@@ -168,22 +169,27 @@ internal static partial class PovixDexRegression
                     legacyCache["ConsensusVersion"] = 4;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v10 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v11 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 7;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v10 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v11 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 8;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v8 cache preserves pending creation during the v10 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v8 cache preserves pending creation during the v11 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 9;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v9 cache preserves pending creation during the v10 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v9 cache preserves pending creation during the v11 upgrade");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 10;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v10 cache preserves an unapproved token during the v11 upgrade");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
@@ -194,6 +200,32 @@ internal static partial class PovixDexRegression
                     CheckRejection(ControllerFor(service, "regression", sessionItems), (string)conflictingDraft["draftId"], conflictingSignatures, "draft_missing");
                     chain.ValidatePendingTransactions(new[] { received });
                     var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, Blockchain.OneCoin) };
+                    int beforeApproval = chain.Blocks.Count;
+                    long validatorBalanceBeforeApproval = service.GetBalance(first.OwnedOneTimeAddresses.ToArray());
+                    Transaction approvedCreation = received;
+                    approvedCreation.TransactionApproval = chain.CreateTransactionApproval(approvedCreation, new[] { approvedCreation }, validators.Take(1));
+                    Check(chain.HasValidTransactionApproval(approvedCreation, new[] { approvedCreation }),
+                        "the source validator signs a valid creation approval backed by confirmed collateral");
+                    Interlocked.Exchange(ref received, approvedCreation);
+                    peer.BroadcastAsync(approvedCreation).GetAwaiter().GetResult();
+                    Wait(() => service.GetRegistration(id).Status == "validated", "DEX receives the locked-token validator approval before any new block");
+                    Check(chain.Blocks.Count == beforeApproval && service.GetRegistration(id).BlockHeight == null &&
+                        service.GetRegistration(id).Confirmations == 0 && service.GetBalance(originalAddresses) == 0,
+                        "approval creates no block, no confirmations and no spendable pending change");
+                    Check(service.GetBalance(first.OwnedOneTimeAddresses.ToArray()) == validatorBalanceBeforeApproval + received.Fee,
+                        "the DEX exposes the approving locked wallet fee as immediately spendable");
+                    peer.BroadcastAsync(received).GetAwaiter().GetResult();
+                    Check(service.SubmitAsync((string)draft["draftId"], signatures, "regression").GetAwaiter().GetResult() == id,
+                        "approved creation retries remain idempotent without another operation");
+                    service.Dispose();
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "validated" && service.GetRegistration(id).BlockHeight == null,
+                        "the signed approval survives DEX restart while awaiting its batch");
+                    Check(service.GetBalance(first.OwnedOneTimeAddresses.ToArray()) == validatorBalanceBeforeApproval + received.Fee,
+                        "repeated approval and DEX restart preserve exactly one immediate fee credit");
+                    peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
+                    peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                    Wait(() => service.GetNetwork().CanCreate, "DEX resynchronizes with its pending validator approval");
                     Block confirmed = batches.Confirm(chain, new[] { received }, validators);
                     Check(chain.IsValid() && chain.GetTokenBalance(new[] { destination }, (string)draft["tokenId"]) == long.MaxValue, "validators confirm exact token supply in a valid block");
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
@@ -212,12 +244,12 @@ internal static partial class PovixDexRegression
                     while (fork.ChainWork <= chain.ChainWork)
                         LegacyConsensusFixture.Fund(fork, "reorganization-fixture-" + fork.Blocks.Count);
                     peer.BroadcastChainAsync(fork.Blocks).GetAwaiter().GetResult();
-                    Wait(() => service.GetRegistration(id).Status == "pending", "greater-work reorganization returns an orphaned valid creation to the queue");
+                    Wait(() => service.GetRegistration(id).Status == "validated", "greater-work reorganization returns an orphaned valid creation to the queue");
                     Check(service.GetRegistration(id).Confirmations == 0 && service.GetRegistration(id).BlockHash == null,
                         "the receipt loses its old block and confirmations after reorganization");
                     service.Dispose();
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && service.GetRegistration(id).Confirmations == 0 && !service.GetNetwork().CanCreate,
+                    Check(service.GetRegistration(id).Status == "validated" && service.GetRegistration(id).Confirmations == 0 && !service.GetNetwork().CanCreate,
                         "restart preserves the adopted fork and pending receipt while awaiting synchronization");
                 }
                 finally { service.Dispose(); }

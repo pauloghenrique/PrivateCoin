@@ -36,8 +36,8 @@ internal static class PrivateCoinImmediateMigrationRegression
             while (pending.Count < 20) pending.Add(chain.CreateWalletCreationTransaction("v10-wallet-" + pending.Count, pending));
             chain.AddBlock(pending);
             var restored = new Blockchain(Clone(chain.Blocks));
-            Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == 10 && restored.GetUncountedWalletCreations().Count == 0,
-                "historical v8/v9 operations extend into v10 and receipts stay counted after restart");
+            Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion && restored.GetUncountedWalletCreations().Count == 0,
+                "historical v8/v9 operations extend into the current consensus and receipts stay counted after restart");
             Check(new BlockchainQueryApi(restored).GetSummary().InitialDistributionBlocksIssued == 40,
                 "v8, v9 and v10 issuance is counted exactly once");
             var bad = Clone(chain.Blocks); bad.Last().ConsensusVersion = 8; LegacyConsensusFixture.Mine(bad.Last());
@@ -46,7 +46,7 @@ internal static class PrivateCoinImmediateMigrationRegression
             Reject(() => new Blockchain(bad), "v10 rejects an isolated wallet distribution block");
             var forged = Creation("v9-wallet", 99); var next = new List<Transaction> { forged };
             for (int i = 0; i < 19; i++) next.Add(Creation("forged-new-" + i, 100 + i));
-            var duplicateBlock = new Block { ConsensusVersion = 10, Height = chain.Blocks.Count, PreviousHash = chain.Blocks.Last().Hash,
+            var duplicateBlock = new Block { ConsensusVersion = Blockchain.ConsensusVersion, Height = chain.Blocks.Count, PreviousHash = chain.Blocks.Last().Hash,
                 TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = next };
             LegacyConsensusFixture.Mine(duplicateBlock);
             Reject(() => new Blockchain(chain.Blocks.Concat(new[] { duplicateBlock })), "a mined complete batch cannot repeat a historical reward address");
