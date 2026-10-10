@@ -166,7 +166,7 @@ namespace PrivateCoin.Desktop
             showPeersButton.Enabled = false;
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
             toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
-            toolTip.SetToolTip(tokensButton, "Ver os tokens confirmados da blockchain e o saldo da carteira selecionada");
+            toolTip.SetToolTip(tokensButton, "Ver os tokens com saldo da carteira selecionada e enviar para outro endereço");
             toolTip.SetToolTip(walletFolderButton, "Localizar o wallets.dat que está em uso neste Desktop");
 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;

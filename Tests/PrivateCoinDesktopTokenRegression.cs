@@ -43,6 +43,8 @@ internal static class PrivateCoinDesktopTokenRegression
             chain.ValidatePendingTransactions(new[] { create });
             Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0 && chain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,
                 "a prepared or pending DEX creation is excluded from the Desktop list");
+            Check(TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { create }).Count == 0,
+                "unapproved creations stay outside the Desktop wallet list");
 
             int sourcePort = Port(), desktopPort = Port();
             using (var source = new PeerNode(sourcePort, false, Path.Combine(directory, "source-peers.json")))
@@ -64,6 +66,20 @@ internal static class PrivateCoinDesktopTokenRegression
                 var immediate = desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedCreation }).Single();
                 Check(immediate.Amount == long.MaxValue && immediate.CreationHeight == null && immediate.Confirmations == 0 && immediate.ValidationCount == 1 && desktopChain.Blocks.Count == commonBlocks.Length,
                     "Desktop lists the confirmed token and its exact supply without inventing a creation block");
+                Check(TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedCreation }).Single().Amount == long.MaxValue &&
+                    TokenWalletOperations.GetBalances(desktopChain, recipient, new[] { receivedCreation }).Count == 0,
+                    "the Desktop wallet list includes approved creations only for their actual owner before a block");
+                string validProof = receivedCreation.TransactionApproval.Proof.Signature;
+                try
+                {
+                    receivedCreation.TransactionApproval.Proof.Signature = Convert.ToBase64String(new byte[256]);
+                    Check(TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedCreation }).Count == 0,
+                        "the Desktop does not expose token supply from a forged approval");
+                }
+                finally { receivedCreation.TransactionApproval.Proof.Signature = validProof; }
+                Transaction beforeBlock = TokenWalletOperations.CreateTransfer(desktopChain, issuer, new[] { receivedCreation }, create.Token.Id, recipientAddress, 1, 1);
+                Check(beforeBlock.Inputs.Any(input => input.TransactionId == create.Id) && desktopChain.Blocks.Count == commonBlocks.Length,
+                    "the Desktop can sign a movement of an approved creation before its creation block");
                 Block creationBlock = batches.Confirm(chain, new[] { create }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 1,
@@ -76,11 +92,24 @@ internal static class PrivateCoinDesktopTokenRegression
                     "creation height and confirmations come from the received block");
                 Check(desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single().Amount == 0 && desktopChain.GetTokenBalances(null).Single().Amount == 0,
                     "public tokens remain visible with zero balance for other wallets");
+                Check(TokenWalletOperations.GetBalances(desktopChain, issuer).Single().Id == create.Token.Id &&
+                    TokenWalletOperations.GetBalances(desktopChain, recipient).Count == 0 && TokenWalletOperations.GetBalances(desktopChain, null).Count == 0,
+                    "the Desktop defaults to positive balances belonging to the selected wallet");
+                Check(TokenWalletOperations.GetBalances(desktopChain, recipient, false).Single().Amount == 0,
+                    "the optional public registry retains zero balances without granting ownership");
                 CultureInfo previousCulture = Thread.CurrentThread.CurrentCulture;
                 try {
                     Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
                     Check(TokenAmount.Format(long.MaxValue, 8) == "92.233.720.368,54775807" && TokenAmount.Format(123, 0) == "123" && TokenAmount.Format(123, 2) == "1,23",
                         "Desktop quantities preserve all token decimals and Int64 precision");
+                    Check(TokenAmount.Parse("92.233.720.368,54775807", 8) == long.MaxValue && TokenAmount.Parse("1,23", 2) == 123 &&
+                        TokenAmount.Parse("0,00000001", 8) == 1 && TokenAmount.Parse("123", 0) == 123,
+                        "Desktop input converts local decimal quantities to exact atomic token units");
+                    foreach (string invalid in new[] { "", "0", "-1", "abc", "1,231", "1,0000000000000000000000000000001", "9223372036854775808", "79228162514264337593543950335" })
+                        Reject(() => TokenAmount.Parse(invalid, 2), "invalid or inexact token quantity is rejected: " + invalid);
+                    Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+                    Check(TokenAmount.Parse("92,233,720,368.54775807", 8) == long.MaxValue && TokenAmount.Parse("1.23", 2) == 123,
+                        "quantity input also respects a culture with a decimal point");
                 } finally { Thread.CurrentThread.CurrentCulture = previousCulture; }
 
                 Transaction another = PrepareAndSign(chain, issuer, "Outro Aurora", "AUR", 0, 123, recipientAddress);
@@ -91,10 +120,35 @@ internal static class PrivateCoinDesktopTokenRegression
                     desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == another.Token.Id).Amount == 123,
                     "tokens with the same symbol retain distinct IDs and wallet balances");
 
-                Transaction transfer = issuer.CreateTokenTransferTransaction(chain, new Transaction[0], create.Token.Id, recipientAddress, 543210, 1);
+                Check(TokenWalletOperations.GetBalances(desktopChain, issuer).Single().Id == create.Token.Id &&
+                    TokenWalletOperations.GetBalances(desktopChain, recipient).Single().Id == another.Token.Id,
+                    "wallet switching isolates positive balances even when token symbols match");
+                int keyCount = issuer.OwnedOneTimeAddresses.Count;
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, recipient, new Transaction[0], create.Token.Id, destination, 1, 1),
+                    "a different wallet cannot move a token it does not own");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, issuer, new Transaction[0], create.Token.Id, "invalid", 1, 1),
+                    "an invalid destination is rejected before signing");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, issuer, new Transaction[0], create.Token.Id, recipientAddress, 0, 1),
+                    "zero token amounts are rejected before signing");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, issuer, new Transaction[0], create.Token.Id, recipientAddress, 1, Blockchain.MaximumTransferFee + 1),
+                    "a fee outside the allowed range is rejected before signing");
+                Check(issuer.OwnedOneTimeAddresses.Count == keyCount, "rejected Desktop transfers do not generate change keys");
+                long povixBefore = desktopChain.GetBalance(issuer.OwnedOneTimeAddresses);
+                Transaction transfer = TokenWalletOperations.CreateTransfer(desktopChain, issuer, new Transaction[0], create.Token.Id, recipientAddress, 543210, 1);
                 chain.ValidatePendingTransactions(new[] { transfer });
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue,
                     "a pending transfer does not alter the confirmed balance");
+                Check(TokenWalletOperations.GetAvailableBalance(desktopChain, issuer, new[] { transfer }, create.Token.Id) == 0 &&
+                    TokenWalletOperations.GetBalances(desktopChain, issuer).Single().Amount == long.MaxValue,
+                    "block ownership stays unchanged while unapproved pending inputs are reserved for sending");
+                Check(TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { transfer }).Count == 0,
+                    "the default wallet list excludes tokens with no available balance while their outputs are reserved");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, issuer, new[] { transfer }, create.Token.Id, recipientAddress, 1, 1),
+                    "the same token output cannot be sent twice while pending");
+                bool transactionReceived = false;
+                source.TransactionReceived += (sender, data) => { if (data.Transaction.Id == transfer.Id) transactionReceived = true; };
+                desktop.BroadcastAsync(transfer).GetAwaiter().GetResult();
+                Wait(() => transactionReceived, "the signed Desktop token transfer propagates through the real P2P connection");
                 Transaction receivedMovement = null;
                 desktop.TransactionReceived += (sender, data) => { if (data.Transaction.Id == transfer.Id) Interlocked.Exchange(ref receivedMovement, data.Transaction); };
                 transfer.TransactionApproval = chain.CreateTransactionApproval(transfer, new[] { transfer }, validators);
@@ -105,6 +159,9 @@ internal static class PrivateCoinDesktopTokenRegression
                     desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
                     desktopChain.Blocks.Count == blocksBeforeMovement,
                     "Desktop updates recipient and sender balances from validation without creating a block");
+                Check(TokenWalletOperations.GetBalances(desktopChain, recipient, new[] { receivedMovement }).Single(token => token.Id == create.Token.Id).Amount == 543210 &&
+                    TokenWalletOperations.GetBalances(desktopChain, issuer, new[] { receivedMovement }).Single().Amount == long.MaxValue - 543210,
+                    "the Desktop wallet list follows approved movement balances before the block");
                 batches.Confirm(chain, new[] { transfer }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,
@@ -112,9 +169,31 @@ internal static class PrivateCoinDesktopTokenRegression
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
                     desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Confirmations == 3,
                     "the sender balance and confirmation count follow the synchronized chain");
+                Check(desktopChain.GetBalance(issuer.OwnedOneTimeAddresses) == povixBefore - transfer.Fee &&
+                    transfer.Outputs.Where(output => output.AssetId == create.Token.Id).Sum(output => output.Amount) == long.MaxValue &&
+                    transfer.Outputs.Skip(1).All(output => issuer.OwnedOneTimeAddresses.Contains(output.OneTimeAddress)),
+                    "token value is conserved, both changes stay in the sender wallet and only the fee consumes POVIX");
+                using (var restored = Wallet.FromPrivateKeys(issuer.ExportPrivateKeys()))
+                    Check(TokenWalletOperations.GetBalances(new Blockchain(desktopChain.Blocks), restored).Single().Amount == long.MaxValue - 543210,
+                        "restoring the wallet keys and chain preserves ownership of token change");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, recipient, new Transaction[0], create.Token.Id, destination, 543211, 1),
+                    "a quantity above the selected wallet balance is rejected");
+                Reject(() => TokenWalletOperations.CreateTransfer(desktopChain, recipient, new Transaction[0], create.Token.Id, destination, 543210, 1),
+                    "a token holder without POVIX cannot pay the transfer fee");
+                LegacyConsensusFixture.Fund(chain, recipientAddress);
+                Transaction returnAll = TokenWalletOperations.CreateTransfer(chain, recipient, new Transaction[0], create.Token.Id, destination, 543210, 1);
+                Check(TokenWalletOperations.GetAvailableBalance(chain, recipient, new[] { returnAll }, create.Token.Id) == 0,
+                    "sending the entire token balance reserves it immediately");
+                batches.Confirm(chain, new[] { returnAll }, validators);
+                source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                Wait(() => !TokenWalletOperations.GetBalances(desktopChain, recipient).Any(token => token.Id == create.Token.Id),
+                    "a token leaves the owning wallet list after its entire balance is confirmed as spent");
+                Check(TokenWalletOperations.GetBalances(desktopChain, issuer).Single().Amount == long.MaxValue &&
+                    TokenWalletOperations.GetBalances(desktopChain, recipient).Single().Id == another.Token.Id,
+                    "a recipient can move its own tokens independently of the creator and other assets remain isolated");
 
                 var fork = new Blockchain(commonBlocks);
-                for (int i = 0; i < 4; i++) LegacyConsensusFixture.Fund(fork, issuer.CreateReceiveAddress());
+                for (int i = 0; i < 6; i++) LegacyConsensusFixture.Fund(fork, issuer.CreateReceiveAddress());
                 chain = fork;
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.Blocks.Last().Hash == fork.Blocks.Last().Hash && desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Count == 0,
@@ -139,6 +218,12 @@ internal static class PrivateCoinDesktopTokenRegression
     private static int Port() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); int port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }
     private static string Hash(string value) { using (var hash = SHA256.Create()) return string.Concat(hash.ComputeHash(Encoding.UTF8.GetBytes(value)).Select(item => item.ToString("x2"))); }
     private static void Check(bool value, string label) { if (!value) throw new Exception(label); checks++; Console.WriteLine("PASS " + label); }
+    private static void Reject(Action operation, string label)
+    {
+        try { operation(); }
+        catch (InvalidOperationException) { Check(true, label); return; }
+        throw new Exception("Expected rejection: " + label);
+    }
     private static void Wait(Func<bool> ready, string label)
     {
         var timer = Stopwatch.StartNew();

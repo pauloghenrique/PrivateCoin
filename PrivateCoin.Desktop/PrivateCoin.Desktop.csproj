@@ -67,6 +67,7 @@
     </Compile>
     <Compile Include="UiTheme.cs" />
     <Compile Include="TokenAmount.cs" />
+    <Compile Include="TokenWalletOperations.cs" />
     <Compile Include="TokenWalletDialog.cs">
       <SubType>Form</SubType>
     </Compile>

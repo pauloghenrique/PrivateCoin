@@ -306,9 +306,51 @@ namespace PrivateCoin.Desktop
 
         private void TokensButtonClick(object sender, EventArgs e)
         {
-            using (var dialog = new TokenWalletDialog(() => blockchain, () => SelectedWallet,
-                () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s).", SnapshotPending))
+            using (var dialog = new TokenWalletDialog(() => blockchain, wallets, SelectedWallet, SnapshotPending,
+                () => persistenceAvailable && networkReadiness.IsReady && IsNetworkConnected(),
+                () => peerNode == null ? "Nó parado; inicie-o para sincronizar."
+                    : networkReadiness.IsReady && IsNetworkConnected() ? "Sincronizado | " + peerNode.ConnectedPeerCount + " par(es)."
+                    : "Aguardando conexão e sincronização.", SendTokenTransferAsync))
                 dialog.ShowDialog(this);
+        }
+
+        private async Task<string> SendTokenTransferAsync(NamedWallet wallet, string tokenId, string destination, long amount, long fee)
+        {
+            if (!persistenceAvailable) throw new InvalidOperationException("Restaure o acesso aos arquivos da carteira antes de enviar tokens.");
+            if (!wallets.Contains(wallet)) throw new InvalidOperationException("Selecione uma carteira local.");
+            Transaction transaction = ExecuteNetworkOperation(() => {
+                lock (pendingSync)
+                {
+                    Transaction[] pending = SnapshotPending();
+                    Transaction created = TokenWalletOperations.CreateTransfer(blockchain, wallet.Wallet, pending, tokenId, destination, amount, fee);
+                    // Persist the new change keys and the signed transaction before accepting or broadcasting it.
+                    walletStore.SaveTokenTransfer(wallets, blockchain, pending.Concat(new[] { created }));
+                    pendingIds.Add(created.Id);
+                    pendingTransactions.Add(created);
+                    return created;
+                }
+            });
+            Log("Carteira " + wallet.Name + ": transferência de token validada e salva (" + ShortId(transaction.Id) + ").", true);
+            UpdateChainSummary();
+            BeginInvoke(new Action(StartAutomaticMining));
+            string result = "Transação: " + transaction.Id + "\n\nTransferência salva na fila local. Aguarde a aprovação de um validador; ela será incluída posteriormente em um lote de 20 operações.";
+            try
+            {
+                PeerNode node = peerNode;
+                if (node != null && node.ConnectedPeerCount > 0)
+                {
+                    await node.BroadcastAsync(transaction);
+                    if (node.ConnectedPeerCount == 0) return result + "\nReconecte o nó para propagá-la à rede; não repita o envio.";
+                }
+                else return result + "\nReconecte o nó para propagá-la à rede.";
+                Log("Transferência de token propagada aos pares conectados.", true);
+                return result + "\nEnviada aos pares conectados.";
+            }
+            catch (Exception error)
+            {
+                Log("Transferência de token salva; falha na propagação: " + error.Message, false);
+                return result + "\nFalha na propagação. Reconecte o nó para tentar novamente; não repita o envio.";
+            }
         }
 
         private void WalletFolderButtonClick(object sender, EventArgs e)

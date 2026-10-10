@@ -199,6 +199,20 @@ namespace PrivateCoin.Desktop
 
         public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
         {
+            // Preserve network-first ordering for legacy migrations.
+            SaveNetwork(wallets, blockchain, pendingTransactions);
+            SaveWallets(wallets);
+        }
+
+        public void SaveTokenTransfer(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
+        {
+            // New change keys must be recoverable before a signed transfer can be restored from the public file.
+            SaveWallets(wallets);
+            SaveNetwork(wallets, blockchain, pendingTransactions);
+        }
+
+        private void SaveNetwork(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
+        {
             if (wallets == null) throw new ArgumentNullException(nameof(wallets));
             if (blockchain == null) throw new ArgumentNullException(nameof(blockchain));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
@@ -239,6 +253,11 @@ namespace PrivateCoin.Desktop
                 Sha256 = CalculateSha256(networkData)
             }, false);
             NetworkNeedsUpgrade = false;
+        }
+
+        private void SaveWallets(IEnumerable<NamedWallet> wallets)
+        {
+            if (wallets == null) throw new ArgumentNullException(nameof(wallets));
             WriteJson(walletFilePath, new StoredWalletCollection
             {
                 Wallets = wallets.Select(item => new StoredWallet
