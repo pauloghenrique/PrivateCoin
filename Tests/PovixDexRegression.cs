@@ -106,6 +106,15 @@ internal static partial class PovixDexRegression
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult();
                     peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "DEX synchronizes through an existing peer");
+                    model.FeeAtomic = service.GetNetwork().Fees[1];
+                    var queuedCreation = chain.CreateWalletCreationTransaction(new string('f', 64), new Transaction[0]);
+                    peer.BroadcastAsync(queuedCreation).GetAwaiter().GetResult();
+                    Wait(() => service.GetNetwork().Fees[1] > model.FeeAtomic.Value, "the pending queue changes after the browser selected its fee");
+                    long selectedFee = model.FeeAtomic.Value;
+                    model.FeeAtomic = 0;
+                    try { service.Prepare(model, PublicKeys(issuer), change, "invalid-fee"); throw new Exception("Invalid quote accepted"); }
+                    catch (TokenOperationException error) { Check(error.Code == "fee_invalid", "a zero selected fee is rejected before signing"); }
+                    model.FeeAtomic = selectedFee;
                     var sessionItems = new SessionStateItemCollection();
                     var controller = ControllerFor(service, "regression", sessionItems);
                     object prepared = ((JsonResult)controller.Prepare(model, PublicKeys(issuer).Select(key =>
@@ -114,10 +123,11 @@ internal static partial class PovixDexRegression
                         "MVC preparation persists session state so ASP.NET retains the owner cookie");
                     var draft = Json.DeserializeObject(Json.Serialize(prepared)) as Dictionary<string, object>;
                     long fee = long.Parse((string)draft["feeAtomic"]), expectedChange = originalBalance - fee;
+                    Check(fee == selectedFee, "creation charges exactly the selected fee despite a changed pending queue");
                     Check((string)draft["changeAddress"] == change && long.Parse((string)draft["changeAtomic"]) == expectedChange,
                         "review returns the full native balance minus only the fee to an original wallet address");
                     File.WriteAllText(Path.Combine(directory, "fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = prepared,
-                        expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination },
+                        expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination, FeeAtomic = draft["feeAtomic"] },
                         networkId = Blockchain.NetworkId, changeAddress = change }));
                     var start = new ProcessStartInfo(nodeExecutable) { UseShellExecute = false };
                     start.Arguments = "Tests/PovixDexWalletRegression.js " + directory;
@@ -149,7 +159,7 @@ internal static partial class PovixDexRegression
                     Check(service.GetRegistration(id).Status == "pending" && chain.GetTokens().Count == 0, "pending receipt does not claim blockchain confirmation");
                     Check(service.GetBalance(issuer.OwnedOneTimeAddresses.ToArray()) == 0, "pending funding output is reserved");
                     var pendingBalance = BalanceResult(controller, originalAddresses);
-                    Check((string)pendingBalance["balanceAtomic"] == "0" && long.Parse((string)pendingBalance["confirmedAtomic"]) == originalBalance &&
+                    Check((string)pendingBalance["balanceAtomic"] == "0" && long.Parse((string)pendingBalance["pendingFeesAtomic"]) == fee && long.Parse((string)pendingBalance["confirmedAtomic"]) == originalBalance &&
                         long.Parse((string)pendingBalance["reservedAtomic"]) == originalBalance && long.Parse((string)pendingBalance["pendingIncomingAtomic"]) == expectedChange,
                         "MVC balance distinguishes the whole reserved UTXO from the pending change and the fee");
                     var povixOutputs = service.GetRegistration(id).PovixOutputs;
@@ -190,6 +200,12 @@ internal static partial class PovixDexRegression
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v10 cache preserves an unapproved token during the v11 upgrade");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 11;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate,
+                        "v11 cache upgrades without losing pending creation or charging again");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,
@@ -210,8 +226,8 @@ internal static partial class PovixDexRegression
                     peer.BroadcastAsync(approvedCreation).GetAwaiter().GetResult();
                     Wait(() => service.GetRegistration(id).Status == "validated", "DEX receives the locked-token validator approval before any new block");
                     Check(chain.Blocks.Count == beforeApproval && service.GetRegistration(id).BlockHeight == null &&
-                        service.GetRegistration(id).Confirmations == 0 && service.GetBalance(originalAddresses) == 0,
-                        "approval creates no block, no confirmations and no spendable pending change");
+                        service.GetRegistration(id).Confirmations == 0 && service.GetBalance(originalAddresses) == expectedChange,
+                        "approval creates no block or confirmations and immediately returns the original POVIX balance minus the selected fee");
                     Check(service.GetBalance(first.OwnedOneTimeAddresses.ToArray()) == validatorBalanceBeforeApproval + received.Fee,
                         "the DEX exposes the approving locked wallet fee as immediately spendable");
                     peer.BroadcastAsync(received).GetAwaiter().GetResult();

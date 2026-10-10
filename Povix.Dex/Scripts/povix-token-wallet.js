@@ -146,9 +146,9 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 11 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 12 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
-            draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
+            draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
             !Array.isArray(draft.inputs) || draft.inputs.length === 0 || draft.inputs.length > 1000 ||
             !Array.isArray(draft.inputAddresses) || draft.inputAddresses.length !== draft.inputs.length ||
@@ -183,7 +183,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 11 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 12 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||

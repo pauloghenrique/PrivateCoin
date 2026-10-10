@@ -461,9 +461,12 @@ namespace PrivateCoin.Desktop
 
         private void PeerNodeTransactionReceived(object sender, TransactionReceivedEventArgs e)
         {
+            long epoch = networkReadiness.Epoch;
             BeginInvoke(new Action(() =>
             {
-                if (networkReadiness.IsReady && IsNetworkConnected()) ValidateAndQueue(e.Transaction, "Rede P2P");
+                if (!ReferenceEquals(sender, peerNode) || epoch != networkReadiness.Epoch || !IsNetworkConnected()) return;
+                if (networkReadiness.IsReady) ValidateAndQueue(e.Transaction, "Rede P2P");
+                else networkReadiness.Defer(epoch, e.Transaction);
             }));
         }
 
@@ -508,6 +511,8 @@ namespace PrivateCoin.Desktop
                             return true;
                         });
                     if (!accepted) return;
+                    foreach (Transaction transaction in Blockchain.OrderByFeePriority(networkReadiness.TakeDeferred(epoch)))
+                        ValidateAndQueue(transaction, "Rede P2P após sincronização");
                     UpdatePeerStatus();
                     UpdateChainSummary();
                     if (changed)

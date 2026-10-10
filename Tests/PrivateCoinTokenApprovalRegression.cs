@@ -49,8 +49,8 @@ internal static class PrivateCoinTokenApprovalRegression
             var ordered = Blockchain.OrderByFeePriority(pending).ToList();
             Check(ordered.FindIndex(tx => tx.Id == approval.CollateralTransactionId) < ordered.FindIndex(tx => tx.Id == creation.Id),
                 "the approving collateral is included before its high-fee token operation");
-            Check(chain.GetTokenBalances(new[] { c }).Count == 0 && chain.GetSpendableBalance(new[] { c }, pending) == 0,
-                "approval does not release unconfirmed tokens or native change");
+            Check(chain.GetTokenBalances(new[] { c }).Count == 0 && chain.GetSpendableBalance(issuer.OwnedOneTimeAddresses, pending) == Blockchain.WalletCreationReward - creation.Fee,
+                "approval returns exactly native funds minus the chosen fee while token confirmation still awaits its block");
             var restarted = new Blockchain(Copy(chain.Blocks.ToList())); var restoredPending = Copy(pending);
             Check(restarted.HasValidTransactionApproval(restoredPending.Single(tx => tx.Id == originalId), restoredPending),
                 "pending approval survives serialization and restart without a block");
@@ -112,6 +112,18 @@ internal static class PrivateCoinTokenApprovalRegression
                 "the explorer follows the fee output and its subsequent spend");
             Check(new Blockchain(Copy(chain.Blocks.ToList())).GetTokenBalance(new[] { c }, creation.Token.Id) == 100000,
                 "confirmed approvals and token balances independently restore");
+            var historicalApproval = Copy(chain.Blocks.ToList());
+            historicalApproval.Last().ConsensusVersion = 11;
+            LegacyConsensusFixture.Resign(historicalApproval.Last(), validators);
+            LegacyConsensusFixture.Mine(historicalApproval.Last());
+            var v11 = new Blockchain(historicalApproval);
+            Check(v11.IsValid() && v11.GetTokenBalance(new[] { c }, creation.Token.Id) == 100000,
+                "real v11 approval and fee-spend history retains its original balances");
+            var upgrade = new List<Transaction>();
+            for (int i = 0; i < 20; i++) upgrade.Add(v11.CreateWalletCreationTransaction("v11-upgrade-" + i, upgrade));
+            v11.AddBlock(upgrade);
+            Check(v11.IsValid() && v11.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion,
+                "v11 history extends into immediate token change consensus without duplicate fees");
             var tampered = Copy(chain.Blocks.ToList()); tampered.Last().Transactions.Single(tx => tx.Id == originalId).TransactionApproval = null;
             LegacyConsensusFixture.Mine(tampered.Last());
             Reject(() => new Blockchain(tampered), "a mined received block cannot discard its token approval");
@@ -138,8 +150,8 @@ internal static class PrivateCoinTokenApprovalRegression
             var next = new List<Transaction>();
             for (int i = 0; i < 20; i++) next.Add(chain.CreateWalletCreationTransaction("after-v10-" + i, next));
             chain.AddBlock(next);
-            Check(chain.IsValid() && chain.Blocks.Last().ConsensusVersion == 11,
-                "historical v10 token chains extend into v11 without issuing the token again");
+            Check(chain.IsValid() && chain.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion,
+                "historical v10 token chains extend into the current consensus without issuing the token again");
         }
     }
     private static T Copy<T>(T value)

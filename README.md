@@ -233,17 +233,26 @@ que validou. Seu crédito usa o identificador da movimentação e o índice segu
 às saídas declaradas (`Outputs.Count`), sem alterar a assinatura do remetente.
 Esse crédito pode financiar outra operação antes do bloco. Repetições e reinícios
 preservam um único crédito; a confirmação conserva a mesma referência e não paga
-a taxa novamente. Recebimentos comuns, tokens e troco aguardam o bloco.
+a taxa novamente. Na criação de token, a aprovação também libera imediatamente
+as saídas de troco em POVIX nos mesmos endereços da carteira criadora: seu saldo
+fica reduzido apenas pela taxa escolhida. Esse troco pode financiar transferências
+ou garantias antes do bloco. Recebimentos comuns, tokens e o troco de transferências
+comuns continuam aguardando o bloco.
+
+O DEX envia o valor exato mostrado na opção de taxa à preparação, e o navegador
+confere esse valor antes de assinar. Mudanças na fila não aumentam a taxa escolhida.
+O saldo distingue taxas de valores reservados. Transações recebidas pelo Desktop
+durante a sincronização são retidas até a cadeia ser validada, em vez de descartadas.
 
 O bloco inclui as 20 operações e suas provas, cobertas pelo hash e pelos votos.
 Sua transação de recompensa contém somente a emissão prevista, sem taxas.
 As fases, os valores e a divisão de 30%/70% da recompensa permanecem iguais.
 Após o fim da emissão, as taxas continuam pertencendo aos validadores das operações.
 
-Novos blocos usam `ConsensusVersion = 11`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10, preservando as regras antigas de pagamento de taxas,
-e permite sua extensão em v11 sem voltar a uma versão anterior. Caches DEX
-v3/v4/v7/v8/v9/v10 são revalidados antes da migração. Nós e clientes DEX devem
+Novos blocos usam `ConsensusVersion = 12`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11, preservando as regras antigas de pagamento de taxas,
+e permite sua extensão em v12 sem voltar a uma versão anterior. Caches DEX
+v3/v4/v7/v8/v9/v10/v11 são revalidados antes da migração. Nós e clientes DEX devem
 atualizar juntos; a versão anunciada nunca substitui a validação dos dados.
 
 `AddProofOfStakeBlock` continua sendo a entrada para produzir um bloco de

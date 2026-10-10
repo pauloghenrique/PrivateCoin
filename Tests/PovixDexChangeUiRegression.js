@@ -23,18 +23,20 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     for (const key of ['Name', 'Symbol', 'Supply', 'Decimals', 'DestinationAddress']) node(key).value = fixture.expected[key];
     node('DestinationAddress').value = '';
     let pending = false, refresh, preparations = 0;
+    const quotedFee = fixture.draft.feeAtomic;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-create.js'), 'utf8'), {
         window: { PovixTokenWallet: wallet }, document: { getElementById: node, querySelectorAll: () => [] },
         Option: class { constructor(text, value) { this.text = text; this.value = value; } },
         URLSearchParams, setInterval(callback) { refresh = callback; },
         fetch: async (url, options) => {
             let result;
-            if (url === '/network') result = { CanCreate: true, PeerCount: 2, Height: 5, Fees: ['1', '2', '4'] };
+            if (url === '/network') result = { CanCreate: true, PeerCount: 2, Height: 5, Fees: ['1', quotedFee, '4'] };
             else if (url === '/balance') result = { balanceAtomic: pending ? '0' : '600000000', confirmedAtomic: '600000000',
-                reservedAtomic: pending ? '600000000' : '0', pendingIncomingAtomic: pending ? fixture.draft.changeAtomic : '0' };
+                reservedAtomic: pending ? '600000000' : '0', pendingFeesAtomic: pending ? quotedFee : '0', pendingIncomingAtomic: pending ? fixture.draft.changeAtomic : '0' };
             else {
                 assert.equal(url, '/prepare');
                 const body = new URLSearchParams(options.body);
+                assert.equal(body.get('FeeAtomic'), quotedFee, 'the prepared fee must equal the option shown in the browser');
                 assert(originalAddresses.includes(body.get('changeAddress')), 'change must return to an address in the original wallet');
                 assert.equal(wallet.addresses().length, originalAddresses.length, 'preparation must not add a browser-only key');
                 assert.equal(body.get('changeAddress'), fixture.changeAddress);
@@ -77,7 +79,8 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     await refresh();
     assert.equal(node('wallet-balance').textContent, '0,00000000 POVIX');
     assert(node('wallet-balance-detail').textContent.includes('Confirmado: 6,00000000 POVIX'));
-    assert(node('wallet-balance-detail').textContent.includes('Reservado: 6,00000000 POVIX'));
+    assert(node('wallet-balance-detail').textContent.includes('Taxas das operações pendentes: ' + wallet.formatAtomic(quotedFee, 8)));
+    assert(node('wallet-balance-detail').textContent.includes('Reservado (não é taxa): 6,00000000 POVIX'));
     assert(node('wallet-balance-detail').textContent.includes('A receber após confirmação: ' + wallet.formatAtomic(fixture.draft.changeAtomic, 8)));
     console.log('PASS token form receives issuance and change under original keys, explains external destinations and distinguishes reserved funds from the fee');
 };

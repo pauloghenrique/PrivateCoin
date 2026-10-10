@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 11;
+        public const int ConsensusVersion = 12;
+        private const int ApprovalVersion = 11;
         private const int SelfValidatedVersion = 10;
         private const int LegacyImmediateVersion = 9;
         private const int LegacyWalletBatchVersion = 8;
@@ -208,7 +209,7 @@ namespace PrivateCoin.Core
         }
 
         private static Dictionary<string, UnspentOutput> BuildImmediateUtxo(IDictionary<string, UnspentOutput> confirmed,
-            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null)
+            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null, bool releaseTokenChange = true)
         {
             var result = new Dictionary<string, UnspentOutput>(confirmed, StringComparer.Ordinal);
             foreach (Transaction transaction in OrderByFeePriority(transactions))
@@ -219,7 +220,18 @@ namespace PrivateCoin.Core
                 {
                     bool approved = IsValidTransactionApproval(transaction, result, history);
                     foreach (TransactionInput input in transaction.Inputs) result.Remove(Key(input.TransactionId, input.OutputIndex));
-                    if (approved) AddValidationFee(transaction, result);
+                    if (approved)
+                    {
+                        AddValidationFee(transaction, result);
+                        if (releaseTokenChange && transaction.Kind == TransactionKind.TokenCreate)
+                            for (int index = 0; index < transaction.Outputs.Count; index++)
+                            {
+                                TransactionOutput output = transaction.Outputs[index];
+                                if (output.AssetId == null)
+                                    result.Add(Key(transaction.Id, index), new UnspentOutput { TransactionId = transaction.Id,
+                                        OutputIndex = index, Output = output, TransactionKind = transaction.Kind });
+                            }
+                    }
                 }
             }
             return result;
@@ -520,7 +532,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -529,7 +541,7 @@ namespace PrivateCoin.Core
                 {
                     if (block.ConsensusVersion < LegacyImmediateVersion && (tx.Kind == TransactionKind.WalletDistribution || tx.WalletDistributionId != null))
                         throw new InvalidOperationException("Immediate wallet distributions require consensus version 9.");
-                    if (block.ConsensusVersion < ConsensusVersion && tx.TransactionApproval != null)
+                    if (block.ConsensusVersion < ApprovalVersion && tx.TransactionApproval != null)
                         throw new InvalidOperationException("Token creation approvals require consensus version 11.");
                     if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
                 }
@@ -600,7 +612,7 @@ namespace PrivateCoin.Core
                     if (block.ConsensusVersion < SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
                         throw new InvalidOperationException("Historical collateral operations require their original minimum fee.");
                     ValidateWalletIssuance(operation, ref issued);
-                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ConsensusVersion && RequiresLockedTokenApproval(operation));
+                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation));
                 }
             }
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
@@ -614,7 +626,7 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
                 item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
-            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history) : utxo;
+            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ConsensusVersion) : utxo;
             foreach (BlockValidator record in records)
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
@@ -646,7 +658,7 @@ namespace PrivateCoin.Core
             if (block.ConsensusVersion >= LegacySignedVersion)
             {
                 ValidateTransactionFees(block, transfers, stakes, previousHash, expected, utxo, history);
-                if (block.ConsensusVersion < ConsensusVersion || reward.Outputs.Count > 0) Apply(reward, utxo, true);
+                if (block.ConsensusVersion < ApprovalVersion || reward.Outputs.Count > 0) Apply(reward, utxo, true);
                 return;
             }
             long fees = transfers.Aggregate(0L, (total, transaction) => checked(total + transaction.Fee));
@@ -789,18 +801,18 @@ namespace PrivateCoin.Core
             string previousHash, IReadOnlyList<ValidatorReward> rewards, IDictionary<string, UnspentOutput> collateral, IList<Block> history)
         {
             Transaction reward = block.Transactions[0];
-            if (block.ConsensusVersion >= ConsensusVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
+            if (block.ConsensusVersion >= ApprovalVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
                 reward.TransactionApproval != null || reward.WalletDistributionId != null || reward.ValidatorPublicKey != null ||
                 reward.ValidatorRewardAddress != null || reward.ValidatorOwnedAddresses != null))
                 throw new InvalidOperationException("Invalid scheduled block reward.");
             Transaction[] signedTransactions = transactions.Where(tx => block.ConsensusVersion >= SelfValidatedVersion ? !IsSelfValidatedOperation(tx) : block.ConsensusVersion < LegacyWalletBatchVersion || tx.Kind != TransactionKind.WalletCreate).ToArray();
             if (block.TransactionValidations == null || block.TransactionValidations.Count != signedTransactions.Length ||
-                reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != rewards.Count + (block.ConsensusVersion >= ConsensusVersion ? 0 : signedTransactions.Length))
+                reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != rewards.Count + (block.ConsensusVersion >= ApprovalVersion ? 0 : signedTransactions.Length))
                 throw new InvalidOperationException("Invalid transaction validation proofs or fee settlement.");
             for (int index = 0; index < rewards.Count; index++)
                 if (reward.Outputs[index].Amount != rewards[index].Amount || reward.Outputs[index].OneTimeAddress != rewards[index].RewardAddress)
                     throw new InvalidOperationException("The block reward must not include transaction fees.");
-            if (block.ConsensusVersion >= ConsensusVersion)
+            if (block.ConsensusVersion >= ApprovalVersion)
             {
                 var replay = new Dictionary<string, UnspentOutput>(collateral, StringComparer.Ordinal);
                 foreach (Transaction operation in transactions)
@@ -879,7 +891,7 @@ namespace PrivateCoin.Core
                 {
                     foreach (var input in transaction.Inputs) result.Remove(Key(input.TransactionId, input.OutputIndex));
                     AddOutputs(transaction, result);
-                    if (block.ConsensusVersion >= ConsensusVersion && RequiresLockedTokenApproval(transaction)) AddValidationFee(transaction, result);
+                    if (block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(transaction)) AddValidationFee(transaction, result);
                 }
             return result;
         }

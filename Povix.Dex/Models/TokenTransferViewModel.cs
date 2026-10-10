@@ -11,6 +11,7 @@ namespace Povix.Dex.Models
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string Amount { get; set; }
         [Required, RegularExpression("[0-9a-f]{64}")] public string DestinationAddress { get; set; }
         public int FeePriority { get; set; } = 2;
+        [Range(1, Blockchain.MaximumTransferFee)] public long? FeeAtomic { get; set; }
         public TokenNetworkViewModel Network { get; set; } = new TokenNetworkViewModel();
         public IEnumerable<ValidationResult> Validate(ValidationContext context)
         {

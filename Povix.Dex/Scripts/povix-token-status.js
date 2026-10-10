@@ -16,7 +16,7 @@
             byId('receipt-title').textContent = confirmed ? (transfer ? 'Movimentação confirmada.' : 'Token registrado.') : validated ? (transfer ? 'Movimentação validada.' : 'Criação validada.') : pending ? (transfer ? 'Transação enviada.' : 'Aguardando validação.') : (transfer ? 'Movimentação não confirmada.' : 'Registro não confirmado.');
             byId('receipt-description').textContent = confirmed ? (transfer ? 'A transferência consta em um bloco validado da rede POVIX.' : 'A criação do token consta em um bloco validado da rede POVIX.') :
                 validated ? (transfer ? 'A movimentação foi validada e a taxa já foi transferida ao validador. O envio aguarda o lote de 20 operações.' : 'Uma carteira com tokens bloqueados validou a criação e recebeu a taxa. Ela conta para o lote de 20 operações e aguarda confirmação em bloco.') :
-                pending ? (transfer ? 'O envio aguarda aprovação de uma carteira com tokens bloqueados, sem criar bloco nessa etapa.' : 'A criação aguarda aprovação de uma carteira com tokens bloqueados. Essa validação não cria um bloco.') :
+                pending ? (transfer ? 'O envio aguarda aprovação de uma carteira com tokens bloqueados, sem criar bloco nessa etapa.' : (data.waitingReason || 'A criação aguarda aprovação de uma carteira com tokens bloqueados. Essa validação não cria um bloco.')) :
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : validated ? 'Validado' : pending ? (transfer ? 'Pendente' : 'Aguardando validação') : 'Não confirmado';
             byId('receipt-status').classList.toggle('waiting', !confirmed);

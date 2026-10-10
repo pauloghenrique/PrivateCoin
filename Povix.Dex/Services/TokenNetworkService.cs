@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -86,13 +86,25 @@ namespace Povix.Dex.Services
                 long incoming = blockchain.GetUnspentOutputs(addresses, pending).Where(item => item.Output.AssetId == null &&
                     item.TransactionKind != TransactionKind.StakeLock && pendingIds.Contains(item.TransactionId) &&
                     !available.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture))).Sum(item => item.Output.Amount);
+                var owned = new HashSet<string>(addresses, StringComparer.Ordinal);
+                long pendingFees = pending.Where(tx => tx.Inputs.Any(input => owned.Contains(AddressFor(input.PublicKey))))
+                    .Sum(tx => tx.Fee);
                 return new {
+                    pendingFeesAtomic = pendingFees.ToString(CultureInfo.InvariantCulture),
                     balanceAtomic = blockchain.GetSpendableBalance(addresses, pending).ToString(CultureInfo.InvariantCulture),
                     confirmedAtomic = confirmed.Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
                     reservedAtomic = reservedAmount.ToString(CultureInfo.InvariantCulture),
                     pendingIncomingAtomic = incoming.ToString(CultureInfo.InvariantCulture)
                 };
             }
+        }
+
+        private long GetSelectedFee(int priority, long? selected)
+        {
+            if (priority != 1 && priority != 2 && priority != 4 ||
+                selected.HasValue && (selected.Value < Blockchain.TransferFeeStep || selected.Value > Blockchain.MaximumTransferFee))
+                throw new TokenOperationException("fee_invalid", "Selecione uma taxa válida em POVIX.");
+            return selected ?? Blockchain.CalculateAutomaticFee(pending.Count, priority);
         }
 
         public object Prepare(CreateTokenViewModel model, string[] publicKeys, string changeAddress, string owner)
@@ -107,7 +119,7 @@ namespace Povix.Dex.Services
                 long amount;
                 if (!CreateTokenViewModel.TryParseSupply(model.Supply, model.Decimals, out amount))
                     throw new ArgumentException("Quantidade inválida.");
-                long fee = Blockchain.CalculateAutomaticFee(pending.Count, model.FeePriority);
+                long fee = GetSelectedFee(model.FeePriority, model.FeeAtomic);
                 var creation = TokenCreation.Prepare(blockchain, pending, publicKeys, model.Name, model.Symbol,
                     model.Decimals, amount, model.DestinationAddress, changeAddress, fee);
                 string draftId = Guid.NewGuid().ToString("N");
@@ -176,12 +188,24 @@ namespace Povix.Dex.Services
                 Transaction transaction = block?.Transactions.FirstOrDefault(tx => tx.Id == transactionId) ??
                     pending.FirstOrDefault(item => item.Id == transactionId) ?? submitted.FirstOrDefault(item => item.Transaction.Id == transactionId)?.Transaction;
                 if (transaction == null || transaction.Kind != TransactionKind.TokenCreate) return null;
+                string status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ?
+                    blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected";
+                string waitingReason = null;
+                if (status == "pending")
+                {
+                    var active = blockchain.GetActiveValidators(pending);
+                    var participants = new HashSet<string>(transaction.Inputs.Select(input => AddressFor(input.PublicKey))
+                        .Concat(transaction.Outputs.Select(output => output.OneTimeAddress)), StringComparer.Ordinal);
+                    waitingReason = active.Count == 0 ? "A criação aguarda uma carteira validadora com tokens bloqueados na rede sincronizada." :
+                        !active.Any(stake => !stake.OwnedAddresses.Any(participants.Contains)) ?
+                            "Os tokens bloqueados pertencem à carteira que cria ou recebe este token. Pelas regras atuais, outra carteira com tokens bloqueados precisa validar a criação." :
+                            "Há tokens bloqueados elegíveis. A criação aguarda a assinatura de um nó conectado com a carteira validadora aberta.";
+                }
                 return new TokenRegistrationViewModel { TransactionId = transaction.Id, Token = transaction.Token,
                     Fee = transaction.Fee, DestinationAddress = transaction.Outputs.First(output => output.AssetId == transaction.Token.Id).OneTimeAddress,
                     PovixOutputs = transaction.Outputs.Where(output => output.AssetId == null).Select(output =>
                         new TransactionOutput { Amount = output.Amount, OneTimeAddress = output.OneTimeAddress }).ToArray(),
-                    Status = block != null ? "confirmed" : pending.Any(item => item.Id == transactionId) ?
-                        blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected",
+                    Status = status, WaitingReason = waitingReason,
                     BlockHeight = block?.Height, BlockHash = block?.Hash, PeerCount = node.ConnectedPeerCount,
                     Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1 };
             }
