@@ -271,3 +271,11 @@ registro e quantidade imediatamente disponíveis, prova falsa, restart, transfer
 real dos tokens antes do bloco, inclusão posterior sem duplicação e histórico v12.
 A regressão DEX confirma o comprovante, a listagem e a preparação de movimentação
 antes de qualquer bloco. A tela Desktop usa o mesmo estado validado e exibe “Sem bloco”.
+
+## Movimentação confirmada por validação (consenso v14)
+
+A regressão de confirmação cobre saldo imediato do destinatário e troco do
+remetente, nova movimentação assinada usando esse troco antes do bloco, rejeição
+de aprovação forjada e restauração do histórico v12/v13. A regressão DEX verifica
+comprovante confirmado com 1 validação antes do bloco, taxa única, inclusão
+posterior com metadados reais e persistência.

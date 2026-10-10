@@ -93,7 +93,7 @@ namespace Povix.Dex.Controllers
             var receipt = ValidId(id) ? MvcApplication.TokenNetwork?.GetTransferReceipt(id) : null;
             if (receipt == null) return HttpNotFound();
             return Json(new { status = receipt.Status, blockHeight = receipt.BlockHeight, blockHash = receipt.BlockHash,
-                confirmations = receipt.Confirmations, peerCount = receipt.PeerCount }, JsonRequestBehavior.AllowGet);
+                confirmations = receipt.Confirmations, validations = receipt.ValidationCount, peerCount = receipt.PeerCount }, JsonRequestBehavior.AllowGet);
         }
 
         private ActionResult Error(string message, int status, string code)

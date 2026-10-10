@@ -152,7 +152,9 @@ namespace Povix.Dex.Services
                     DestinationAddress = destination.OneTimeAddress, ChangeOutputs = transaction.Outputs.Skip(1).Select(output =>
                         new TransactionOutput { Amount = output.Amount, AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress }).ToArray(),
                     Status = block != null ? "confirmed" : pending.Any(tx => tx.Id == id) ?
-                        blockchain.HasValidTransactionApproval(transaction, pending) ? "validated" : "pending" : "rejected", BlockHeight = block?.Height,
+                        blockchain.HasValidTransactionApproval(transaction, pending) ? "confirmed" : "pending" : "rejected",
+                    ValidationCount = (block != null || pending.Any(tx => tx.Id == id) && blockchain.HasValidTransactionApproval(transaction, pending)) &&
+                        (transaction.TransactionApproval != null || block?.TransactionValidations?.Any(proof => proof.TransactionId == id) == true) ? 1 : 0, BlockHeight = block?.Height,
                     BlockHash = block?.Hash, Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1, PeerCount = node.ConnectedPeerCount };
             }
         }

@@ -95,6 +95,16 @@ internal static class PrivateCoinDesktopTokenRegression
                 chain.ValidatePendingTransactions(new[] { transfer });
                 Check(desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue,
                     "a pending transfer does not alter the confirmed balance");
+                Transaction receivedMovement = null;
+                desktop.TransactionReceived += (sender, data) => { if (data.Transaction.Id == transfer.Id) Interlocked.Exchange(ref receivedMovement, data.Transaction); };
+                transfer.TransactionApproval = chain.CreateTransactionApproval(transfer, new[] { transfer }, validators);
+                int blocksBeforeMovement = desktopChain.Blocks.Count;
+                source.BroadcastAsync(transfer).GetAwaiter().GetResult();
+                Wait(() => receivedMovement != null, "Desktop receives token movement approval before the block");
+                Check(desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == 543210 &&
+                    desktopChain.GetTokenBalances(issuer.OwnedOneTimeAddresses, new[] { receivedMovement }).Single(item => item.Id == create.Token.Id).Amount == long.MaxValue - 543210 &&
+                    desktopChain.Blocks.Count == blocksBeforeMovement,
+                    "Desktop updates recipient and sender balances from validation without creating a block");
                 batches.Confirm(chain, new[] { transfer }, validators);
                 source.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                 Wait(() => desktopChain.GetTokenBalances(recipient.OwnedOneTimeAddresses).Single(item => item.Id == create.Token.Id).Amount == 543210,

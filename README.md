@@ -241,8 +241,10 @@ validação**: seu registro e a quantidade emitida ficam disponíveis imediatame
 no DEX e no Desktop. O token pode financiar uma movimentação antes do bloco.
 O comprovante registra a confirmação por validação, sem inventar altura, hash ou
 confirmações em bloco. A tela mostra a quantidade real de validações (1 após a
-aprovação individual), separada da inclusão posterior em bloco. Recebimentos e troco de transferências comuns, incluindo
-movimentações de tokens, continuam aguardando o bloco.
+aprovação individual), separada da inclusão posterior em bloco. A movimentação de tokens também fica confirmada por validação: o destinatário
+recebe saldo disponível e o remetente recebe seu troco de token e POVIX sem
+esperar bloco. O comprovante mostra 1 validação, e a taxa é paga uma única vez.
+Transferências comuns de POVIX continuam aguardando o bloco.
 
 O DEX envia o valor exato mostrado na opção de taxa à preparação, e o navegador
 confere esse valor antes de assinar. Mudanças na fila não aumentam a taxa escolhida.
@@ -254,10 +256,10 @@ Sua transação de recompensa contém somente a emissão prevista, sem taxas.
 As fases, os valores e a divisão de 30%/70% da recompensa permanecem iguais.
 Após o fim da emissão, as taxas continuam pertencendo aos validadores das operações.
 
-Novos blocos usam `ConsensusVersion = 13`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10/v11/v12, preservando as regras antigas de pagamento de taxas,
-e permite sua extensão em v13 sem voltar a uma versão anterior. Caches DEX
-v3/v4/v7/v8/v9/v10/v11/v12 são revalidados antes da migração. Nós e clientes DEX devem
+Novos blocos usam `ConsensusVersion = 14`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11/v12/v13, preservando as regras antigas de pagamento de taxas,
+e permite sua extensão em v14 sem voltar a uma versão anterior. Caches DEX
+v3/v4/v7/v8/v9/v10/v11/v12/v13 são revalidados antes da migração. Nós e clientes DEX devem
 atualizar juntos; a versão anunciada nunca substitui a validação dos dados.
 
 `AddProofOfStakeBlock` continua sendo a entrada para produzir um bloco de

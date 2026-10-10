@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11 && state.ConsensusVersion != 12))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11 && state.ConsensusVersion != 12 && state.ConsensusVersion != 13))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
