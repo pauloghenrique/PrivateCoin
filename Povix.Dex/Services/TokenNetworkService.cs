@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -246,7 +246,7 @@ namespace Povix.Dex.Services
         private async void RelayPending()
         {
             Transaction[] transactions;
-            lock (sync) transactions = pending.ToArray();
+            lock (sync) transactions = Blockchain.OrderByFeePriority(pending).ToArray();
             foreach (Transaction transaction in transactions) await Relay(transaction).ConfigureAwait(false);
         }
 
@@ -261,7 +261,7 @@ namespace Povix.Dex.Services
         {
             Block[] blocks;
             lock (sync) blocks = blockchain.Blocks.ToArray();
-            try { await node.BroadcastChainAsync(blocks).ConfigureAwait(false); }
+            try { await node.BroadcastChainAsync(blocks).ConfigureAwait(false); RelayPending(); }
             catch (Exception error) when (error is IOException || error is System.Net.Sockets.SocketException || error is ObjectDisposedException || error is OperationCanceledException)
             { Trace.TraceWarning("DEX: resposta de sincronização interrompida ({0}).", error.GetType().Name); }
         }

@@ -29,8 +29,8 @@ internal static class PrivateCoinProofOfWorkRegression
             var chain = new Blockchain(); Fund(chain, payer.CreateReceiveAddress());
             string firstAddress = first.CreateReceiveAddress(), secondAddress = second.CreateReceiveAddress();
             Fund(chain, firstAddress); Fund(chain, secondAddress);
-            chain.AddBlock(new[] { first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 1) });
-            chain.AddBlock(new[] { second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, 2 * Blockchain.OneCoin, 1) });
+            LegacyConsensusFixture.SelfBlock(chain, first.CreateStakeLockTransaction(chain, new Transaction[0], firstAddress, Blockchain.OneCoin, 0));
+            LegacyConsensusFixture.SelfBlock(chain, second.CreateStakeLockTransaction(chain, new Transaction[0], secondAddress, 2 * Blockchain.OneCoin, 0));
             var validators = new[] { first.CreateValidatorStake(firstAddress, Blockchain.OneCoin), second.CreateValidatorStake(secondAddress, 2 * Blockchain.OneCoin) };
             using (var batches = new ValidationBatchFixture(chain))
             {
@@ -73,7 +73,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 Reject(() => new Blockchain(malformed), "malformed peer data is rejected");
                 var lowerVersion = Clone(chain.Blocks); lowerVersion.Last().ConsensusVersion = 4;
                 LegacyConsensusFixture.Mine(lowerVersion.Last());
-                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v9 to v4");
+                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v10 to v4");
                 Reject(() => chain.AddProofOfStakeBlock(block.Transactions.Skip(1), new[] { validators[0] }), "a miner cannot omit eligible locked stake");
 
                 var luckyBlocks = Clone(chain.Blocks);
@@ -117,8 +117,8 @@ internal static class PrivateCoinProofOfWorkRegression
             {
                 batches.Confirm(legacy, new Transaction[0], validators);
                 Check(legacy.IsValid() && legacy.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion, "legacy collateral can participate in the upgraded hybrid consensus");
-                var unlock = first.CreateStakeUnlockTransaction(legacy, firstAddress, 1);
-                legacy.AddBlock(new[] { unlock });
+                var unlock = first.CreateStakeUnlockTransaction(legacy, firstAddress, 0);
+                LegacyConsensusFixture.SelfBlock(legacy, unlock);
                 Check(new Blockchain(Clone(legacy.Blocks)).GetActiveValidators().Count == 1, "signed stake unlock remains valid after upgrade and restart");
             }
         }

@@ -7,51 +7,57 @@ using PrivateCoin.Core;
 
 internal static class PrivateCoinImmediateMigrationRegression
 {
+    private static int checks;
     public static int Main()
     {
         try
         {
-            var genesis = new Blockchain();
-            var oldOperations = new List<Transaction>();
-            for (int i = 0; i < 20; i++) oldOperations.Add(LegacyCreation("v8-wallet-" + i, i + 1));
+            var genesis = new Blockchain(); var oldOperations = new List<Transaction>();
+            for (int i = 0; i < 20; i++) oldOperations.Add(Creation("v8-wallet-" + i, i + 1));
             var oldBlock = new Block { ConsensusVersion = 8, Height = 1, PreviousHash = genesis.Blocks[0].Hash,
                 TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = oldOperations };
             LegacyConsensusFixture.Mine(oldBlock);
-            var chain = new Blockchain(genesis.Blocks.Concat(new[] { oldBlock }));
-            Check(chain.GetBalance(new[] { "v8-wallet-0" }) == Blockchain.WalletCreationReward, "historical v8 wallet batches retain their original rewards");
-            var pending = LegacyCreation("v8-pending-wallet", 21);
-            chain.ValidatePendingTransactions(new[] { pending });
-            Check(chain.GetBalance(new[] { "v8-pending-wallet" }) == 0, "a historical pending wallet entry can be loaded without minting offline");
-            var receipt = chain.CreateWalletCreationTransaction(pending.Outputs[0].OneTimeAddress, new Transaction[0]);
-            chain.ValidatePendingTransactions(new[] { receipt });
-            Check(chain.GetBalance(new[] { "v8-pending-wallet" }) == Blockchain.WalletCreationReward && receipt.Outputs[0].Amount == 0,
-                "upgrading a pending v8 wallet gives its reward immediately and replaces it with a non-minting receipt");
-            Reject(() => chain.ValidatePendingTransactions(new[] { pending }), "the old minting entry cannot be replayed after migration");
-            Reject(() => chain.CreateWalletCreationTransaction("v8-wallet-0", new Transaction[0]), "a historical rewarded address cannot receive another reward");
+            var distribution = Creation("v9-wallet", 21); distribution.Kind = TransactionKind.WalletDistribution; distribution.Id = LegacyConsensusFixture.Id(distribution);
+            var oldDistribution = new Block { ConsensusVersion = 9, Height = 2, PreviousHash = oldBlock.Hash,
+                TimestampUtcTicks = distribution.TimestampUtcTicks, Transactions = new List<Transaction> { distribution } };
+            LegacyConsensusFixture.Mine(oldDistribution);
+            var chain = new Blockchain(genesis.Blocks.Concat(new[] { oldBlock, oldDistribution }));
+            Check(chain.GetBalance(new[] { "v8-wallet-0" }) == Blockchain.WalletCreationReward && chain.GetBalance(new[] { "v9-wallet" }) == Blockchain.WalletCreationReward,
+                "v8 batch rewards and historical v9 distribution blocks retain their balances");
+            var receipt = chain.GetUncountedWalletCreations().Single();
+            var pending = new List<Transaction> { receipt, Creation("v8-pending-wallet", 22) };
+            chain.ValidatePendingTransactions(pending);
+            Check(chain.Blocks.Count == 3 && chain.GetSpendableBalance(new[] { "v8-pending-wallet" }, pending) == Blockchain.WalletCreationReward,
+                "pending v8 creations become immediately available without creating a migration block");
+            Check(receipt.Outputs[0].Amount == 0 && chain.GetSpendableBalance(new[] { "v9-wallet" }, pending) == Blockchain.WalletCreationReward,
+                "historical v9 receipts count once without duplicating their initial reward");
+            Reject(() => chain.CreateWalletCreationTransaction("v8-wallet-0", pending), "historical v8 addresses cannot receive a second distribution");
+            Reject(() => chain.CreateWalletCreationTransaction("v9-wallet", pending), "historical v9 addresses cannot receive a second distribution");
+            while (pending.Count < 20) pending.Add(chain.CreateWalletCreationTransaction("v10-wallet-" + pending.Count, pending));
+            chain.AddBlock(pending);
             var restored = new Blockchain(Clone(chain.Blocks));
-            Check(restored.IsValid() && restored.GetUncountedWalletCreations().Single().Id == receipt.Id &&
-                new BlockchainQueryApi(restored).GetSummary().InitialDistributionBlocksIssued == 21,
-                "v8 and v9 history restores with exactly 21 distributions and the same uncounted receipt");
-            var forged = Clone(chain.Blocks); forged[1].ConsensusVersion = 9; LegacyConsensusFixture.Mine(forged[1]);
-            forged.RemoveAt(2);
-            Reject(() => new Blockchain(forged), "a v9 batch cannot reuse the v8 mint-in-batch format");
-            forged = Clone(chain.Blocks); forged.Last().ConsensusVersion = 8; LegacyConsensusFixture.Mine(forged.Last());
-            Reject(() => new Blockchain(forged), "legacy v8 cannot accept a v9 immediate distribution");
-            forged = Clone(chain.Blocks);
-            Transaction duplicate = forged.Last().Transactions[0]; duplicate.TimestampUtcTicks++; duplicate.Id = LegacyConsensusFixture.Id(duplicate);
-            var duplicateBlock = new Block { ConsensusVersion = 9, Height = chain.Blocks.Count, PreviousHash = chain.Blocks.Last().Hash,
-                TimestampUtcTicks = duplicate.TimestampUtcTicks, Transactions = new List<Transaction> { duplicate } };
+            Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == 10 && restored.GetUncountedWalletCreations().Count == 0,
+                "historical v8/v9 operations extend into v10 and receipts stay counted after restart");
+            Check(new BlockchainQueryApi(restored).GetSummary().InitialDistributionBlocksIssued == 40,
+                "v8, v9 and v10 issuance is counted exactly once");
+            var bad = Clone(chain.Blocks); bad.Last().ConsensusVersion = 8; LegacyConsensusFixture.Mine(bad.Last());
+            Reject(() => new Blockchain(bad), "the chain cannot downgrade from historical v9 to v8");
+            bad = Clone(chain.Blocks); bad[2].ConsensusVersion = 10; LegacyConsensusFixture.Mine(bad[2]);
+            Reject(() => new Blockchain(bad), "v10 rejects an isolated wallet distribution block");
+            var forged = Creation("v9-wallet", 99); var next = new List<Transaction> { forged };
+            for (int i = 0; i < 19; i++) next.Add(Creation("forged-new-" + i, 100 + i));
+            var duplicateBlock = new Block { ConsensusVersion = 10, Height = chain.Blocks.Count, PreviousHash = chain.Blocks.Last().Hash,
+                TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = next };
             LegacyConsensusFixture.Mine(duplicateBlock);
-            Reject(() => new Blockchain(chain.Blocks.Concat(new[] { duplicateBlock })), "a re-mined peer block cannot issue the same wallet address twice");
-            Console.WriteLine("9 immediate migration checks passed"); return 0;
+            Reject(() => new Blockchain(chain.Blocks.Concat(new[] { duplicateBlock })), "a mined complete batch cannot repeat a historical reward address");
+            Console.WriteLine(checks + " migration checks passed"); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
-    private static Transaction LegacyCreation(string address, long timestamp)
+    private static Transaction Creation(string address, long timestamp)
     {
         var tx = new Transaction { Kind = TransactionKind.WalletCreate, TimestampUtcTicks = timestamp };
-        tx.Outputs.Add(new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = address });
-        tx.Id = LegacyConsensusFixture.Id(tx); return tx;
+        tx.Outputs.Add(new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = address }); tx.Id = LegacyConsensusFixture.Id(tx); return tx;
     }
     private static List<Block> Clone(IEnumerable<Block> blocks)
     {
@@ -63,5 +69,5 @@ internal static class PrivateCoinImmediateMigrationRegression
         try { action(); } catch (InvalidOperationException) { Check(true, label); return; }
         throw new Exception("Expected rejection: " + label);
     }
-    private static void Check(bool value, string label) { if (!value) throw new Exception(label); Console.WriteLine("PASS " + label); }
+    private static void Check(bool value, string label) { if (!value) throw new Exception(label); checks++; Console.WriteLine("PASS " + label); }
 }

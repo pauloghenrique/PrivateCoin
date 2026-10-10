@@ -11,7 +11,7 @@ Exemplo com Mono instalado:
 mkdir -p work/dex-regression
 mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
-  -r:System.Web.Extensions -r:System.Web -r:System.Core \
+  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
   Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
@@ -198,7 +198,7 @@ carteiras locais, atualizações repetidas, a remoção de garantias órfãs e a
 adoção das garantias da cadeia substituta. A interface visual precisa ser
 verificada no Windows.
 
-Para verificar a distribuição imediata e a contagem de carteiras no consenso v9, após compilar o Core:
+Para verificar a distribuição imediata e a contagem de carteiras no consenso v10, após compilar o Core:
 
 ```sh
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
@@ -207,14 +207,14 @@ mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Seria
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinWalletValidationRegression.exe
 ```
 
-Confere os 6 POVIX disponíveis antes de completar 20 operações, comprovantes
-sem emissão, 18 transferências mais 2 carteiras, taxas apenas das transferências,
-divisão da recompensa, restauração, migração, limite promocional e rejeição de
-comprovantes adulterados, distribuição duplicada e gastos órfãos.
-`LegacyConsensusFixture.Fund` prepara a distribuição histórica antes do v8 e
-usa a distribuição imediata depois da transição.
+Confere os 6 POVIX e garantias disponíveis sem criar blocos, dependências da
+fila, persistência, lote misto com 20 operações, taxas apenas das transferências,
+recompensa inalterada e rejeição de duplicações, gastos órfãos e lotes parciais.
+`LegacyConsensusFixture.Fund` prepara históricos antes da transição e usa lotes
+completos de carteiras em v10. `SelfBlock` completa operações de garantia com
+registros descartáveis apenas nos testes.
 
-Para verificar a migração v8/v9 sem reproduzir a distribuição:
+Para verificar a migração v8/v9/v10 sem reproduzir a distribuição:
 
 ```sh
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
@@ -223,6 +223,19 @@ mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Seria
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinImmediateMigrationRegression.exe
 ```
 
-Verifica saldos históricos, pendência v8 carregada sem emissão offline, migração
-para crédito imediato, comprovante recuperado após reinício e rejeição do formato
-antigo em blocos novos, referências v9 em v8 e duplicações recebidas de peers.
+Verifica saldos históricos v8/v9, pendências v8 disponíveis sem blocos de
+migração, comprovantes v9 contabilizados em v10 sem nova emissão, restauração e
+rejeição de distribuições isoladas, retrocesso de versão e endereços repetidos.
+
+Para verificar as operações imediatas recebidas por dois peers TCP locais:
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -out:work/PrivateCoinPendingLedgerRegression.exe Tests/PrivateCoinPendingLedgerRegression.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinPendingLedgerRegression.exe \
+  work/pending-ledger-regression
+```
+
+Confere a propagação ordenada de criação, bloqueio e transferência dependente,
+as garantias e reservas no peer receptor e a ausência de blocos com menos de 20
+operações. Usa somente carteiras e arquivos descartáveis.
