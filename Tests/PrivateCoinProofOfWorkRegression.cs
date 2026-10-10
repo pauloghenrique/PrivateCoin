@@ -73,7 +73,7 @@ internal static class PrivateCoinProofOfWorkRegression
                 Reject(() => new Blockchain(malformed), "malformed peer data is rejected");
                 var lowerVersion = Clone(chain.Blocks); lowerVersion.Last().ConsensusVersion = 4;
                 LegacyConsensusFixture.Mine(lowerVersion.Last());
-                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v8 to v4");
+                Reject(() => new Blockchain(lowerVersion), "a chain cannot downgrade from v9 to v4");
                 Reject(() => chain.AddProofOfStakeBlock(block.Transactions.Skip(1), new[] { validators[0] }), "a miner cannot omit eligible locked stake");
 
                 var luckyBlocks = Clone(chain.Blocks);

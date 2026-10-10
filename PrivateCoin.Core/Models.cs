@@ -14,7 +14,8 @@ namespace PrivateCoin.Core
         StakeUnlock = 2,
         TokenCreate = 3,
         TokenTransfer = 4,
-        WalletCreate = 5
+        WalletCreate = 5,
+        WalletDistribution = 6
     }
 
     [DataContract]
@@ -100,6 +101,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 9, EmitDefaultValue = false)] public List<string> ValidatorOwnedAddresses { get; set; }
 
         [DataMember(Order = 10, EmitDefaultValue = false)] public TokenDefinition Token { get; set; }
+        [DataMember(Order = 11, EmitDefaultValue = false)] public string WalletDistributionId { get; set; }
 
         internal string SigningPayload()
         {
@@ -114,6 +116,7 @@ namespace PrivateCoin.Core
                 value.Append("|kind:").Append(((int)Kind).ToString(CultureInfo.InvariantCulture))
                     .Append("|validator:").Append(ValidatorPublicKey).Append("|reward:").Append(ValidatorRewardAddress)
                     .Append("|owned:").Append(string.Join(",", ValidatorOwnedAddresses ?? new List<string>()));
+            if (WalletDistributionId != null) AppendField(value, WalletDistributionId);
             // Length-prefix new fields so delimiters in token names cannot change the encoding.
             if (Token != null || Outputs.Any(output => output.AssetId != null))
             {

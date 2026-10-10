@@ -26,11 +26,8 @@ internal static class LegacyConsensusFixture
     {
         if (chain.Blocks.Last().ConsensusVersion >= 8)
         {
-            var registrations = new List<Transaction>();
-            registrations.Add(chain.CreateWalletCreationTransaction(address, registrations));
-            while (registrations.Count < Blockchain.ValidationsPerBlock)
-                registrations.Add(chain.CreateWalletCreationTransaction("wallet-fixture-" + Guid.NewGuid().ToString("N"), registrations));
-            return chain.AddBlock(registrations);
+            chain.CreateWalletCreationTransaction(address, new Transaction[0]);
+            return chain.Blocks.Last();
         }
         var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
         reward.Outputs.Add(new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = address });

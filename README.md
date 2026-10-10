@@ -25,13 +25,13 @@ using (var bob = new Wallet())
 {
     var chain = new Blockchain();
     var pending = new List<Transaction>();
+    // Registra a distribuição inicial e já libera 6 POVIX, sem esperar o lote.
     pending.Add(chain.CreateWalletCreationTransaction(alice.CreateReceiveAddress(), pending));
-    // Reúna 20 registros de carteira para confirmar a distribuição inicial.
-    for (int i = 1; i < Blockchain.ValidationsPerBlock; i++)
-        pending.Add(chain.CreateWalletCreationTransaction(bob.CreateReceiveAddress(), pending));
-    chain.AddBlock(pending);
-    var payment = alice.CreateTransaction(chain, bob.CreateReceiveAddress(), 5 * Blockchain.OneCoin);
-    chain.ValidatePendingTransactions(new[] { payment });
+    var payment = alice.CreateTransaction(chain, pending, bob.CreateReceiveAddress(), Blockchain.OneCoin, 1);
+    pending.Add(payment);
+    chain.ValidatePendingTransactions(pending);
+    // O comprovante da carteira e a transferência contam como duas operações.
+    // Reúna 20 operações para confirmar as transferências e pagar os validadores.
 }
 ```
 
@@ -41,7 +41,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer`; a versão **8** do consenso
+O Core oferece `TokenCreate` e `TokenTransfer`; a versão **9** do consenso
 exige 20 operações distintas por bloco. Transferências e operações de tokens
 exigem provas assinadas; registros de carteira contam sem essas provas.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
@@ -177,7 +177,7 @@ carteira no DEX, especialmente quando existem cópias em pastas antigas.
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de POVIX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 POVIX em um endereço descartável gerado aleatoriamente, e o registro entra na fila compartilhada, é salvo e propagado como operação pendente. Cada criação conta uma vez, sem taxa nem aprovação individual por tokens bloqueados; a recompensa só fica disponível quando o lote de 20 operações é confirmado. A emissão termina quando o limite total de 180.000 POVIX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 POVIX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 POVIX. A taxa selecionada é descontada além do valor enviado e paga ao validador da transação, mediante prova assinada separada dos votos do bloco. Ao reunir 20 operações, contando transferências validadas e registros de carteiras, as 20 operações de maior taxa são incluídas no bloco e as demais continuam pendentes. Um lote composto somente por carteiras pode ser confirmado com prova de trabalho sem validadores com tokens bloqueados, permitindo a distribuição inicial. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam esse bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
+O painel também permite iniciar um nó TCP, conectar a outro par, sincronizar a cadeia, assinar e propagar transações e acompanhar cada aprovação ou rejeição feita pela validação da blockchain. Na seção **Validador**, informe a quantidade de POVIX e use **Bloquear e ativar** para reservar a garantia da carteira selecionada; o painel passa a exibir a quantia bloqueada, impede que ela seja transferida e restaura a ativação nas próximas execuções. Use **Desbloquear** para desativar o validador, liberar toda a garantia para transferências e salvar esse novo estado. A blockchain nasce sem saldo no bloco gênese. Cada nova carteira recebe 6 POVIX em um endereço descartável gerado aleatoriamente, e o registro entra na fila compartilhada, é salvo e propagado como operação pendente. Cada criação conta uma vez, sem taxa nem aprovação individual por tokens bloqueados; os 6 POVIX ficam disponíveis imediatamente, antes do lote. A distribuição é registrada separadamente com prova de trabalho, sem stake, e o comprovante que entra na fila não emite POVIX novamente. A emissão termina quando o limite total de 180.000 POVIX for alcançado, depois de 30.000 carteiras recompensadas. Uma transferência validada permanece na fila pendente e reserva os UTXOs de entrada para impedir gasto duplo, sem alterar o **saldo disponível** nem permitir o gasto de troco ou recebimentos ainda não confirmados. A fila é ordenada pela maior taxa e usa horário e identificador como desempate determinístico. O sistema calcula três opções de taxa a partir do tamanho atual da fila, e o usuário escolhe por múltipla escolha entre **Econômica**, **Normal** e **Prioritária**. A taxa mínima é uma unidade atômica, equivalente a **0,00000001 POVIX**, acrescentada por nível de congestionamento na opção econômica; as opções normal e prioritária aplicam multiplicadores de 2× e 4×, respectivamente, sempre limitadas a 1 POVIX. A taxa selecionada é descontada além do valor enviado e paga ao validador da transação, mediante prova assinada separada dos votos do bloco. Ao reunir 20 operações, contando transferências validadas e registros de carteiras, as 20 operações de maior taxa são incluídas no bloco e as demais continuam pendentes. Um lote composto somente por carteiras pode ser confirmado com prova de trabalho sem validadores com tokens bloqueados, permitindo a distribuição inicial. A transferência só se efetiva depois que pelo menos dois validadores elegíveis criam e validam esse bloco. O sistema escolhe um deles para criar o bloco, os demais o confirmam e todos recebem sua parcela da recompensa; o novo bloco é salvo e propagado aos pares conectados. Para transferir entre carteiras locais, selecione a destinatária, copie o endereço exibido em **Receber em**, volte à carteira pagadora e informe esse endereço como destino. Para testar a rede localmente, abra duas instâncias em portas diferentes e conecte uma à outra pelo endereço `127.0.0.1`; as duas instâncias convergirão para a mesma cadeia válida.
 
 ### Descoberta automática de nós
 
@@ -237,9 +237,9 @@ prevista. Um mesmo participante pode também validar transações, mas só receb
 suas taxas mediante as respectivas provas assinadas. Os valores e fases da
 recompensa e sua divisão de 30%/70% permanecem iguais.
 
-Novos blocos usam `ConsensusVersion = 8`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7 e permite sua extensão em v8; uma cadeia não pode voltar para
-uma versão anterior após a transição. Caches do DEX v3/v4/v7 são revalidados antes
+Novos blocos usam `ConsensusVersion = 9`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8 e permite sua extensão em v9; uma cadeia não pode voltar para
+uma versão anterior após a transição. Caches do DEX v3/v4/v7/v8 são revalidados antes
 da migração. Pares que anunciam outras versões são desconectados; os nós e os
 clientes do DEX precisam atualizar juntos. A versão anunciada nunca substitui
 a validação dos dados.
@@ -255,8 +255,21 @@ carteiras são aceitos por `AddBlock` quando contêm exatamente 20 registros,
 sem exigir stake. Lotes mistos continuam exigindo os votos do bloco e provas
 individuais apenas para as operações que pagam taxa. `StakeLock` e `StakeUnlock`
 continuam separados e não completam a fila. A promoção permanece em 6 POVIX
-para as primeiras 30.000 carteiras (180.000 POVIX); depois disso, novos registros
-ainda contam para o lote, mas não emitem POVIX.
+para as primeiras 30.000 carteiras (180.000 POVIX), agora disponível imediatamente;
+depois disso, novos registros ainda contam para o lote, mas não emitem POVIX.
+
+`CreateWalletCreationTransaction` registra imediatamente uma `WalletDistribution`
+em um registro separado da cadeia, com prova de trabalho e sem recompensa de
+consenso. Retorna um `WalletCreate` de valor zero que referencia a distribuição
+por `WalletDistributionId`. Os 6 POVIX já podem financiar transferências enquanto
+esse comprovante aguarda as outras operações. Os nós verificam o vínculo,
+rejeitam endereços de distribuição repetidos e não permitem contar o mesmo
+comprovante duas vezes, mesmo após alterar seu horário ou identificador.
+`GetUncountedWalletCreations` reconstrói os comprovantes ainda não incluídos em
+lotes, sem emitir tokens, após reinício, sincronização ou reorganização. Pendências
+v8 são carregadas sem emissão offline e migram no Desktop após sincronizar:
+recebem sua distribuição imediata e viram comprovantes sem emissão. Históricos
+v8 confirmados conservam os saldos e não recebem outra recompensa.
 
 ### Trabalho acumulado, confirmações e reorganizações
 
