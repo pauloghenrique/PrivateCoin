@@ -64,21 +64,39 @@ da cadeia. `GetUnspentOutputs` inclui todos os ativos; consumidores devem
 consultar `Output.AssetId` (`null` significa POVIX). As saídas do livro-caixa
 expõem também `AssetId`.
 
-### Visualizar tokens no PrivateCoin.Desktop
+### Visualizar e movimentar tokens no PrivateCoin.Desktop
 
 Selecione a carteira e clique em **Ver tokens**, no cartão **Carteira**. A tela
 lê os registros confirmados da blockchain local e mostra nome, símbolo,
-quantidade total, saldo da carteira selecionada, casas decimais, identificador,
-bloco de criação e confirmações. O identificador completo pode ser copiado.
-Todos os tokens da rede aparecem por padrão, incluindo os de saldo zero;
-**Somente tokens com saldo** restringe a lista à carteira selecionada.
+quantidade total, saldo em blocos e saldo disponível da carteira selecionada,
+casas decimais, identificador, bloco de criação e validações. Tokens aprovados
+antes de um bloco mostram **Sem bloco**, com saldo disponível para enviar.
+O identificador completo pode ser copiado.
+Por padrão, **Somente tokens com saldo** mostra apenas tokens com saldo
+disponível maior que zero. Troque a carteira no seletor dessa tela para consultar
+seus respectivos tokens; desmarque o filtro para consultar o registro público.
+
+Para movimentar, selecione o token, informe o endereço de destino, a quantidade
+nas casas decimais desse token e a taxa em POVIX. Clique em **Revisar e enviar**
+e confira a carteira, o identificador, o destino, a quantidade e a taxa antes
+de confirmar. A carteira que possui o saldo assina a transferência e paga a
+taxa em POVIX; ter criado o token não concede saldo em outra carteira. O troco
+do token e de POVIX permanece na carteira de envio. O nó precisa estar conectado
+e sincronizado, e os arquivos locais precisam estar acessíveis para salvar
+as chaves de troco e a transação antes de propagá-la.
 
 O `Povix.Dex` já envia uma operação nativa `TokenCreate` para a rede existente.
-Depois da confirmação pelos validadores, o nó do Desktop recebe o bloco pela
-sincronização P2P existente. A lista acompanha novos blocos e transferências
-automaticamente, verificando a cadeia a cada cinco segundos. O botão **Atualizar**
-relê imediatamente a blockchain local. Criações e transferências pendentes
-não alteram os dados confirmados, e uma troca de cadeia atualiza a lista.
+Depois da aprovação por um validador, o nó do Desktop recebe a operação e sua
+prova pela sincronização P2P existente. Os tokens aprovados e a movimentação de
+seus saldos aparecem antes do bloco. A lista acompanha validações, blocos e
+transferências automaticamente a cada cinco segundos; **Atualizar** relê os
+dados imediatamente. Criações sem aprovação não acrescentam saldo. Entradas
+utilizadas em envios pendentes ficam reservadas e reduzem o saldo disponível,
+impedindo gasto duplo. Uma troca de cadeia atualiza a lista. A tela informa o
+identificador da transação enviada, que posteriormente entra no lote de 20
+operações de um bloco.
+Transações pendentes salvas são propagadas novamente depois da sincronização,
+inclusive após reconexão ou reinício; não é necessário criar outro envio.
 
 Para visualizar um token criado no DEX, mantenha o nó do Desktop conectado à
 mesma rede e aguarde o status **Confirmado** no comprovante do DEX. Para receber

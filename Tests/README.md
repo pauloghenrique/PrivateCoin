@@ -124,7 +124,8 @@ em Release e execute:
 ```sh
 mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -out:work/PrivateCoinDesktopTokenRegression.exe \
-  Tests/PrivateCoinDesktopTokenRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs PrivateCoin.Desktop/TokenAmount.cs
+  Tests/PrivateCoinDesktopTokenRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs \
+  PrivateCoin.Desktop/TokenAmount.cs PrivateCoin.Desktop/TokenWalletOperations.cs
 MONO_PATH=PrivateCoin.Desktop/bin/Release mono \
   work/PrivateCoinDesktopTokenRegression.exe work/desktop-tokens-regression
 ```
@@ -133,8 +134,16 @@ A regressão cria tokens com a mesma preparação/assinatura nativa usada pelo
 DEX, confirma blocos com validadores descartáveis e sincroniza dois nós reais
 de loopback. Confere metadados e saldo por carteira, precisão até `Int64.MaxValue`,
 distinção por identificador entre símbolos iguais, confirmação de transferências
-e atualização após troca de cadeia. Criações e transferências pendentes ficam
-fora dos registros/saldos confirmados. Os dados de produção não são acessados.
+e atualização após troca de cadeia. Criações sem aprovação não acrescentam
+saldo; criações e movimentações aprovadas aparecem antes do bloco e podem
+financiar transferências pela operação real do Desktop. Aprovações falsas
+não liberam tokens. Os dados de produção não são acessados.
+Exercita também a listagem padrão de saldos positivos, o isolamento entre
+carteiras, leitura exata das quantidades nos formatos pt-BR/en-US, rejeição de
+destino inválido, valor inexato, saldo insuficiente e taxa sem POVIX. As
+transferências usam a mesma operação do Desktop, propagam por P2P e verificam
+reserva contra gasto duplo, conservação do token, troco sob as chaves da
+carteira e envio de todo o saldo, que retira o token da lista após confirmação.
 A interface WinForms ainda deve ser verificada visualmente no Windows.
 
 Para verificar o histórico v4, os lotes de 20 e a remuneração por transação:
