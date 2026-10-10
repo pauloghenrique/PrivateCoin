@@ -146,6 +146,23 @@ reserva contra gasto duplo, conservação do token, troco sob as chaves da
 carteira e envio de todo o saldo, que retira o token da lista após confirmação.
 A interface WinForms ainda deve ser verificada visualmente no Windows.
 
+Para verificar o saldo POVIX exibido na tela principal após um envio:
+
+```sh
+mcs -r:PrivateCoin.Desktop/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -out:work/PrivateCoinDesktopBalanceRegression.exe \
+  Tests/PrivateCoinDesktopBalanceRegression.cs PrivateCoin.Desktop/WalletBalanceSummary.cs
+MONO_PATH=PrivateCoin.Desktop/bin/Release mono work/PrivateCoinDesktopBalanceRegression.exe
+```
+
+Confere que o troco da carteira que envia continua visível antes do bloco,
+com desconto exato do valor e da taxa, sem liberar novo gasto. Inclui garantia
+bloqueada, envio completo, transferência para a própria carteira, múltiplas
+saídas, reinício com pendências e confirmação posterior sem duplicar saldo.
+Também verifica o troco POVIX de operações de token sem somar sua quantidade
+ao saldo nativo. A dica do saldo na tela principal separa o disponível para
+enviar do troco aguardando confirmação em bloco.
+
 Para verificar o histórico v4, os lotes de 20 e a remuneração por transação:
 
 ```sh
