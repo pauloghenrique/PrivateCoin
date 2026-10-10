@@ -168,12 +168,17 @@ internal static partial class PovixDexRegression
                     legacyCache["ConsensusVersion"] = 4;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v8 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v4 cache also preserves pending creation during the v9 upgrade");
                     service.Dispose();
                     legacyCache["ConsensusVersion"] = 7;
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = new TokenNetworkService(directory, dexPort, new string[0]);
-                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v8 upgrade");
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v7 cache preserves pending creation during the v9 upgrade");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 8;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = new TokenNetworkService(directory, dexPort, new string[0]);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate, "v8 cache preserves pending creation during the v9 upgrade");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,

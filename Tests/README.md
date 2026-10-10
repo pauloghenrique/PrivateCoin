@@ -198,7 +198,7 @@ carteiras locais, atualizações repetidas, a remoção de garantias órfãs e a
 adoção das garantias da cadeia substituta. A interface visual precisa ser
 verificada no Windows.
 
-Para verificar a contagem de carteiras no consenso v8, após compilar o Core:
+Para verificar a distribuição imediata e a contagem de carteiras no consenso v9, após compilar o Core:
 
 ```sh
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
@@ -207,8 +207,22 @@ mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Seria
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinWalletValidationRegression.exe
 ```
 
-Confere 19/20 registros, confirmação sem stake, saldo pendente, 18 transferências
-mais 2 carteiras, taxas apenas das transferências, divisão da recompensa,
-restauração, migração v7/v8, limite promocional e rejeição de blocos adulterados.
+Confere os 6 POVIX disponíveis antes de completar 20 operações, comprovantes
+sem emissão, 18 transferências mais 2 carteiras, taxas apenas das transferências,
+divisão da recompensa, restauração, migração, limite promocional e rejeição de
+comprovantes adulterados, distribuição duplicada e gastos órfãos.
 `LegacyConsensusFixture.Fund` prepara a distribuição histórica antes do v8 e
-usa lotes completos de carteiras depois da transição.
+usa a distribuição imediata depois da transição.
+
+Para verificar a migração v8/v9 sem reproduzir a distribuição:
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
+  -r:System.Numerics -out:work/PrivateCoinImmediateMigrationRegression.exe \
+  Tests/PrivateCoinImmediateMigrationRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinImmediateMigrationRegression.exe
+```
+
+Verifica saldos históricos, pendência v8 carregada sem emissão offline, migração
+para crédito imediato, comprovante recuperado após reinício e rejeição do formato
+antigo em blocos novos, referências v9 em v8 e duplicações recebidas de peers.

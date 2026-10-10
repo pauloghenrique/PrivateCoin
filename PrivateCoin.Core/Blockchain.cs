@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 8;
+        public const int ConsensusVersion = 9;
+        private const int LegacyWalletBatchVersion = 8;
         private const int LegacyHybridVersion = 7;
         private const int LegacySignedVersion = 4;
         public const int ValidationsPerBlock = 20;
@@ -52,6 +53,7 @@ namespace PrivateCoin.Core
             {
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
+                ValidateNewWalletReceipts(pending);
                 bool walletsOnly = pending.Count > 0 && pending.All(item => item.Kind == TransactionKind.WalletCreate);
                 if (walletsOnly) ValidateBatch(pending);
                 if (!walletsOnly && (pending.Count == 0 || pending.Any(item => item.Kind != TransactionKind.StakeLock && item.Kind != TransactionKind.StakeUnlock)))
@@ -71,6 +73,7 @@ namespace PrivateCoin.Core
             {
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
+                ValidateNewWalletReceipts(pending);
                 if (pending.Count != ValidationsPerBlock || pending.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != ValidationsPerBlock)
                     throw new InvalidOperationException("A consensus block requires exactly 20 distinct validated transactions.");
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
@@ -133,7 +136,7 @@ namespace PrivateCoin.Core
             }
         }
 
-        /// <summary>Creates one fee-free wallet registration for the shared pending queue.</summary>
+        /// <summary>Records the initial distribution immediately and returns its non-minting queue receipt.</summary>
         public Transaction CreateWalletCreationTransaction(string rewardAddress, IEnumerable<Transaction> pendingTransactions)
         {
             if (string.IsNullOrWhiteSpace(rewardAddress)) throw new ArgumentException("A wallet reward address is required.", nameof(rewardAddress));
@@ -142,20 +145,68 @@ namespace PrivateCoin.Core
             {
                 Transaction[] pending = pendingTransactions.ToArray();
                 ValidateTransactions(pending);
-                int rewardedWallets = CountWalletCreationRewards() + pending.Count(tx => tx.Kind == TransactionKind.WalletCreate && tx.Outputs[0].Amount > 0);
-                var registration = new Transaction { Kind = TransactionKind.WalletCreate, TimestampUtcTicks = DateTime.UtcNow.Ticks };
-                registration.Outputs.Add(new TransactionOutput { Amount = rewardedWallets < RewardedWalletLimit ? WalletCreationReward : 0, OneTimeAddress = rewardAddress });
-                registration.Id = registration.CalculateId();
-                ValidateTransactions(pending.Concat(new[] { registration }).ToList());
-                return registration;
+                if (WalletDistributionAddresses().Contains(rewardAddress) || pending.Any(tx => tx.Kind == TransactionKind.WalletCreate &&
+                    tx.Outputs[0].OneTimeAddress == rewardAddress))
+                    throw new InvalidOperationException("This wallet address already received its initial distribution.");
+                var distribution = new Transaction { Kind = TransactionKind.WalletDistribution, TimestampUtcTicks = DateTime.UtcNow.Ticks };
+                distribution.Outputs.Add(new TransactionOutput { Amount = CountWalletCreationRewards() < RewardedWalletLimit ? WalletCreationReward : 0, OneTimeAddress = rewardAddress });
+                distribution.Id = distribution.CalculateId();
+                var block = new Block { ConsensusVersion = ConsensusVersion, Height = blocks.Count, PreviousHash = blocks.Last().Hash,
+                    TimestampUtcTicks = distribution.TimestampUtcTicks, Transactions = new List<Transaction> { distribution } };
+                Mine(block);
+                blocks.Add(block);
+                return CreateWalletCreationReceipt(distribution);
             }
+        }
+
+        private static Transaction CreateWalletCreationReceipt(Transaction distribution)
+        {
+            var receipt = new Transaction { Kind = TransactionKind.WalletCreate, TimestampUtcTicks = distribution.TimestampUtcTicks,
+                WalletDistributionId = distribution.Id };
+            receipt.Outputs.Add(new TransactionOutput { Amount = 0, OneTimeAddress = distribution.Outputs[0].OneTimeAddress });
+            receipt.Id = receipt.CalculateId();
+            return receipt;
+        }
+
+        /// <summary>Reconstructs uncounted wallet receipts after restart or chain synchronization.</summary>
+        public IReadOnlyList<Transaction> GetUncountedWalletCreations()
+        {
+            lock (sync)
+            {
+                var counted = new HashSet<string>(blocks.SelectMany(block => block.Transactions)
+                    .Where(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId != null).Select(tx => tx.WalletDistributionId), StringComparer.Ordinal);
+                return blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.WalletDistribution && !counted.Contains(tx.Id))
+                    .Select(CreateWalletCreationReceipt).ToArray();
+            }
+        }
+
+        private HashSet<string> WalletDistributionAddresses()
+        {
+            return new HashSet<string>(blocks.Skip(1).SelectMany(block => block.Transactions.Where(tx =>
+                tx.Kind == TransactionKind.WalletDistribution || (tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null) ||
+                ((block.Validators == null || block.Validators.Count == 0) && IsWalletCreationReward(tx))))
+                .Select(tx => tx.Outputs[0].OneTimeAddress), StringComparer.Ordinal);
+        }
+
+        private static void ValidateWalletReceipt(Transaction receipt, IDictionary<string, Transaction> distributions, ISet<string> counted)
+        {
+            Transaction distribution;
+            if (receipt.WalletDistributionId == null || !distributions.TryGetValue(receipt.WalletDistributionId, out distribution) ||
+                receipt.Id != CreateWalletCreationReceipt(distribution).Id || !counted.Add(distribution.Id))
+                throw new InvalidOperationException("Invalid or already counted wallet distribution receipt.");
         }
 
         private int CountWalletCreationRewards()
         {
             return blocks.Skip(1).Sum(block => block.Transactions.Count(tx =>
-                (tx.Kind == TransactionKind.WalletCreate && tx.Outputs[0].Amount == WalletCreationReward) ||
+                ((tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.WalletDistribution) && tx.Outputs[0].Amount == WalletCreationReward) ||
                 ((block.Validators == null || block.Validators.Count == 0) && IsWalletCreationReward(tx))));
+        }
+
+        private static void ValidateNewWalletReceipts(IEnumerable<Transaction> transactions)
+        {
+            if (transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null))
+                throw new InvalidOperationException("Version 8 wallet entries must receive their initial distribution before joining a new block.");
         }
 
         private static void ValidateBatch(IList<Transaction> transactions)
@@ -167,7 +218,7 @@ namespace PrivateCoin.Core
 
         private static void ValidateWalletIssuance(Transaction transaction, ref long issued)
         {
-            if (transaction.Kind != TransactionKind.WalletCreate) return;
+            if ((transaction.Kind != TransactionKind.WalletCreate && transaction.Kind != TransactionKind.WalletDistribution) || transaction.WalletDistributionId != null) return;
             long expected = issued < DistributionSupply ? WalletCreationReward : 0;
             if (transaction.Outputs.Count != 1 || transaction.Outputs[0].Amount != expected)
                 throw new InvalidOperationException("Invalid wallet distribution amount.");
@@ -386,12 +437,20 @@ namespace PrivateCoin.Core
         private void ValidateTransactions(IList<Transaction> pending)
         {
             var utxo = BuildUtxo();
-            long issued = CountWalletCreationRewards() * WalletCreationReward;
+            var distributions = blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.WalletDistribution).ToDictionary(tx => tx.Id, StringComparer.Ordinal);
+            var counted = new HashSet<string>(blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId != null).Select(tx => tx.WalletDistributionId), StringComparer.Ordinal);
+            var distributionAddresses = WalletDistributionAddresses();
             var ids = new HashSet<string>(blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id), StringComparer.Ordinal);
             foreach (var transaction in OrderByFeePriority(pending))
             {
                 if (transaction == null || !ids.Add(transaction.Id)) throw new InvalidOperationException("Duplicate or missing pending transaction.");
-                ValidateWalletIssuance(transaction, ref issued);
+                if (transaction.Kind == TransactionKind.WalletDistribution) throw new InvalidOperationException("Initial distribution must be recorded immediately, not queued.");
+                if (transaction.Kind == TransactionKind.WalletCreate)
+                {
+                    if (transaction.WalletDistributionId != null) ValidateWalletReceipt(transaction, distributions, counted);
+                    else if (!distributionAddresses.Add(transaction.Outputs[0].OneTimeAddress)) throw new InvalidOperationException("Wallet already received its distribution.");
+                }
+                // Legacy pending entries are migrated to immediate distributions, never minted in v9 batches.
                 Apply(transaction, utxo, false);
             }
         }
@@ -405,22 +464,29 @@ namespace PrivateCoin.Core
             long validatorIssued = 0;
             int latestVersion = 0;
             var transactionIds = new HashSet<string>(StringComparer.Ordinal);
+            var distributions = new Dictionary<string, Transaction>(StringComparer.Ordinal);
+            var counted = new HashSet<string>(StringComparer.Ordinal);
+            var distributionAddresses = new HashSet<string>(StringComparer.Ordinal);
 
             for (int blockIndex = 1; blockIndex < blocks.Count; blockIndex++)
             {
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
                 latestVersion = Math.Max(latestVersion, block.ConsensusVersion);
                 foreach (Transaction tx in block.Transactions)
+                {
+                    if (block.ConsensusVersion < ConsensusVersion && (tx.Kind == TransactionKind.WalletDistribution || tx.WalletDistributionId != null))
+                        throw new InvalidOperationException("Immediate wallet distributions require consensus version 9.");
                     if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
+                }
                 if (block.TransactionValidations != null && (block.ConsensusVersion == 0 || block.Validators == null || block.Validators.Count == 0))
                     throw new InvalidOperationException("Unexpected transaction validation proofs.");
-                if (block.ConsensusVersion >= ConsensusVersion && (block.Validators == null || block.Validators.Count == 0) &&
+                if (block.ConsensusVersion >= LegacyWalletBatchVersion && (block.Validators == null || block.Validators.Count == 0) &&
                     block.Transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate) && !block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))
                     throw new InvalidOperationException("Unsigned wallet batches cannot include other operations.");
                 int regularTransactionIndex = 0;
@@ -430,16 +496,26 @@ namespace PrivateCoin.Core
                     validatorIssued = checked(validatorIssued + ProofOfStake.GetBlockReward(block.Height));
                     regularTransactionIndex = 1;
                 }
-                else if (block.ConsensusVersion >= ConsensusVersion && block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))
+                else if (block.ConsensusVersion >= ConsensusVersion && block.Transactions.Count == 1 && block.Transactions[0].Kind == TransactionKind.WalletDistribution)
+                {
+                    Transaction distribution = block.Transactions[0];
+                    if (!distributionAddresses.Add(distribution.Outputs[0].OneTimeAddress)) throw new InvalidOperationException("Duplicate wallet distribution address.");
+                    ValidateWalletIssuance(distribution, ref issued);
+                    Apply(distribution, utxo, true);
+                    distributions.Add(distribution.Id, distribution);
+                    regularTransactionIndex = 1;
+                }
+                else if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))
                 {
                     ValidateBatch(block.Transactions);
                 }
                 else if (block.Transactions.Count > 0 && block.Transactions[0].Inputs.Count == 0)
                 {
                     Transaction reward = block.Transactions[0];
-                    if (block.ConsensusVersion >= ConsensusVersion) throw new InvalidOperationException("Wallet creation must participate in a 20-operation batch.");
+                    if (block.ConsensusVersion >= LegacyWalletBatchVersion) throw new InvalidOperationException("Wallet creation must participate in a 20-operation batch.");
                     if (!IsWalletCreationReward(reward)) throw new InvalidOperationException("Invalid wallet creation reward.");
                     if (block.Transactions.Count != 1) throw new InvalidOperationException("A wallet creation reward must have its own block.");
+                    distributionAddresses.Add(reward.Outputs[0].OneTimeAddress);
                     Apply(reward, utxo, true);
                     issued = checked(issued + WalletCreationReward);
                     if (issued > DistributionSupply) throw new InvalidOperationException("The wallet distribution supply was exceeded.");
@@ -448,13 +524,24 @@ namespace PrivateCoin.Core
                 for (int transactionIndex = regularTransactionIndex; transactionIndex < block.Transactions.Count; transactionIndex++)
                 {
                     if (block.ConsensusVersion >= LegacySignedVersion && regularTransactionIndex == 0 &&
-                        !(block.ConsensusVersion >= ConsensusVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate) &&
+                        !(block.ConsensusVersion >= LegacyWalletBatchVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate) &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeLock &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeUnlock)
                         throw new InvalidOperationException("Transfers and token operations require signed consensus validations.");
-                    if (block.ConsensusVersion < ConsensusVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate)
+                    if (block.ConsensusVersion < LegacyWalletBatchVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate)
                         throw new InvalidOperationException("Wallet registrations require consensus version 8.");
-                    ValidateWalletIssuance(block.Transactions[transactionIndex], ref issued);
+                    Transaction operation = block.Transactions[transactionIndex];
+                    if (operation.Kind == TransactionKind.WalletDistribution) throw new InvalidOperationException("Distribution cannot be included in a regular batch.");
+                    if (operation.Kind == TransactionKind.WalletCreate)
+                    {
+                        if (block.ConsensusVersion >= ConsensusVersion) ValidateWalletReceipt(operation, distributions, counted);
+                        else
+                        {
+                            if (operation.WalletDistributionId != null) throw new InvalidOperationException("Unexpected wallet receipt in legacy consensus.");
+                            distributionAddresses.Add(operation.Outputs[0].OneTimeAddress);
+                        }
+                    }
+                    ValidateWalletIssuance(operation, ref issued);
                     Apply(block.Transactions[transactionIndex], utxo, false);
                 }
             }
@@ -533,7 +620,7 @@ namespace PrivateCoin.Core
             string previousHash, IReadOnlyList<ValidatorReward> rewards)
         {
             Transaction reward = block.Transactions[0];
-            Transaction[] signedTransactions = transactions.Where(tx => block.ConsensusVersion < ConsensusVersion || tx.Kind != TransactionKind.WalletCreate).ToArray();
+            Transaction[] signedTransactions = transactions.Where(tx => block.ConsensusVersion < LegacyWalletBatchVersion || tx.Kind != TransactionKind.WalletCreate).ToArray();
             if (block.TransactionValidations == null || block.TransactionValidations.Count != signedTransactions.Length ||
                 reward.Id != reward.CalculateId() || reward.Inputs.Count != 0 || reward.Outputs.Count != rewards.Count + signedTransactions.Length)
                 throw new InvalidOperationException("Invalid transaction validation proofs or fee settlement.");
@@ -609,10 +696,13 @@ namespace PrivateCoin.Core
         private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint)
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
-            if (transaction.Kind == TransactionKind.WalletCreate)
+            if (transaction.WalletDistributionId != null && transaction.Kind != TransactionKind.WalletCreate)
+                throw new InvalidOperationException("Only wallet receipts may reference a distribution.");
+            if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution)
             {
-                if (allowMint || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count != 1 ||
+                if (allowMint != (transaction.Kind == TransactionKind.WalletDistribution) || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count != 1 ||
                     (transaction.Outputs[0].Amount != WalletCreationReward && transaction.Outputs[0].Amount != 0) ||
+                    (transaction.WalletDistributionId != null && transaction.Outputs[0].Amount != 0) ||
                     string.IsNullOrWhiteSpace(transaction.Outputs[0].OneTimeAddress) || transaction.Outputs[0].AssetId != null ||
                     transaction.Token != null || transaction.ValidatorPublicKey != null || transaction.ValidatorRewardAddress != null || transaction.ValidatorOwnedAddresses != null)
                     throw new InvalidOperationException("Invalid fee-free wallet registration.");

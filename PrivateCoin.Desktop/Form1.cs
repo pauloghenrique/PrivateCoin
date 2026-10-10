@@ -85,6 +85,7 @@ namespace PrivateCoin.Desktop
                 wallets.Add(recoveryWallet);
                 blockchain = CreateBlockchainForWallet(recoveryWallet.Wallet);
             }
+            if (persistenceAvailable && RecoverWalletCreationReceipts()) SaveState();
             RefreshWalletList(0);
             UpdateChainSummary();
         }
@@ -217,8 +218,12 @@ namespace PrivateCoin.Desktop
                     MessageBoxIcon.Information);
 
                 Log("Carteira “" + name + "” criada e salva. O registro conta como uma operação na fila de 20, sem aprovação por tokens bloqueados. " +
-                    (registration.Outputs[0].Amount > 0 ? "A recompensa de 6 POVIX será confirmada no bloco." : "A distribuição promocional terminou."), true);
-                if (peerNode != null) await peerNode.BroadcastAsync(registration);
+                    (blockchain.GetBalance(new[] { rewardAddress }) > 0 ? "Os 6 POVIX já estão disponíveis para transferência." : "A distribuição promocional terminou."), true);
+                if (peerNode != null)
+                {
+                    await peerNode.BroadcastChainAsync(blockchain.Blocks);
+                    await peerNode.BroadcastAsync(registration);
+                }
 
                 UpdateChainSummary();
                 BeginInvoke(new Action(StartAutomaticMining));
@@ -489,6 +494,7 @@ namespace PrivateCoin.Desktop
                                     foreach (Transaction tx in orphaned)
                                         if (pendingIds.Add(tx.Id)) pendingTransactions.Add(tx);
                                 RemoveInvalidPendingTransactions();
+                                RecoverWalletCreationReceipts();
                                 RefreshValidatorState();
                                 SaveState();
                             }
@@ -571,6 +577,27 @@ namespace PrivateCoin.Desktop
             miningInProgress = true;
             try
             {
+                Transaction[] legacyCreations = SnapshotPending().Where(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null).ToArray();
+                foreach (Transaction legacy in legacyCreations)
+                {
+                    await Task.Run(() => ExecuteNetworkOperation(() =>
+                    {
+                        lock (pendingSync)
+                        {
+                            pendingTransactions.RemoveAll(tx => tx.Id == legacy.Id);
+                            pendingIds.Remove(legacy.Id);
+                            Transaction receipt;
+                            try { receipt = blockchain.CreateWalletCreationTransaction(legacy.Outputs[0].OneTimeAddress, pendingTransactions); }
+                            catch { pendingTransactions.Add(legacy); pendingIds.Add(legacy.Id); throw; }
+                            pendingTransactions.Add(receipt);
+                            pendingIds.Add(receipt.Id);
+                            return true;
+                        }
+                    }));
+                    SaveState();
+                }
+                RecoverWalletCreationReceipts();
+                if (legacyCreations.Length > 0 && peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                 while (true)
                 {
                     Transaction[] batch = Blockchain.SelectValidationBatch(SnapshotPending()).ToArray();
@@ -810,6 +837,15 @@ namespace PrivateCoin.Desktop
             if (!persistenceAvailable) return;
             try { walletStore.Save(wallets, blockchain, SnapshotPending()); }
             catch (Exception error) { Log("Não foi possível salvar os arquivos da carteira e da rede: " + error.Message, false); }
+        }
+
+        private bool RecoverWalletCreationReceipts()
+        {
+            bool changed = false;
+            lock (pendingSync)
+                foreach (Transaction receipt in blockchain.GetUncountedWalletCreations())
+                    if (pendingIds.Add(receipt.Id)) { pendingTransactions.Add(receipt); changed = true; }
+            return changed;
         }
 
         private Transaction[] SnapshotPending()

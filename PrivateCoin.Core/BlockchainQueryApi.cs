@@ -114,7 +114,7 @@ namespace PrivateCoin.Core
         {
             Block[] snapshot = blockchain.Blocks.ToArray();
             int initialBlocks = snapshot.Skip(1).Count(IsInitialDistributionBlock) + snapshot.Skip(1).SelectMany(block => block.Transactions)
-                .Count(tx => tx.Kind == TransactionKind.WalletCreate && tx.Outputs[0].Amount == Blockchain.WalletCreationReward);
+                .Count(tx => (tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.WalletDistribution) && tx.Outputs[0].Amount == Blockchain.WalletCreationReward);
             long validatorIssuance = snapshot.Skip(1).Where(IsProofOfStakeBlock)
                 .Aggregate(0L, (total, block) => checked(total + ProofOfStake.GetBlockReward(block.Height)));
             long issued = checked((long)initialBlocks * Blockchain.WalletCreationReward + validatorIssuance);
@@ -152,7 +152,7 @@ namespace PrivateCoin.Core
                         type = LedgerEntryType.ValidatorReward;
                         issuedAmount = ProofOfStake.GetBlockReward(block.Height);
                     }
-                    else if (transaction.Kind == TransactionKind.WalletCreate || (transactionIndex == 0 && IsInitialDistributionBlock(block)))
+                    else if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution || (transactionIndex == 0 && IsInitialDistributionBlock(block)))
                     {
                         type = LedgerEntryType.InitialDistribution;
                         issuedAmount = outputAmount;
@@ -174,7 +174,7 @@ namespace PrivateCoin.Core
         {
             if (IsProofOfStakeBlock(block) || block.Transactions.Count != 1) return false;
             Transaction transaction = block.Transactions[0];
-            return transaction.Inputs.Count == 0 && transaction.Outputs.Count == 1 &&
+            return transaction.Kind == TransactionKind.Transfer && transaction.Inputs.Count == 0 && transaction.Outputs.Count == 1 &&
                 transaction.Outputs[0].Amount == Blockchain.WalletCreationReward;
         }
 
