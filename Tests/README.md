@@ -252,3 +252,14 @@ histórico v10. A regressão DEX também verifica propagação da aprovação, e
 Execute `node Tests/PovixApprovalStatusRegression.js` para verificar as transições
 do comprovante real entre pendente, validado, confirmado e reorganizado, inclusive
 a remoção da hash antiga e a indicação de taxa já transferida.
+
+## Troco da criação e taxa selecionada (consenso v12)
+
+`PrivateCoinTokenChangeRegression.cs` verifica reserva antes da aprovação, devolução
+imediata do troco em POVIX, desconto somente da taxa, reinício, rejeição de prova falsa,
+gasto do troco em garantia e transferência e confirmação sem nova emissão.
+`PrivateCoinDeferredValidationRegression.cs`, compilado com `NetworkReadiness.cs`,
+verifica que operações recebidas durante a sincronização sejam validadas depois,
+sem criar bloco, e que desconexões descartem mensagens de uma conexão antiga.
+A regressão DEX altera a fila entre cotação e preparação e verifica a taxa escolhida,
+a verificação no navegador, a devolução do troco e os caches históricos v11.

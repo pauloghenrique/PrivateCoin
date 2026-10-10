@@ -70,7 +70,7 @@ namespace Povix.Dex.Services
                 if (!CreateTokenViewModel.TryParseSupply(model.Amount, creation.Token.Decimals, out amount))
                     throw new TokenOperationException("amount_invalid", "Confira a quantidade e as casas decimais do token.");
                 var transfer = TokenTransfer.Prepare(blockchain, pending, publicKeys, model.TokenId, model.DestinationAddress,
-                    amount, changeAddress, Blockchain.CalculateAutomaticFee(pending.Count, model.FeePriority));
+                    amount, changeAddress, GetSelectedFee(model.FeePriority, model.FeeAtomic));
                 if (transfer.Inputs.Count > 1000) throw new TokenOperationException("inputs_limit", "Esta movimentação precisa de mais entradas do que a tela permite. Tente uma quantidade menor.");
                 string draftId = Guid.NewGuid().ToString("N");
                 var draft = new PreparedTransfer { Transfer = transfer, Owner = owner, CreatorKey = creatorKey, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };

@@ -35,6 +35,7 @@ namespace Povix.Dex.Models
         public string DestinationAddress { get; set; }
 
         public int FeePriority { get; set; } = 2;
+        [Range(1, Blockchain.MaximumTransferFee)] public long? FeeAtomic { get; set; }
         public TokenNetworkViewModel Network { get; set; }
 
         public IEnumerable<ValidationResult> Validate(ValidationContext context)
@@ -89,6 +90,7 @@ namespace Povix.Dex.Models
         public long Fee { get; set; }
         public TransactionOutput[] PovixOutputs { get; set; } = new TransactionOutput[0];
         public string Status { get; set; }
+        public string WaitingReason { get; set; }
         public int? BlockHeight { get; set; }
         public string BlockHash { get; set; }
         public int Confirmations { get; set; }

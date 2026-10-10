@@ -16,6 +16,12 @@ internal static class LegacyConsensusFixture
     public static string Id(Transaction tx) => (string)typeof(Transaction).GetMethod("CalculateId", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(tx, null);
     private static string Vote(ValidatorStake stake, string payload) => (string)typeof(ValidatorStake).GetMethod("CreateVote", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(stake, new object[] { payload });
     public static void Mine(Block block) => Call("Mine", block);
+    public static void Resign(Block block, IEnumerable<ValidatorStake> validators)
+    {
+        string payload = CreateVotePayload(block);
+        foreach (BlockValidator record in block.Validators)
+            record.VoteSignature = Vote(validators.Single(stake => stake.ValidatorId == record.ValidatorId), payload);
+    }
     private static IEnumerable<Transaction> OrderByFeePriority(IEnumerable<Transaction> txs) => Blockchain.OrderByFeePriority(txs);
     private static IEnumerable<ValidatorStake> ExcludeTransactionParticipants(IEnumerable<ValidatorStake> stakes, IEnumerable<Transaction> txs) => (IEnumerable<ValidatorStake>)Call("ExcludeTransactionParticipants", stakes, txs, true);
     private static bool SameStakeSet(IEnumerable<ValidatorStake> left, IEnumerable<ValidatorStake> right) => (bool)Call("SameStakeSet", left, right);

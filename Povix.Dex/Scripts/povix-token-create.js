@@ -98,7 +98,8 @@
             const detail = byId('wallet-balance-detail');
             detail.hidden = result.confirmedAtomic == null;
             detail.textContent = detail.hidden ? '' : 'Confirmado: ' + wallet.formatAtomic(result.confirmedAtomic, 8) +
-                ' POVIX · Reservado: ' + wallet.formatAtomic(result.reservedAtomic, 8) +
+                ' POVIX · Taxas das operações pendentes: ' + wallet.formatAtomic(result.pendingFeesAtomic || '0', 8) +
+                ' POVIX · Reservado (não é taxa): ' + wallet.formatAtomic(result.reservedAtomic, 8) +
                 ' POVIX · A receber após confirmação: ' + wallet.formatAtomic(result.pendingIncomingAtomic, 8) + ' POVIX';
         } catch (_) {
             balance = null; byId('wallet-balance').textContent = 'Consulta indisponível';
@@ -207,7 +208,7 @@
         if (busy || draft || !form.reportValidity()) return;
         busy = true; message(''); updateControls();
         try {
-            expected = Object.freeze(fields());
+            expected = Object.freeze({ ...fields(), FeeAtomic: selectedFee() });
             wallet.parseSupply(expected.Supply, Number(expected.Decimals));
             // Keep POVIX change under a key already present in the imported wallet.
             // A new browser-only key would hide the remaining funds from Desktop.

@@ -229,7 +229,7 @@
             wallet.parseSupply(expected.Amount, expected.Decimals);
             const changeAddress = wallet.addresses()[0];
             const result = await post(app.dataset.prepareUrl, { TokenId: expected.TokenId, Amount: expected.Amount,
-                DestinationAddress: expected.DestinationAddress, FeePriority: expected.FeePriority, publicKeys: wallet.publicKeys(), changeAddress });
+                DestinationAddress: expected.DestinationAddress, FeePriority: expected.FeePriority, FeeAtomic: expected.FeeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await wallet.verifyTransferDraft(result, expected, app.dataset.networkId, changeAddress);
             draft = Object.freeze(result); byId('sign-actions').hidden = false; update();
             byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
