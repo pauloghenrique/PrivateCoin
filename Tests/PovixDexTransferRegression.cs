@@ -105,12 +105,12 @@ internal static partial class PovixDexRegression
             int heightBeforeApproval = chain.Blocks.Count;
             propagated.TransactionApproval = chain.CreateTransactionApproval(propagated, new[] { propagated }, validators.Take(1));
             peer.BroadcastAsync(propagated).GetAwaiter().GetResult();
-            Wait(() => service.GetTransferReceipt(transactionId).Status == "confirmed", "token movement receipt receives its separate locked-token approval");
+            Wait(() => service.GetTransferReceipt(transactionId).Status == "validated", "token movement receipt receives its separate locked-token approval");
             Check(chain.Blocks.Count == heightBeforeApproval && service.GetTransferReceipt(transactionId).Confirmations == 0 &&
                 service.GetTransferReceipt(transactionId).BlockHash == null && service.GetTransferReceipt(transactionId).ValidationCount == 1 &&
-                chain.GetSpendableTokenOutputs(new[] { destination }, new[] { propagated }, tokenId).Sum(output => output.Output.Amount) == amount &&
-                service.GetBalance(new[] { validators[0].RewardAddress }) == validatorBalance + propagated.Fee,
-                "confirmed token movement releases recipient assets and credits its fee with one validation and no block");
+                chain.GetSpendableTokenOutputs(new[] { destination }, new[] { propagated }, tokenId).Sum(output => output.Output.Amount) == 0 &&
+                service.GetBalance(new[] { validators[0].RewardAddress }) == validatorBalance,
+                "approved movement waits for a block before releasing recipient assets and paying its fee");
             Block confirmed = batches.Confirm(chain, new[] { propagated }, validators);
             peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
             Wait(() => service.GetTransferReceipt(transactionId).BlockHash == confirmed.Hash, "confirmed movement receives actual block metadata");

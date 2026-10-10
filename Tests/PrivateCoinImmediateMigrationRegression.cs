@@ -27,14 +27,14 @@ internal static class PrivateCoinImmediateMigrationRegression
             var receipt = chain.GetUncountedWalletCreations().Single();
             var pending = new List<Transaction> { receipt, Creation("v8-pending-wallet", 22) };
             chain.ValidatePendingTransactions(pending);
-            Check(chain.Blocks.Count == 3 && chain.GetSpendableBalance(new[] { "v8-pending-wallet" }, pending) == Blockchain.WalletCreationReward,
-                "pending v8 creations become immediately available without creating a migration block");
+            Check(chain.Blocks.Count == 3 && chain.GetSpendableBalance(new[] { "v8-pending-wallet" }, pending) == 0,
+                "pending legacy creations now wait for a block without requiring a migration block");
             Check(receipt.Outputs[0].Amount == 0 && chain.GetSpendableBalance(new[] { "v9-wallet" }, pending) == Blockchain.WalletCreationReward,
                 "historical v9 receipts count once without duplicating their initial reward");
             Reject(() => chain.CreateWalletCreationTransaction("v8-wallet-0", pending), "historical v8 addresses cannot receive a second distribution");
             Reject(() => chain.CreateWalletCreationTransaction("v9-wallet", pending), "historical v9 addresses cannot receive a second distribution");
             while (pending.Count < 20) pending.Add(chain.CreateWalletCreationTransaction("v10-wallet-" + pending.Count, pending));
-            chain.AddBlock(pending);
+            foreach (var registration in pending) chain.AddBlock(new[] { registration });
             var restored = new Blockchain(Clone(chain.Blocks));
             Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion && restored.GetUncountedWalletCreations().Count == 0,
                 "historical v8/v9 operations extend into the current consensus and receipts stay counted after restart");

@@ -14,8 +14,9 @@ namespace PrivateCoin.Desktop
 
         public static IReadOnlyList<TokenBalance> GetBalances(Blockchain chain, Wallet wallet, IEnumerable<Transaction> pending, bool onlyOwned = true)
         {
-            return chain.GetTokenBalances(wallet?.OwnedOneTimeAddresses, pending)
-                .Where(token => !onlyOwned || token.Amount > 0).ToArray();
+            Transaction[] queue = pending.ToArray();
+            return chain.GetTokenBalances(wallet?.OwnedOneTimeAddresses, queue)
+                .Where(token => !onlyOwned || GetAvailableBalance(chain, wallet, queue, token.Id) > 0).ToArray();
         }
 
         public static long GetAvailableBalance(Blockchain chain, Wallet wallet, IEnumerable<Transaction> pending, string tokenId)

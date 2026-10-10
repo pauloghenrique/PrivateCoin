@@ -11,10 +11,8 @@ internal sealed class ValidationBatchFixture : IDisposable
     public ValidationBatchFixture(Blockchain chain)
     {
         destination = filler.CreateReceiveAddress();
-        for (int index = 0; index < Blockchain.ValidationsPerBlock; index++)
-        {
-            LegacyConsensusFixture.Fund(chain, filler.CreateReceiveAddress());
-        }
+        LegacyConsensusFixture.FundBatch(chain, Enumerable.Range(0, Blockchain.ValidationsPerBlock)
+            .Select(index => filler.CreateReceiveAddress()).ToArray());
     }
 
     public Block Confirm(Blockchain chain, IEnumerable<Transaction> transactions, IEnumerable<ValidatorStake> validators)

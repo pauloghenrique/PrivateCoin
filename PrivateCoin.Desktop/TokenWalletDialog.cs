@@ -92,7 +92,7 @@ namespace PrivateCoin.Desktop
             var feeLabel = new Label { Text = "Taxa em POVIX", ForeColor = UiTheme.Muted };
             feeLabel.SetBounds(730, 485, 236, 20); fees.SetBounds(730, 508, 236, 27);
             feeBalance.SetBounds(24, 544, 942, 25); feeBalance.ForeColor = UiTheme.Muted;
-            var help = new Label { Text = "O saldo disponível inclui tokens aprovados por validador. O troco permanece na carteira que envia.", ForeColor = UiTheme.Muted };
+            var help = new Label { Text = "O saldo disponível inclui somente tokens confirmados em bloco. O troco permanece na carteira que envia.", ForeColor = UiTheme.Muted };
             help.SetBounds(24, 616, 942, 28);
             var copy = new AccentButton { Text = "Copiar identificador", Primary = false }; copy.SetBounds(488, 576, 194, 32);
             send.SetBounds(694, 576, 156, 32); close.SetBounds(862, 576, 104, 32);
@@ -168,7 +168,7 @@ namespace PrivateCoin.Desktop
             status.Text = wallet == null ? "Selecione uma carteira."
                 : entries.Length == 0 ? (onlyOwned.Checked
                     ? "Nenhum token com saldo disponível nesta carteira. Confira os envios pendentes, o destino no DEX e a sincronização."
-                    : "Nenhum token confirmado por validação ou bloco. Confira a conexão com a rede do DEX e aguarde a sincronização.")
+                    : "Nenhum token confirmado em bloco. Confira a conexão com a rede do DEX e aguarde a sincronização.")
                 : tokens.Rows.Count + " token(s) exibido(s) para esta carteira. Saldos atualizados automaticamente após validações, blocos e envios.";
             lastTip = tip; lastWallet = wallet; lastPending = pendingIds; lastAddresses = addresses;
             UpdateSelection();
