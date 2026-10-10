@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 12;
+        public const int ConsensusVersion = 13;
+        private const int ImmediateChangeVersion = 12;
         private const int ApprovalVersion = 11;
         private const int SelfValidatedVersion = 10;
         private const int LegacyImmediateVersion = 9;
@@ -209,7 +210,7 @@ namespace PrivateCoin.Core
         }
 
         private static Dictionary<string, UnspentOutput> BuildImmediateUtxo(IDictionary<string, UnspentOutput> confirmed,
-            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null, bool releaseTokenChange = true)
+            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null, bool releaseTokenChange = true, bool releaseTokenAssets = true)
         {
             var result = new Dictionary<string, UnspentOutput>(confirmed, StringComparer.Ordinal);
             foreach (Transaction transaction in OrderByFeePriority(transactions))
@@ -227,7 +228,7 @@ namespace PrivateCoin.Core
                             for (int index = 0; index < transaction.Outputs.Count; index++)
                             {
                                 TransactionOutput output = transaction.Outputs[index];
-                                if (output.AssetId == null)
+                                if (output.AssetId == null || releaseTokenAssets)
                                     result.Add(Key(transaction.Id, index), new UnspentOutput { TransactionId = transaction.Id,
                                         OutputIndex = index, Output = output, TransactionKind = transaction.Kind });
                             }
@@ -532,7 +533,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -626,7 +627,7 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
                 item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
-            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ConsensusVersion) : utxo;
+            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ImmediateChangeVersion, block.ConsensusVersion >= ConsensusVersion) : utxo;
             foreach (BlockValidator record in records)
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
@@ -1015,6 +1016,34 @@ namespace PrivateCoin.Core
                     Decimals = tx.Token.Decimals, Supply = tx.Token.Supply }).ToArray();
         }
 
+        public IReadOnlyList<Transaction> GetApprovedTokenCreations(IEnumerable<Transaction> pendingTransactions)
+        {
+            if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
+            lock (sync)
+            {
+                var pending = pendingTransactions.ToArray();
+                ValidateTransactions(pending.ToList());
+                return pending.Where(tx => tx.Kind == TransactionKind.TokenCreate && HasValidTransactionApproval(tx, pending)).ToArray();
+            }
+        }
+
+        public IReadOnlyList<TokenDefinition> GetTokens(IEnumerable<Transaction> pendingTransactions)
+        {
+            lock (sync) return GetTokens().Concat(GetApprovedTokenCreations(pendingTransactions).Select(tx => tx.Token)).ToArray();
+        }
+
+        public IReadOnlyList<UnspentOutput> GetRegisteredTokenOutputs(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            var owned = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+            lock (sync)
+            {
+                var approved = GetApprovedTokenCreations(pendingTransactions);
+                return GetUnspentOutputs(owned).Where(item => item.Output.AssetId != null).Concat(approved.SelectMany(tx =>
+                    tx.Outputs.Select((output, index) => new UnspentOutput { TransactionId = tx.Id, OutputIndex = index,
+                        Output = output, TransactionKind = tx.Kind }).Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)))).ToArray();
+            }
+        }
+
         public long GetTokenBalance(IEnumerable<string> addresses, string tokenId)
         {
             if (string.IsNullOrEmpty(tokenId)) throw new ArgumentException("Token identifier is required.", nameof(tokenId));
@@ -1033,7 +1062,24 @@ namespace PrivateCoin.Core
                     AddAssetAmount(amounts, output.Output.AssetId, output.Output.Amount);
                 return blocks.SelectMany(block => block.Transactions.Where(tx => tx.Kind == TransactionKind.TokenCreate)
                     .Select(tx => new TokenBalance(tx.Token, amounts.ContainsKey(tx.Token.Id) ? amounts[tx.Token.Id] : 0,
-                        block.Height, blocks[blocks.Count - 1].Height - block.Height + 1))).ToArray();
+                        block.Height, blocks[blocks.Count - 1].Height - block.Height + 1,
+                        tx.TransactionApproval != null || block.TransactionValidations?.Any(proof => proof.TransactionId == tx.Id) == true ? 1 : 0))).ToArray();
+            }
+        }
+
+        public IReadOnlyList<TokenBalance> GetTokenBalances(IEnumerable<string> addresses, IEnumerable<Transaction> pendingTransactions)
+        {
+            lock (sync)
+            {
+                var pending = pendingTransactions.ToArray();
+                var confirmed = GetTokenBalances(addresses);
+                var registered = confirmed.Concat(GetApprovedTokenCreations(pending).Select(tx => new TokenBalance(tx.Token, 0, null, 0, 1)));
+                var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input => Key(input.TransactionId, input.OutputIndex)), StringComparer.Ordinal);
+                var amounts = GetRegisteredTokenOutputs(addresses, pending).Where(output => !reserved.Contains(Key(output.TransactionId, output.OutputIndex)))
+                    .GroupBy(output => output.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(output => output.Output.Amount), StringComparer.Ordinal);
+                return registered.Select(token => new TokenBalance(new TokenDefinition { Id = token.Id, Name = token.Name,
+                    Symbol = token.Symbol, Decimals = token.Decimals, Supply = token.Supply }, amounts.ContainsKey(token.Id) ? amounts[token.Id] : 0,
+                    token.CreationHeight, token.Confirmations, token.ValidationCount)).ToArray();
             }
         }
 
@@ -1047,7 +1093,8 @@ namespace PrivateCoin.Core
             {
                 ValidateTransactions(pending);
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(i => Key(i.TransactionId, i.OutputIndex)), StringComparer.Ordinal);
-                return GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == tokenId &&
+                var owned = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+                return BuildImmediateUtxo(BuildUtxo(), pending, blocks).Values.Where(item => owned.Contains(item.Output.OneTimeAddress) && item.Output.AssetId == tokenId &&
                     !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
             }
         }

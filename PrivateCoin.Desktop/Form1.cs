@@ -307,7 +307,7 @@ namespace PrivateCoin.Desktop
         private void TokensButtonClick(object sender, EventArgs e)
         {
             using (var dialog = new TokenWalletDialog(() => blockchain, () => SelectedWallet,
-                () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s)."))
+                () => peerNode == null ? "Nó parado; inicie-o para sincronizar." : peerNode.ConnectedPeerCount + " par(es) conectado(s).", SnapshotPending))
                 dialog.ShowDialog(this);
         }
 

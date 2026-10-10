@@ -10,6 +10,8 @@ namespace PrivateCoin.Desktop
     {
         private readonly Func<Blockchain> chain;
         private readonly Func<NamedWallet> selectedWallet;
+        private readonly Func<Transaction[]> pending;
+        private string lastPending;
         private readonly Func<string> connectionStatus;
         private readonly DataGridView tokens = new DataGridView();
         private readonly Label walletLabel = new Label();
@@ -20,10 +22,10 @@ namespace PrivateCoin.Desktop
         private string lastTip;
         private NamedWallet lastWallet;
 
-        public TokenWalletDialog(Func<Blockchain> chain, Func<NamedWallet> selectedWallet, Func<string> connectionStatus)
+        public TokenWalletDialog(Func<Blockchain> chain, Func<NamedWallet> selectedWallet, Func<string> connectionStatus, Func<Transaction[]> pending)
         {
             this.chain = chain; this.selectedWallet = selectedWallet;
-            this.connectionStatus = connectionStatus;
+            this.connectionStatus = connectionStatus; this.pending = pending;
             Text = "POVIX — Tokens da blockchain";
             Font = new Font("Segoe UI", 9F); BackColor = UiTheme.Background;
             ClientSize = new Size(990, 555); AutoScaleMode = AutoScaleMode.Dpi;
@@ -51,7 +53,7 @@ namespace PrivateCoin.Desktop
             tokens.Columns.Add("Decimals", "Casas decimais"); tokens.Columns[4].Width = 95;
             tokens.Columns.Add("Id", "Identificador do token"); tokens.Columns[5].Width = 470;
             tokens.Columns.Add("Height", "Bloco de criação"); tokens.Columns[6].Width = 105;
-            tokens.Columns.Add("Confirmations", "Confirmações"); tokens.Columns[7].Width = 95;
+            tokens.Columns.Add("Confirmations", "Validações"); tokens.Columns[7].Width = 95;
             foreach (DataGridViewColumn column in tokens.Columns) column.SortMode = DataGridViewColumnSortMode.NotSortable;
             status.SetBounds(24, 469, 942, 34); status.ForeColor = UiTheme.Muted;
             var copy = new AccentButton { Text = "Copiar identificador", Primary = false }; copy.SetBounds(652, 510, 194, 32);
@@ -77,21 +79,23 @@ namespace PrivateCoin.Desktop
             string tip = blockchain.Blocks.Last().Hash;
             walletLabel.Text = "Carteira selecionada: " + (wallet?.Name ?? "Nenhuma");
             connection.Text = connectionStatus();
-            if (!force && tip == lastTip && ReferenceEquals(wallet, lastWallet)) return;
+            var queue = pending();
+            string fingerprint = string.Join("|", queue.Select(tx => tx.Id + ":" + tx.TransactionApproval?.Proof?.Signature));
+            if (!force && tip == lastTip && fingerprint == lastPending && ReferenceEquals(wallet, lastWallet)) return;
             string selectedId = tokens.CurrentRow?.Cells[5].Value as string;
-            var entries = blockchain.GetTokenBalances(wallet?.Wallet.OwnedOneTimeAddresses)
+            var entries = blockchain.GetTokenBalances(wallet?.Wallet.OwnedOneTimeAddresses, queue)
                 .OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(item => item.Id).ToArray();
             tokens.Rows.Clear();
             foreach (TokenBalance item in entries.Where(item => !onlyOwned.Checked || item.Amount > 0))
             {
                 int row = tokens.Rows.Add(item.Name, item.Symbol, TokenAmount.Format(item.Supply, item.Decimals),
-                    TokenAmount.Format(item.Amount, item.Decimals), item.Decimals, item.Id, item.CreationHeight, item.Confirmations);
+                    TokenAmount.Format(item.Amount, item.Decimals), item.Decimals, item.Id, item.CreationHeight.HasValue ? (object)item.CreationHeight.Value : "Sem bloco", item.ValidationCount);
                 if (item.Id == selectedId) tokens.CurrentCell = tokens.Rows[row].Cells[0];
             }
-            status.Text = entries.Length == 0 ? "Nenhum token confirmado nesta blockchain. Conecte o nó à mesma rede do DEX e aguarde a sincronização."
+            status.Text = entries.Length == 0 ? "Nenhum token confirmado por validação ou bloco. Conecte o nó à mesma rede do DEX e aguarde a sincronização."
                 : tokens.Rows.Count == 0 ? "A carteira selecionada ainda não possui saldo em tokens. Confira o endereço de destino informado no DEX."
-                : entries.Length + " token(s) confirmado(s) na blockchain local. A lista acompanha automaticamente os novos blocos.";
-            lastTip = tip; lastWallet = wallet;
+                : entries.Length + " token(s) confirmado(s) por validação ou bloco. A lista acompanha as novas validações.";
+            lastTip = tip; lastWallet = wallet; lastPending = fingerprint;
         }
 
         protected override void Dispose(bool disposing) { if (disposing) timer.Dispose(); base.Dispose(disposing); }

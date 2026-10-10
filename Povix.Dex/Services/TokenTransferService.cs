@@ -20,14 +20,14 @@ namespace Povix.Dex.Services
             {
                 var keys = new HashSet<string>(publicKeys, StringComparer.Ordinal);
                 var addresses = new HashSet<string>(publicKeys.Select(AddressFor), StringComparer.Ordinal);
-                var creations = blockchain.Blocks.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
+                var creations = blockchain.Blocks.SelectMany(block => block.Transactions).Concat(blockchain.GetApprovedTokenCreations(pending)).Where(tx => tx.Kind == TransactionKind.TokenCreate &&
                     keys.Contains(tx.Inputs[0].PublicKey)).ToArray();
                 var receivingAddresses = creations.SelectMany(tx => tx.Outputs.Where(output => output.AssetId == tx.Token.Id))
                     .Select(output => output.OneTimeAddress);
-                // Query confirmed outputs once; missing receiving keys are diagnostic only.
+                // Query registered outputs once; missing receiving keys are diagnostic only.
                 // An issuance to another address must never count as this wallet's spendable balance.
                 blockchain.ValidatePendingTransactions(pending);
-                var knownOutputs = blockchain.GetUnspentOutputs(addresses.Concat(receivingAddresses).Distinct(StringComparer.Ordinal))
+                var knownOutputs = blockchain.GetRegisteredTokenOutputs(addresses.Concat(receivingAddresses).Distinct(StringComparer.Ordinal), pending)
                     .Where(item => item.Output.AssetId != null).ToArray();
                 var outputs = knownOutputs.Where(item => addresses.Contains(item.Output.OneTimeAddress)).ToArray();
                 var receivingBalances = knownOutputs.GroupBy(item => item.Output.AssetId + ":" + item.Output.OneTimeAddress, StringComparer.Ordinal)
@@ -62,7 +62,7 @@ namespace Povix.Dex.Services
                 if (drafts.Count + transferDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) >= 5)
                     throw new TokenOperationException("draft_limit", "Há preparações em andamento. Aguarde alguns minutos e tente novamente.");
                 Transaction creation = FindCreation(model.TokenId);
-                if (creation == null) throw new TokenOperationException("token_unconfirmed", "O token precisa estar confirmado na blockchain.");
+                if (creation == null) throw new TokenOperationException("token_unconfirmed", "O token precisa ter sua criação confirmada por validação ou bloco.");
                 string creatorKey = creation.Inputs[0].PublicKey;
                 if (!publicKeys.Contains(creatorKey, StringComparer.Ordinal))
                     throw new TokenOperationException("creator_required", "Somente a carteira que criou este token pode movimentá-lo nesta tela.");
@@ -173,7 +173,7 @@ namespace Povix.Dex.Services
         }
 
         private Transaction FindCreation(string tokenId) => blockchain.Blocks.SelectMany(block => block.Transactions)
-            .FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token.Id == tokenId);
+            .Concat(blockchain.GetApprovedTokenCreations(pending)).FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token.Id == tokenId);
         private static string AddressFor(string publicKey)
         {
             using (var hash = SHA256.Create()) return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(publicKey))).Replace("-", "").ToLowerInvariant();

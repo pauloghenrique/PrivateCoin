@@ -94,6 +94,7 @@ namespace Povix.Dex.Models
         public int? BlockHeight { get; set; }
         public string BlockHash { get; set; }
         public int Confirmations { get; set; }
+        public int ValidationCount { get; set; }
         public int PeerCount { get; set; }
         public string SupplyDisplay => (Token.Supply / Pow10(Token.Decimals)).ToString("N" + Token.Decimals, CultureInfo.GetCultureInfo("pt-BR"));
         private static decimal Pow10(int decimals) { decimal value = 1; for (int i = 0; i < decimals; i++) value *= 10; return value; }

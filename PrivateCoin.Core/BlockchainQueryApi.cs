@@ -6,14 +6,14 @@ using System.Globalization;
 
 namespace PrivateCoin.Core
 {
-    /// <summary>A confirmed token and a wallet balance from the same chain snapshot.</summary>
+    /// <summary>A token confirmed by validation or block and its wallet balance.</summary>
     public sealed class TokenBalance
     {
-        internal TokenBalance(TokenDefinition token, long amount, int height, int confirmations)
+        internal TokenBalance(TokenDefinition token, long amount, int? height, int confirmations, int validationCount = 0)
         {
             Id = token.Id; Name = token.Name; Symbol = token.Symbol;
             Decimals = token.Decimals; Supply = token.Supply; Amount = amount;
-            CreationHeight = height; Confirmations = confirmations;
+            CreationHeight = height; Confirmations = confirmations; ValidationCount = validationCount;
         }
         public string Id { get; }
         public string Name { get; }
@@ -21,8 +21,9 @@ namespace PrivateCoin.Core
         public int Decimals { get; }
         public long Supply { get; }
         public long Amount { get; }
-        public int CreationHeight { get; }
+        public int? CreationHeight { get; }
         public int Confirmations { get; }
+        public int ValidationCount { get; }
     }
 
     /// <summary>A point-in-time summary of the public blockchain and its emission.</summary>
