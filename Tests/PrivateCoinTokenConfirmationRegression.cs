@@ -48,8 +48,22 @@ internal static class PrivateCoinTokenConfirmationRegression
                 var payment = creator.CreateTokenTransferTransaction(chain, pending, token.Token.Id, new string('e', 64), 30, 5); pending.Add(payment);
                 payment.TransactionApproval = chain.CreateTransactionApproval(payment, pending, validators.Take(1));
                 Check(chain.HasValidTransactionApproval(payment, pending) && chain.GetSpendableBalance(first.OwnedOneTimeAddresses, pending) == 12 &&
-                    chain.GetSpendableTokenOutputs(new[] { new string('e', 64) }, pending, token.Token.Id).Count == 0,
+                    chain.GetSpendableTokenOutputs(new[] { new string('e', 64) }, pending, token.Token.Id).Sum(output => output.Output.Amount) == 30,
                     "a confirmed creation funds an actual signed token movement and pays its validator fee without a block");
+                Check(chain.GetTokenBalances(new[] { new string('e', 64) }, pending).Single().Amount == 30 &&
+                    chain.GetTokenBalances(creator.OwnedOneTimeAddresses, pending).Single().Amount == 70,
+                    "approval immediately updates recipient and sender token balances");
+                var forgedMovement = Copy(pending);
+                forgedMovement.Single(tx => tx.Id == payment.Id).TransactionApproval.Proof.Signature = Convert.ToBase64String(new byte[256]);
+                Check(chain.GetSpendableTokenOutputs(new[] { new string('e', 64) }, forgedMovement, token.Token.Id).Count == 0,
+                    "forged movement approval cannot release recipient assets");
+                var followupPending = Copy(pending);
+                var followup = creator.CreateTokenTransferTransaction(chain, followupPending, token.Token.Id, new string('f', 64), 20, 5);
+                followupPending.Add(followup);
+                followup.TransactionApproval = chain.CreateTransactionApproval(followup, followupPending, validators.Take(1));
+                Check(followup.Inputs.Any(input => input.TransactionId == payment.Id) && chain.HasValidTransactionApproval(followup, followupPending) &&
+                    chain.GetSpendableTokenOutputs(new[] { new string('f', 64) }, followupPending, token.Token.Id).Sum(output => output.Output.Amount) == 20 && chain.Blocks.Count == 1,
+                    "approved movement change funds another signed token movement before any block");
                 while (pending.Count < 20) pending.Add(chain.CreateWalletCreationTransaction("change-batch-" + pending.Count, pending));
                 var block = chain.AddProofOfStakeBlock(chain.SelectApprovedValidationBatch(pending), validators);
                 Check(chain.IsValid() && block.ConsensusVersion == Blockchain.ConsensusVersion && chain.Blocks.Count == 2 && chain.GetTokenBalance(new[] { new string('e', 64) }, token.Token.Id) == 30,
@@ -57,6 +71,9 @@ internal static class PrivateCoinTokenConfirmationRegression
                 var historical = chain.Blocks.ToList(); historical.Last().ConsensusVersion = 12;
                 LegacyConsensusFixture.Resign(historical.Last(), validators); LegacyConsensusFixture.Mine(historical.Last());
                 Check(new Blockchain(historical).IsValid(), "historical v12 rules restore without changing their native change policy");
+                historical.Last().ConsensusVersion = 13;
+                LegacyConsensusFixture.Resign(historical.Last(), validators); LegacyConsensusFixture.Mine(historical.Last());
+                Check(new Blockchain(historical).IsValid(), "historical v13 rules restore before immediate token movements");
                 Check(chain.GetBalancesByAddress().Values.Sum() == 15 * Blockchain.WalletCreationReward + ProofOfStake.GetBlockReward(block.Height),
                     "immediate change and fee credits preserve native supply without duplicate payments");
             }

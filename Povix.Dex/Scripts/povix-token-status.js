@@ -13,15 +13,15 @@
             const data = await response.json();
             const confirmed = data.status === 'confirmed', pending = data.status === 'pending', validated = data.status === 'validated';
             const transfer = app.dataset.operation === 'transfer';
-            const confirmedWithoutBlock = confirmed && !transfer && data.blockHeight == null;
+            const confirmedWithoutBlock = confirmed && data.blockHeight == null;
             byId('receipt-title').textContent = confirmed ? (transfer ? 'Movimentação confirmada.' : 'Token registrado.') : validated ? (transfer ? 'Movimentação validada.' : 'Criação validada.') : pending ? (transfer ? 'Transação enviada.' : 'Aguardando validação.') : (transfer ? 'Movimentação não confirmada.' : 'Registro não confirmado.');
-            byId('receipt-description').textContent = confirmed ? (transfer ? 'A transferência consta em um bloco validado da rede POVIX.' : (confirmedWithoutBlock ? 'A criação do token foi confirmada por uma carteira com tokens bloqueados, sem criar bloco. A taxa já foi paga ao validador e o token está disponível.' : 'A criação do token consta em um bloco validado da rede POVIX.')) :
+            byId('receipt-description').textContent = confirmed ? (transfer ? (confirmedWithoutBlock ? 'A movimentação foi confirmada por uma carteira com tokens bloqueados, sem criar bloco. O saldo está disponível ao destinatário e a taxa já foi paga ao validador.' : 'A transferência consta em um bloco validado da rede POVIX.') : (confirmedWithoutBlock ? 'A criação do token foi confirmada por uma carteira com tokens bloqueados, sem criar bloco. A taxa já foi paga ao validador e o token está disponível.' : 'A criação do token consta em um bloco validado da rede POVIX.')) :
                 validated ? (transfer ? 'A movimentação foi validada e a taxa já foi transferida ao validador. O envio aguarda o lote de 20 operações.' : 'Uma carteira com tokens bloqueados confirmou a criação e recebeu a taxa. A confirmação da criação não depende de bloco.') :
                 pending ? (transfer ? 'O envio aguarda aprovação de uma carteira com tokens bloqueados, sem criar bloco nessa etapa.' : (data.waitingReason || 'A criação aguarda aprovação de uma carteira com tokens bloqueados. Essa validação não cria um bloco.')) :
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : validated ? 'Validado' : pending ? (transfer ? 'Pendente' : 'Aguardando validação') : 'Não confirmado';
             byId('receipt-status').classList.toggle('waiting', !confirmed);
-            byId('receipt-confirmations').textContent = String(transfer ? data.confirmations : (data.validations || 0));
+            byId('receipt-confirmations').textContent = String(data.validations || 0);
             byId('receipt-block').textContent = data.blockHeight == null ? (confirmedWithoutBlock ? 'Sem bloco: confirmação por validação' : 'Aguardando confirmação') : String(data.blockHeight);
             byId('receipt-hash').textContent = data.blockHash || '—';
             byId('receipt-connectivity').textContent = data.peerCount + ' pares conectados · Atualização automática a cada 10 segundos';

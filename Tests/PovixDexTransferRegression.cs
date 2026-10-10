@@ -105,14 +105,15 @@ internal static partial class PovixDexRegression
             int heightBeforeApproval = chain.Blocks.Count;
             propagated.TransactionApproval = chain.CreateTransactionApproval(propagated, new[] { propagated }, validators.Take(1));
             peer.BroadcastAsync(propagated).GetAwaiter().GetResult();
-            Wait(() => service.GetTransferReceipt(transactionId).Status == "validated", "token movement receipt receives its separate locked-token approval");
+            Wait(() => service.GetTransferReceipt(transactionId).Status == "confirmed", "token movement receipt receives its separate locked-token approval");
             Check(chain.Blocks.Count == heightBeforeApproval && service.GetTransferReceipt(transactionId).Confirmations == 0 &&
-                service.GetTransferReceipt(transactionId).BlockHash == null &&
+                service.GetTransferReceipt(transactionId).BlockHash == null && service.GetTransferReceipt(transactionId).ValidationCount == 1 &&
+                chain.GetSpendableTokenOutputs(new[] { destination }, new[] { propagated }, tokenId).Sum(output => output.Output.Amount) == amount &&
                 service.GetBalance(new[] { validators[0].RewardAddress }) == validatorBalance + propagated.Fee,
-                "validated token movement immediately credits its fee without a block or confirmations");
+                "confirmed token movement releases recipient assets and credits its fee with one validation and no block");
             Block confirmed = batches.Confirm(chain, new[] { propagated }, validators);
             peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
-            Wait(() => service.GetTransferReceipt(transactionId).Status == "confirmed", "movement receipt confirms only after a validated block");
+            Wait(() => service.GetTransferReceipt(transactionId).BlockHash == confirmed.Hash, "confirmed movement receives actual block metadata");
             Check(chain.IsValid() && chain.GetTokenBalance(addresses, tokenId) == long.MaxValue - amount && chain.GetTokenBalance(new[] { destination }, tokenId) == amount &&
                 chain.GetBalance(addresses) == beforePovix - receipt.Fee && service.GetBalance(addresses) == beforePovix - receipt.Fee,
                 "confirmed movement conserves the token and deducts only the POVIX fee from the original wallet");

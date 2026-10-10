@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 13;
+        public const int ConsensusVersion = 14;
+        private const int ImmediateTokenVersion = 13;
         private const int ImmediateChangeVersion = 12;
         private const int ApprovalVersion = 11;
         private const int SelfValidatedVersion = 10;
@@ -210,7 +211,7 @@ namespace PrivateCoin.Core
         }
 
         private static Dictionary<string, UnspentOutput> BuildImmediateUtxo(IDictionary<string, UnspentOutput> confirmed,
-            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null, bool releaseTokenChange = true, bool releaseTokenAssets = true)
+            IEnumerable<Transaction> transactions, IList<Block> history, string stopBefore = null, bool releaseTokenChange = true, bool releaseTokenAssets = true, bool releaseTokenTransfers = true)
         {
             var result = new Dictionary<string, UnspentOutput>(confirmed, StringComparer.Ordinal);
             foreach (Transaction transaction in OrderByFeePriority(transactions))
@@ -224,7 +225,7 @@ namespace PrivateCoin.Core
                     if (approved)
                     {
                         AddValidationFee(transaction, result);
-                        if (releaseTokenChange && transaction.Kind == TransactionKind.TokenCreate)
+                        if ((releaseTokenChange && transaction.Kind == TransactionKind.TokenCreate) || (releaseTokenTransfers && transaction.Kind == TransactionKind.TokenTransfer))
                             for (int index = 0; index < transaction.Outputs.Count; index++)
                             {
                                 TransactionOutput output = transaction.Outputs[index];
@@ -533,7 +534,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -627,7 +628,7 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
                 item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
-            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ImmediateChangeVersion, block.ConsensusVersion >= ConsensusVersion) : utxo;
+            var collateral = block.ConsensusVersion >= SelfValidatedVersion ? BuildImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ImmediateChangeVersion, block.ConsensusVersion >= ImmediateTokenVersion, block.ConsensusVersion >= ConsensusVersion) : utxo;
             foreach (BlockValidator record in records)
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
@@ -1037,10 +1038,10 @@ namespace PrivateCoin.Core
             var owned = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
             lock (sync)
             {
-                var approved = GetApprovedTokenCreations(pendingTransactions);
-                return GetUnspentOutputs(owned).Where(item => item.Output.AssetId != null).Concat(approved.SelectMany(tx =>
-                    tx.Outputs.Select((output, index) => new UnspentOutput { TransactionId = tx.Id, OutputIndex = index,
-                        Output = output, TransactionKind = tx.Kind }).Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)))).ToArray();
+                var pending = pendingTransactions.ToList();
+                ValidateTransactions(pending);
+                return BuildImmediateUtxo(BuildUtxo(), pending, blocks).Values
+                    .Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)).ToArray();
             }
         }
 

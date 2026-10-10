@@ -31,6 +31,7 @@ namespace Povix.Dex.Models
         public string Status { get; set; }
         public int? BlockHeight { get; set; }
         public string BlockHash { get; set; }
+        public int ValidationCount { get; set; }
         public int Confirmations { get; set; }
         public int PeerCount { get; set; }
     }
