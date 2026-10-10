@@ -875,9 +875,13 @@ namespace PrivateCoin.Desktop
         {
             RefreshValidatorState();
             NamedWallet selected = SelectedWallet;
-            long availableBalance = selected == null ? 0 : blockchain.GetSpendableBalance(selected.Wallet.OwnedOneTimeAddresses, SnapshotPending());
+            WalletBalanceSummary balance = WalletBalanceSummary.Read(blockchain, selected?.Wallet, SnapshotPending());
             long lockedStake = selected == null ? 0 : selected.LockedStake;
-            balanceLabel.Text = ((decimal)availableBalance / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
+            balanceLabel.Text = ((decimal)balance.Total / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
+            toolTip.SetToolTip(balanceLabel, "Disponível para enviar: " +
+                ((decimal)balance.Available / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX" +
+                (balance.PendingChange == 0 ? string.Empty : "\nTroco aguardando confirmação em bloco: " +
+                    ((decimal)balance.PendingChange / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX"));
             validatorStatusLabel.Text = lockedStake == 0
                 ? "Validador inativo"
                 : "Ativo  |  Bloqueado: " + ((decimal)lockedStake / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
