@@ -9,7 +9,7 @@
 - blocos ligados por SHA-256 e prova de trabalho;
 - escolha da cadeia válida por maior trabalho acumulado, sem checkpoint; emissão em quatro fases e seleção do criador ponderada pelo stake;
 - transações assinadas com RSA/SHA-256 e validação contra gasto duplo;
-- fila de validação por maior taxa, com uma operação por bloco, incluindo a criação de carteiras e taxas pagas aos validadores das transações mediante assinaturas individuais;
+- fila de validação por maior taxa, com até 20 operações por bloco ou espera de 10 segundos, incluindo a criação de carteiras e taxas pagas aos validadores das transações mediante assinaturas individuais;
 - privacidade por endereços descartáveis: a carteira cria uma chave nova para cada recebimento, portanto não existe um endereço público permanente no blockchain;
 - propagação P2P de transações e blockchains, com enquadramento, limite de tamanho, deduplicação e retransmissão (gossip);
 - sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
@@ -31,7 +31,7 @@ using (var bob = new Wallet())
     pending.Clear();
     pending.Add(alice.CreateTransaction(chain, pending, bob.CreateReceiveAddress(), Blockchain.OneCoin, 1));
     chain.ValidatePendingTransactions(pending);
-    // A transferência terá seu próprio bloco, com aprovação assinada e dois validadores.
+    // A transferência será incluída em um bloco, com aprovação assinada e dois validadores.
 }
 ```
 
@@ -41,8 +41,8 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer`; a versão **15** do consenso
-exige uma operação por bloco. Transferências e operações de tokens
+O Core oferece `TokenCreate` e `TokenTransfer`; a versão **16** do consenso
+aceita de 1 a 20 operações por bloco. Transferências e operações de tokens
 exigem provas assinadas; registros de carteira contam sem essas provas.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
 permite criar tokens com nome de até 64 caracteres, símbolo de 1 a 10 letras
@@ -93,7 +93,7 @@ transferências automaticamente a cada cinco segundos; **Atualizar** relê os
 dados imediatamente. Criações e movimentações fora de blocos não acrescentam saldo, mesmo aprovadas. Entradas
 utilizadas em envios pendentes ficam reservadas e reduzem o saldo disponível,
 impedindo gasto duplo. Uma troca de cadeia atualiza a lista. A tela informa o
-identificador da transação enviada, que será confirmada em seu próprio bloco.
+identificador da transação enviada, que será confirmada em um bloco com até 20 operações.
 Transações pendentes salvas são propagadas novamente depois da sincronização,
 inclusive após reconexão ou reinício; não é necessário criar outro envio.
 
@@ -133,10 +133,10 @@ O Desktop permite consultar e movimentar os saldos de tokens confirmados.
 A criação de tokens é feita no DEX. Nenhum token é criado
 apenas ao compilar o projeto ou executar os testes.
 
-**Ativação:** clientes de consenso 15 aceitam novas operações com confirmação
-em bloco e preservam a validação do histórico até v14. O handshake desconecta
+**Ativação:** clientes de consenso 16 aceitam novas operações com confirmação
+em bloco e preservam a validação do histórico até v15. O handshake desconecta
 clientes com outra versão de consenso. A publicação exige uma
-atualização coordenada dos nós antes da primeira transação com tokens; esta
+atualização coordenada dos nós e da DEX antes da primeira produção de bloco v16; esta
 alteração não agenda nem executa atualização de uma rede em funcionamento.
 Veja `Tests/README.md` para executar a regressão de tokens.
 
@@ -194,13 +194,13 @@ carteira no DEX, especialmente quando existem cópias em pastas antigas.
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel inicia um nó TCP, conecta pares, sincroniza a cadeia, assina e propaga transações. Cada operação tem seu próprio bloco: criação de carteira, transferência de POVIX, criação de token, movimentação de token e bloqueio ou desbloqueio de garantia. Ao criar uma carteira, os 6 POVIX só ficam disponíveis após seu bloco de registro; a distribuição termina em 180.000 POVIX, depois de 30.000 carteiras recompensadas.
+O painel inicia um nó TCP, conecta pares, sincroniza a cadeia, assina e propaga transações. Cada bloco inclui até 20 operações: criação de carteira, transferência de POVIX, criação de token, movimentação de token e bloqueio ou desbloqueio de garantia. Ao criar uma carteira, os 6 POVIX só ficam disponíveis após o bloco de registro; a distribuição termina em 180.000 POVIX, depois de 30.000 carteiras recompensadas.
 
 Na seção **Validador**, **Bloquear e ativar** reserva a entrada da garantia e solicita seu bloco. A ativação só ocorre depois da confirmação desse bloco. **Desbloquear** solicita outro bloco; a garantia é liberada e o validador desativado após a confirmação. Carteiras e garantias não cobram taxa individual e podem ter seus blocos minerados com prova de trabalho, permitindo iniciar a rede sem stake.
 
 Transferências e operações de tokens aguardam aprovação assinada e um bloco próprio criado e confirmado por pelo menos dois validadores elegíveis. Remetentes e destinatários não podem validar sua própria operação. A fila prioriza taxa, horário e identificador, respeitando dependências. Entradas pendentes ficam reservadas para impedir gasto duplo; troco, recebimentos e taxas só são liberados no bloco. A taxa escolhida entre **Econômica**, **Normal** e **Prioritária** é descontada além do valor enviado e paga ao validador da operação, separadamente da recompensa do bloco.
 
-A mineração automática processa uma operação por vez, salva cada bloco e o propaga aos pares. Não é preciso reunir 20 operações. Para transferir entre carteiras locais, copie um endereço de **Receber em** da destinatária e use-o na carteira pagadora. Para testar a rede, abra duas instâncias em portas diferentes e conecte uma à outra por `127.0.0.1`.
+A mineração automática reúne até 20 operações aprovadas. Produz o bloco ao completar o lote ou após 10 segundos desde a primeira operação pronta, mesmo com apenas uma operação. Salva cada bloco e o propaga aos pares. Para transferir entre carteiras locais, copie um endereço de **Receber em** da destinatária e use-o na carteira pagadora. Para testar a rede, abra duas instâncias em portas diferentes e conecte uma à outra por `127.0.0.1`.
 
 ### Descoberta automática de nós
 
@@ -238,10 +238,21 @@ Esses identificadores são separação de protocolo, não atestado do binário. 
 
 ### Validação de transações e taxas
 
-`SelectApprovedValidationBatch` seleciona uma operação validada, por taxa,
+`SelectApprovedValidationBatch` seleciona até 20 operações validadas, por taxa,
 horário e identificador. Movimentações ainda não aprovadas e operações que
-dependem de saídas não confirmadas continuam pendentes. Uma operação pronta
-já permite criar seu próprio bloco; não há espera por um lote de 20.
+dependem de aprovações ausentes continuam pendentes. O produtor usa
+`GetApprovedTransactions` e `BlockProductionScheduler` para observar toda a fila,
+incluindo operações que excedem o primeiro lote. Um lote de 20 é produzido
+imediatamente; lotes de 1 a 19 são produzidos após 10 segundos desde a primeira
+operação pronta observada pelo nó. Novas chegadas não reiniciam o prazo e as
+operações restantes preservam seu tempo de espera. Filas vazias não geram blocos.
+
+O prazo usa um relógio monotônico local e orienta a produção, sem impor uma regra
+de relógio aos outros nós. Ao reiniciar, o produtor volta a observar as pendências
+restauradas. A confirmação ainda depende de conexão, sincronização, aprovações,
+validadores elegíveis e prova de trabalho; os 10 segundos são um gatilho para
+produção. O produtor separa operações quando seu conjunto de participantes
+impedir um lote de ter dois validadores elegíveis, preservando suas dependências.
 
 Transferências de POVIX e operações de tokens recebem uma `TransactionApproval`
 assinada por uma carteira com garantia bloqueada. A prova identifica a garantia,
@@ -269,25 +280,27 @@ confere esse valor antes de assinar. Mudanças na fila não aumentam a taxa esco
 O saldo distingue taxas de valores reservados. Transações recebidas pelo Desktop
 durante a sincronização são retidas até a cadeia ser validada, em vez de descartadas.
 
-Cada bloco inclui uma operação e sua prova, cobertas pelo hash e pelos votos.
+Cada bloco inclui de 1 a 20 operações e suas provas, cobertas pelo hash e pelos votos.
 Sua transação de recompensa contém somente a emissão prevista, sem taxas.
 As fases, os valores e a divisão de 30%/70% da recompensa permanecem iguais.
 Após o fim da emissão, as taxas continuam pertencendo aos validadores das operações.
 
-Novos blocos usam `ConsensusVersion = 15`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14 com suas regras originais e permite
-sua extensão em v15. Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14 são revalidados
+Novos blocos usam `ConsensusVersion = 16`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15 com suas regras originais e permite
+sua extensão em v16. Blocos v15 continuam exigindo uma operação; blocos históricos
+v4 a v14 mantêm os lotes originais de 20 quando exigidos por suas regras.
+Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15 são revalidados
 antes da migração. Nós e clientes DEX precisam atualizar juntos, pois o handshake
 rejeita versões diferentes. As pendências antigas passam a aguardar inclusão
 em bloco, sem apagar transações ou alterar saldos já confirmados.
 
 `AddProofOfStakeBlock` continua sendo a entrada para produzir um bloco de
-consenso: exige exatamente uma operação, garantias globais confirmadas,
+consenso: exige de 1 a 20 operações, garantias globais confirmadas,
 criador escolhido por stake e provas assinadas. O bloco só é acrescentado
 depois de satisfazer também a prova de trabalho. Blocos recebidos passam pelas
-mesmas regras. `AddBlock` aceita uma única operação sem transferência:
+mesmas regras. `AddBlock` aceita de 1 a 20 operações sem transferência:
 criação de carteira, bloqueio ou desbloqueio de garantia.
-Cada uma ocupa seu próprio bloco e não exige prova individual dos validadores
+Elas podem compartilhar um bloco e não exigem prova individual dos validadores
 com tokens bloqueados. Operações de garantia não cobram taxa de validador.
 Transferências e operações de tokens exigem votos do bloco e sua prova
 individual assinada. A recompensa do bloco mantém seu cálculo e divisão.
@@ -298,11 +311,11 @@ cadeia nem minera um bloco. Depois do limite, o registro conta sem emitir POVIX.
 O Core valida a fila completa e reserva suas entradas. Créditos iniciais, tokens,
 garantias, taxas, recebimentos e troco continuam indisponíveis até a confirmação
 do bloco. A fila e suas dependências são salvas
-e propagadas em ordem determinística. Cada operação é incluída em seu próprio bloco, sem duplicar o saldo.
+e propagadas em ordem determinística. Cada operação é incluída uma única vez em um bloco, sem duplicar o saldo.
 
 Históricos v9 preservam suas `WalletDistribution` e seus comprovantes de valor
 zero por `WalletDistributionId`. `GetUncountedWalletCreations` recupera apenas
-esses comprovantes históricos. Eles podem ser confirmados em blocos v15 sem nova emissão.
+esses comprovantes históricos. Eles podem ser confirmados em blocos v16 sem nova emissão.
 Pendências v8 mantêm o próprio registro e não precisam de um bloco de migração.
 Endereços repetidos, gastos duplos e referências órfãs são rejeitados ao validar
 pendências e cadeias recebidas.
@@ -353,7 +366,7 @@ A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitár
 
 Quando há uma transferência aprovada e pelo menos dois validadores locais elegíveis ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
 
-O bloqueio da garantia é publicado como uma transação `StakeLock`: ela consome UTXOs assinados, cria uma saída de garantia que não pode ser usada por uma transferência comum e vincula globalmente o valor, a chave pública do validador e o endereço de recompensa. Todo nó reconstrói o conjunto ativo a partir das saídas não gastas confirmadas na cadeia. Ao validar um bloco v15, considera somente a cadeia anterior; uma garantia pendente não autoriza seus votos. Cada criador e confirmador também assina individualmente o mesmo payload determinístico do voto; as chaves, papéis e assinaturas integram a hash do bloco e são verificados novamente ao carregar ou sincronizar a cadeia.
+O bloqueio da garantia é publicado como uma transação `StakeLock`: ela consome UTXOs assinados, cria uma saída de garantia que não pode ser usada por uma transferência comum e vincula globalmente o valor, a chave pública do validador e o endereço de recompensa. Todo nó reconstrói o conjunto ativo a partir das saídas não gastas confirmadas na cadeia. Ao validar um bloco v15 ou v16, considera somente a cadeia anterior; uma garantia pendente não autoriza seus votos. Cada criador e confirmador também assina individualmente o mesmo payload determinístico do voto; as chaves, papéis e assinaturas integram a hash do bloco e são verificados novamente ao carregar ou sincronizar a cadeia.
 
 ### Reconexão do Desktop
 

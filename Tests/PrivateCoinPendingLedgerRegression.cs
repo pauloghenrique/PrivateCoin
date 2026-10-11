@@ -41,6 +41,11 @@ internal static class PrivateCoinPendingLedgerRegression
                     }
                     catch (Exception error) { failure = error; }
                 };
+                receiver.ChainReceived += (source, message) =>
+                {
+                    try { lock (gate) receiverChain.TryReplaceChain(message.Blocks); }
+                    catch (Exception error) { failure = error; }
+                };
                 sender.Start(new string[0]); receiver.Start(new string[0]);
                 receiver.ConnectAsync("127.0.0.1", senderPort).GetAwaiter().GetResult();
                 foreach (Transaction transaction in Blockchain.OrderByFeePriority(pending)) sender.BroadcastAsync(transaction).GetAwaiter().GetResult();
@@ -51,15 +56,31 @@ internal static class PrivateCoinPendingLedgerRegression
                 {
                     Check(received.Count == 3 && received.Select(tx => tx.Id).SequenceEqual(Blockchain.OrderByFeePriority(pending).Select(tx => tx.Id)),
                         "peers receive wallet creation, collateral lock and independent transfer in valid order");
-                    Check(senderChain.Blocks.Count == height && receiverChain.Blocks.Count == height && Blockchain.SelectValidationBatch(received).Count == 1,
-                        "propagation alone creates no block; one operation is ready for an individual block");
+                    Check(senderChain.Blocks.Count == height && receiverChain.Blocks.Count == height && Blockchain.SelectValidationBatch(received).Count == 3,
+                        "propagation alone creates no block; the selector can return a partial batch");
                     Check(receiverChain.GetActiveValidators(received).Count == 0 &&
                         receiverChain.GetSpendableBalance(wallet.OwnedOneTimeAddresses, received) == 0 &&
                         receiverChain.GetSpendableBalance(new[] { "recipient" }, received) == 0,
                         "remote pending operations reserve inputs without activating collateral or releasing transfer outputs");
                 }
+                var ready = pending.Where(Blockchain.IsSelfValidatedOperation).ToList();
+                while (ready.Count < Blockchain.MaxOperationsPerBlock)
+                    ready.Add(senderChain.CreateWalletCreationTransaction("tcp-batch-" + ready.Count, ready));
+                var scheduler = new BlockProductionScheduler(() => TimeSpan.Zero);
+                Block block = senderChain.AddBlock(scheduler.SelectBatch(senderChain.GetApprovedTransactions(ready)));
+                sender.BroadcastChainAsync(senderChain.Blocks).GetAwaiter().GetResult();
+                deadline = DateTime.UtcNow.AddSeconds(15);
+                while (DateTime.UtcNow < deadline) { lock (gate) { if (receiverChain.Blocks.Last().Hash == block.Hash || failure != null) break; } Thread.Sleep(50); }
+                if (failure != null) throw failure;
+                lock (gate)
+                {
+                    Check(receiverChain.Blocks.Last().Hash == block.Hash && receiverChain.Blocks.Last().Transactions.Count == 20 && receiverChain.IsValid(),
+                        "a real TCP peer validates and adopts a full twenty-operation v16 block");
+                    Check(receiverChain.GetActiveValidators().Count == 1 && receiverChain.GetBalance(new[] { "recipient" }) == 0,
+                        "the received batch confirms its collateral while the unapproved transfer remains unconfirmed");
+                }
             }
-            Console.WriteLine("3 pending ledger P2P checks passed"); return 0;
+            Console.WriteLine("5 pending ledger P2P checks passed"); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }

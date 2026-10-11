@@ -99,9 +99,19 @@ internal static class PrivateCoinTokenApprovalRegression
                     "historical v" + version + " preserves its 20-operation block and original fees");
                 var registration = restored.CreateWalletCreationTransaction("upgrade-v" + version, new Transaction[0]);
                 restored.AddBlock(new[] { registration });
-                Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == 15 && restored.Blocks.Last().Transactions.Count == 1,
-                    "historical v" + version + " extends with a single-operation v15 block");
+                Check(restored.IsValid() && restored.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion && restored.Blocks.Last().Transactions.Count == 1,
+                    "historical v" + version + " extends with a partial block in the current consensus");
             }
+            var v15 = new Blockchain(Copy(chain.Blocks.ToList()));
+            LegacyConsensusFixture.ConfirmApprovedLegacy(v15, Copy(historical.Take(1).ToArray()), validators, 15);
+            var v15Restored = new Blockchain(Copy(v15.Blocks.ToList()));
+            Check(v15Restored.GetTokenBalance(new[] { c }, historical[0].Token.Id) == 456,
+                "historical v15 preserves its single-operation block and fee");
+            var upgraded = new List<Transaction>();
+            for (int i = 0; i < 20; i++) upgraded.Add(v15Restored.CreateWalletCreationTransaction("after-v15-" + i, upgraded));
+            v15Restored.AddBlock(upgraded);
+            Check(v15Restored.IsValid() && new Blockchain(Copy(v15Restored.Blocks.ToList())).Blocks.Last().Transactions.Count == 20,
+                "historical v15 extends with a full 20-operation v16 block");
             var next = new List<Transaction>();
             for (int i = 0; i < 20; i++) next.Add(chain.CreateWalletCreationTransaction("after-v10-" + i, next));
             foreach (var registration in next) chain.AddBlock(new[] { registration });

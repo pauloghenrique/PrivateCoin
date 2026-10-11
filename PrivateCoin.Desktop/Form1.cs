@@ -23,6 +23,8 @@ namespace PrivateCoin.Desktop
         private bool persistenceAvailable = true;
         private bool miningInProgress;
         private bool updateCheckInProgress;
+        private readonly BlockProductionScheduler blockScheduler = new BlockProductionScheduler();
+        private readonly Timer blockProductionTimer;
 
         private sealed class FeeChoice
         {
@@ -37,6 +39,8 @@ namespace PrivateCoin.Desktop
         public Form1()
         {
             InitializeComponent();
+            blockProductionTimer = new Timer(components);
+            blockProductionTimer.Tick += (sender, args) => StartAutomaticMining();
             try
             {
                 List<NamedWallet> legacyWallets;
@@ -645,7 +649,9 @@ namespace PrivateCoin.Desktop
 
         private async void StartAutomaticMining()
         {
-            if (miningInProgress || !networkReadiness.IsReady || !IsNetworkConnected()) return;
+            if (IsDisposed || Disposing || miningInProgress) return;
+            blockProductionTimer.Stop();
+            if (!networkReadiness.IsReady || !IsNetworkConnected()) return;
             miningInProgress = true;
             try
             {
@@ -653,10 +659,13 @@ namespace PrivateCoin.Desktop
                 while (true)
                 {
                     await ApprovePendingTransactions();
-                    Transaction[] batch = blockchain.SelectApprovedValidationBatch(SnapshotPending()).ToArray();
+                    Transaction[] ready = blockchain.GetApprovedTransactions(SnapshotPending()).ToArray();
+                    ValidatorStake[] confirmedValidators = blockchain.GetActiveValidators().ToArray();
+                    Transaction[] batch = blockScheduler.SelectBatch(ready,
+                        candidate => candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate, confirmedValidators).Length >= 2).ToArray();
                     if (batch.Length == 0) break;
 
-                    ValidatorStake[] activeValidators = EligibleValidators(batch);
+                    ValidatorStake[] activeValidators = EligibleValidators(batch, confirmedValidators);
                     bool selfValidatedOnly = batch.All(Blockchain.IsSelfValidatedOperation);
                     if (!selfValidatedOnly && activeValidators.Length < 2)
                     {
@@ -665,7 +674,7 @@ namespace PrivateCoin.Desktop
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
-                    Log("Criação de bloco iniciada para a operação " + ShortId(batch[0].Id) + ".", true);
+                    Log("Criação de bloco iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) aprovada(s).", true);
 
                     Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && activeValidators.Length < 2 ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
@@ -684,7 +693,7 @@ namespace PrivateCoin.Desktop
                             "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
                             " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     }
-                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com uma operação validada: " + ShortId(block.Hash) + ".", true);
+                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) validada(s): " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
@@ -692,20 +701,25 @@ namespace PrivateCoin.Desktop
             }
             catch (Exception error)
             {
-                Log("Mineração cancelada: a operação não passou na validação — " + error.Message, false);
+                Log("Mineração cancelada: o lote não passou na validação — " + error.Message, false);
                 RemoveInvalidPendingTransactions();
             }
             finally
             {
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
-                Transaction[] nextBatch = blockchain.SelectApprovedValidationBatch(remaining).ToArray();
-                miningStatusLabel.Text = nextBatch.Length > 0 && !nextBatch.All(Blockchain.IsSelfValidatedOperation) && EligibleValidators(nextBatch).Length < 2
-                    ? "Aguardando 2 validadores sem participação na transferência"
-                    : "Operações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "  |  Uma operação por bloco";
+                miningStatusLabel.Text = blockScheduler.RemainingWait > TimeSpan.Zero
+                    ? "Aguardando até 20 operações ou " + Math.Ceiling(blockScheduler.RemainingWait.TotalSeconds).ToString(CultureInfo.InvariantCulture) + " s para criar o bloco"
+                    : remaining.Length > 0
+                        ? "Operações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "  |  Aguardando aprovações e validadores elegíveis"
+                        : "Até 20 operações por bloco  |  Espera máxima: 10 s";
                 UpdateChainSummary();
-                if (!IsDisposed && nextBatch.Length > 0 && (nextBatch.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(nextBatch).Length >= 2))
-                    BeginInvoke(new Action(StartAutomaticMining));
+                if (!IsDisposed && !Disposing && remaining.Length > 0 && networkReadiness.IsReady && IsNetworkConnected())
+                {
+                    blockProductionTimer.Interval = blockScheduler.RemainingWait > TimeSpan.Zero
+                        ? (int)Math.Max(1, Math.Min(1000, Math.Ceiling(blockScheduler.RemainingWait.TotalMilliseconds))) : 1000;
+                    blockProductionTimer.Start();
+                }
             }
         }
 
@@ -728,10 +742,9 @@ namespace PrivateCoin.Desktop
             }
         }
 
-        private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions)
+        private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions, ValidatorStake[] eligible)
         {
             Transaction[] batch = transactions.ToArray();
-            ValidatorStake[] eligible = blockchain.GetActiveValidators(batch).ToArray();
             return wallets.Where(item => eligible.Any(stake => item.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress)) &&
                     !batch.Any(item.Wallet.IsParticipant))
                 .Select(item =>
@@ -986,6 +999,7 @@ namespace PrivateCoin.Desktop
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            blockProductionTimer.Stop();
             if (peerNode != null) peerNode.Dispose();
             SaveState();
             foreach (NamedWallet wallet in wallets) wallet.Dispose();

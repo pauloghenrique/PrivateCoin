@@ -36,8 +36,8 @@ internal static class PrivateCoinValidationRegression
             Reject(() => LegacyConsensusFixture.Confirm(chain, pending.Take(19), validators), "19 validations cannot produce a consensus block");
             Reject(() => LegacyConsensusFixture.Confirm(chain, pending, validators), "21 validations must be split into batches");
             Reject(() => chain.AddBlock(new[] { pending[0] }), "plain blocks cannot bypass transfer validation");
-            Check(chain.Blocks.Count == height && Blockchain.SelectValidationBatch(pending.Take(19)).Count == 1,
-                "the current selector chooses one operation without changing the historical chain");
+            Check(chain.Blocks.Count == height && Blockchain.SelectValidationBatch(pending.Take(19)).Count == 19,
+                "the current selector allows partial batches without changing the historical chain");
             Transaction[] batch = Blockchain.OrderByFeePriority(pending).Take(20).ToArray();
             List<Block> legacyBlocks = Clone(chain.Blocks);
             for (int index = 1; index < legacyBlocks.Count; index++)

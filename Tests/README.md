@@ -193,7 +193,7 @@ confirmações, desempate, rejeição de cadeia inválida e reorganização sem
 checkpoint. Confere que zeros adicionais não dão trabalho extra e que
 confirmações/saldos saem da cadeia quando uma transação fica órfã.
 `LegacyConsensusFixture` existe somente nos testes para preparar carteiras
-confirmadas e provas históricas v4/v10–v14; não altera a API de produção.
+confirmadas e provas históricas v4/v10–v15; não altera a API de produção.
 
 Para verificar o bloqueio durante reconexão, compile o Core e execute:
 
@@ -224,7 +224,7 @@ carteiras locais, atualizações repetidas, a remoção de garantias órfãs e a
 adoção das garantias da cadeia substituta. A interface visual precisa ser
 verificada no Windows.
 
-Para verificar carteiras, garantias e transferências confirmadas em bloco no consenso v15:
+Para verificar carteiras, garantias e transferências confirmadas em bloco no consenso v16:
 
 ```sh
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Runtime.Serialization \
@@ -235,7 +235,7 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinWalletValidationRegr
 
 Confere os 6 POVIX indisponíveis até o bloco, bloqueio e desbloqueio de garantias
 confirmados, bootstrap com uma operação por bloco, transferências com provas assinadas,
-reserva contra gasto duplo, persistência, rejeição de blocos vazios ou com mais de uma operação e limite
+reserva contra gasto duplo, persistência, rejeição de blocos vazios ou com mais de 20 operações e limite
 de emissão. `LegacyConsensusFixture.FundBatch` prepara carteiras confirmadas;
 `SelfBlock` confirma cada garantia em um bloco individual.
 
@@ -262,10 +262,12 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinPendingLedgerRegress
 ```
 
 Confere a propagação de criação, bloqueio e transferência,
-as reservas e a ausência de ativação de garantias no peer receptor e a confirmação individual após mineração, sem formar lotes de 20
-operações. Usa somente carteiras e arquivos descartáveis.
+as reservas e a ausência de ativação de garantias no peer receptor e a confirmação
+após mineração de lotes parciais. Propaga também um bloco v16 real com 20 operações
+e verifica sua adoção, garantia confirmada e transferência ainda pendente.
+Usa somente carteiras e arquivos descartáveis.
 
-## Aprovação prévia e confirmação em bloco (consenso v15)
+## Aprovação prévia e confirmação em bloco (consenso v16)
 
 `PrivateCoinTokenApprovalRegression.cs` verifica assinaturas, garantia confirmada,
 reserva de saldo, rejeição de provas falsas, pagamento exato da taxa somente no
@@ -284,3 +286,23 @@ A regressão DEX verifica `pending → validated → confirmed`, listagem e movi
 somente após criação em bloco, taxa única, repetição, persistência e reorganização.
 Execute `node Tests/PovixApprovalStatusRegression.js` para conferir os comprovantes,
 a remoção de hashes antigas e a indicação de saldo e taxa aguardando o bloco.
+
+## Produção com limite e prazo
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Numerics -r:System.Runtime.Serialization \
+  -out:work/PrivateCoinBlockProductionRegression.exe \
+  Tests/PrivateCoinBlockProductionRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinBlockProductionRegression.exe
+```
+
+Usa um relógio injetado para verificar os 10 segundos sem esperas reais: a vigésima
+operação dispara o lote imediatamente, chegadas posteriores não reiniciam o prazo,
+35 operações deixam 15 com a espera original e filas vazias não geram blocos.
+Confere dependências, duplicatas e lotes menores quando os validadores não podem
+produzir o conjunto completo. Exercita blocos reais de 1, 2 e 20 operações,
+aprovações, saldo, taxas, criação de tokens, bloqueio/desbloqueio e restauração.
+Blocos recebidos com 21 operações, lotes v15 com mais de uma e retrocesso de versão
+são rejeitados. As regressões de aprovação também restauram um bloco assinado v15
+e estendem sua cadeia com um lote v16 de 20 operações.
