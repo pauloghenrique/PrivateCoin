@@ -285,7 +285,34 @@ verifica que sincronizar libera a validação, mantendo saldo e taxa pendentes.
 A regressão DEX verifica `pending → validated → confirmed`, listagem e movimentação
 somente após criação em bloco, taxa única, repetição, persistência e reorganização.
 Execute `node Tests/PovixApprovalStatusRegression.js` para conferir os comprovantes,
-a remoção de hashes antigas e a indicação de saldo e taxa aguardando o bloco.
+a remoção de hashes antigas, a separação de aprovações e confirmações em bloco
+e a indicação de saldo e taxa aguardando o limite de 20 operações ou 10 segundos.
+
+## Sincronização DEX/Desktop antes da validação
+
+Após compilar `Povix.Dex` em Release, execute:
+
+```sh
+mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
+  -r:System.Core -r:System.Numerics -r:System.Web.Extensions \
+  -r:System.Runtime.Serialization -r:System.ComponentModel.DataAnnotations \
+  -out:work/PovixDexDesktopSynchronizationRegression.exe \
+  Tests/PovixDexDesktopSynchronizationRegression.cs Tests/LegacyConsensusFixture.cs \
+  PrivateCoin.Desktop/NetworkReadiness.cs
+MONO_PATH=Povix.Dex/bin mono work/PovixDexDesktopSynchronizationRegression.exe \
+  work/dex-desktop-sync-regression
+```
+
+Use um diretório vazio a cada execução. Dois peers TCP reais reproduzem o
+caso em que o Desktop rejeita o cache antigo do DEX antes de este adotar sua
+cadeia mais recente. A regressão usa o `NetworkReadiness` real do Desktop e
+confere que a resposta com a cadeia adotada libera criações e transferências
+para validação. Antes da correção, a criação fica retida nesse ponto.
+Confere aprovação assinada, ausência de bloco aos 9 segundos, produção e
+confirmação de um bloco assinado aos 10 segundos com relógio injetado, saldo
+do token, nova sincronização após desconectar e conectar um DEX com cache
+vazio e ausência de respostas repetidas a uma cadeia idêntica. Usa somente
+carteiras e dados descartáveis.
 
 ## Produção com limite e prazo
 

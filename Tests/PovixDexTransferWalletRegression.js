@@ -49,7 +49,8 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
                 receivingAddresses: metadata.receivingAddresses.map(item => ({ ...item,
                     confirmedAtomic: tokenConfirmed == null ? item.confirmedAtomic : tokenConfirmed })) }];
         }
-        else if (url === '/history') result = [];
+        else if (url === '/history') result = [{ transactionId: 'a'.repeat(64), amountAtomic: '1',
+            status: 'validated', destinationAddress: fixture.expected.DestinationAddress }];
         else if (url === '/prepare') {
             const body = new URLSearchParams(options.body);
             assert.equal(body.get('changeAddress'), fixture.changeAddress);
@@ -98,6 +99,7 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     console.log('PASS original Desktop keys show zero and the missing issuance key; reopening the updated backup restores spendable tokens before signing');
     await refresh();
     assert.equal(node('app-message').textContent, '');
+    assert(node('transfer-history').children[0].textContent.includes('Validado'), 'approved movements stay distinct from block confirmations in history');
     assert.equal(node('TokenId').value, fixture.expected.TokenId);
     assert.equal(node('prepare-transfer').disabled, false);
     node('TokenId').value = ''; node('TokenId').listeners.change();
