@@ -53,7 +53,7 @@ internal static class PrivateCoinTokenConfirmationRegression
                     Check(!chain.HasValidTransactionApproval(forged[0], forged) && chain.GetTokens(forged).Count == 0,
                         "forged approval cannot register a token");
                     Block creationBlock = batches.Confirm(chain, pending, validators);
-                    Check(chain.IsValid() && creationBlock.ConsensusVersion == 15 && chain.GetTokenBalance(creator.OwnedOneTimeAddresses, token.Token.Id) == 100 &&
+                    Check(chain.IsValid() && creationBlock.ConsensusVersion == Blockchain.ConsensusVersion && chain.GetTokenBalance(creator.OwnedOneTimeAddresses, token.Token.Id) == 100 &&
                         chain.GetSpendableBalance(creator.OwnedOneTimeAddresses, new Transaction[0]) == Blockchain.WalletCreationReward - 7,
                         "creation block registers exact token supply and returns the original native change");
                     var entry = chain.GetTokenBalances(creator.OwnedOneTimeAddresses).Single();

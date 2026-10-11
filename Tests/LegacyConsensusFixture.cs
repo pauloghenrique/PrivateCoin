@@ -33,8 +33,6 @@ internal static class LegacyConsensusFixture
         if (chain.Blocks.Last().ConsensusVersion >= 8)
         {
             var batch = new List<Transaction> { chain.CreateWalletCreationTransaction(address, new Transaction[0]) };
-            while (batch.Count < Blockchain.ValidationsPerBlock)
-                batch.Add(chain.CreateWalletCreationTransaction("fixture-" + Guid.NewGuid().ToString("N"), batch));
             return chain.AddBlock(batch);
         }
         var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
@@ -75,8 +73,8 @@ internal static class LegacyConsensusFixture
         IEnumerable<ValidatorStake> validators, int version)
     {
         var operations = OrderByFeePriority(transactions).ToList();
-        if (operations.Count != ValidationsPerBlock || version < 11 || version > 14)
-            throw new InvalidOperationException("Historical approval fixtures require 20 operations in v11-v14.");
+        if (operations.Count != (version == 15 ? 1 : ValidationsPerBlock) || version < 11 || version > 15)
+            throw new InvalidOperationException("Historical approval fixtures require 20 operations in v11-v14 or one in v15.");
         var active = validators.ToArray();
         var parent = chain.Blocks.Last(); int height = chain.Blocks.Count;
         var creator = ProofOfStake.SelectCreator(active, parent.Hash, height);

@@ -30,8 +30,10 @@ internal static class PrivateCoinWalletValidationRegression
                 Reject(() => chain.ValidatePendingTransactions(new[] { forged }), "wallet registrations cannot charge a fee");
                 Check(chain.SelectApprovedValidationBatch(pending).Count == 1, "one registration is ready without waiting for other operations");
                 Reject(() => chain.AddBlock(new Transaction[0]), "empty blocks are rejected");
-                var another = chain.CreateWalletCreationTransaction(b, pending);
-                Reject(() => chain.AddBlock(pending.Concat(new[] { another })), "two registrations cannot share a new block");
+                var oversized = pending.ToList();
+                for (int i = 1; i <= Blockchain.MaxOperationsPerBlock; i++)
+                    oversized.Add(chain.CreateWalletCreationTransaction("oversized-" + i, oversized));
+                Reject(() => chain.AddBlock(oversized), "21 registrations cannot share a new block");
                 Block funding = chain.AddBlock(pending);
                 Check(chain.IsValid() && funding.Transactions.Count == 1 && chain.GetBalance(first.OwnedOneTimeAddresses) == Blockchain.WalletCreationReward,
                     "one registration forms its own valid bootstrap block without staked validators");

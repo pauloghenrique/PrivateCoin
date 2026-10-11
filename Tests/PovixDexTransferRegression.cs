@@ -148,7 +148,7 @@ internal static partial class PovixDexRegression
             var ordinary = TokenTransfer.Prepare(chain, new Transaction[0], PublicKeys(recipient), tokenId, addresses[0], 10000000, destination, 2);
             chain.ValidatePendingTransactions(new[] { ordinary.Complete(ordinary.InputAddresses.Select(address => SignBytes(recipient, address, ordinary.SigningPayload))) });
             Check(true, "holder transfers remain valid under the existing consensus outside the restricted DEX screen");
-            using (var restored = new TokenNetworkService(directory, Port(), new string[0]))
+            using (var restored = OpenOfflineService(directory, Port()))
             {
                 Check(restored.GetTransferReceipt(allId).Status == "pending" && !restored.GetNetwork().CanCreate &&
                     restored.SubmitTransferAsync((string)allDraft["draftId"], allSignatures, allAuthorization, "transfer-owner").GetAwaiter().GetResult() == allId,

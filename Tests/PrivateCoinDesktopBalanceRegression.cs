@@ -84,8 +84,6 @@ internal static class PrivateCoinDesktopBalanceRegression
                 Balance(chain, sender, sending, remaining, 0, "repeated refreshes do not accumulate change");
                 Balance(chain, first, sending, 0, 0, "validator fees stay pending until block confirmation");
                 Reject(() => first.CreateTransaction(chain, sending, recipientAddress, 1, 1), "pending validator fees cannot fund a payment");
-                while (sending.Count < Blockchain.ValidationsPerBlock)
-                    sending.Add(chain.CreateWalletCreationTransaction("balance-fixture-" + sending.Count, sending));
                 chain.AddProofOfStakeBlock(chain.SelectApprovedValidationBatch(sending), validators);
                 Balance(chain, sender, new Transaction[0], remaining, remaining,
                     "block confirmation releases the same remaining balance without a visual jump");
