@@ -223,10 +223,10 @@ namespace Povix.Dex.Services
         {
             try
             {
+                bool changed;
                 lock (sync)
                 {
                     var candidate = new Blockchain(blockchain.Blocks);
-                    bool changed;
                     if (!candidate.TrySynchronizeChain(args.Blocks, out changed)) return;
                     if (changed)
                     {
@@ -248,7 +248,12 @@ namespace Povix.Dex.Services
                     }
                     synchronized = node.ConnectedPeerCount > 0; // Identical validated chains also complete synchronization.
                 }
-                RelayPending();
+                // A Desktop may have rejected our older snapshot and deferred our
+                // transactions. Return the adopted chain first so it can complete
+                // synchronization and drain its inbox. Identical chains must not
+                // trigger another chain reply, which would create an echo loop.
+                if (changed) RelayChain();
+                else RelayPending();
             }
             catch (Exception error) when (IsInvalidData(error) || error is IOException || error is UnauthorizedAccessException)
             { Trace.TraceWarning("DEX: não foi possível aceitar a cadeia recebida ({0}).", error.GetType().Name); }

@@ -15,14 +15,15 @@
             const transfer = app.dataset.operation === 'transfer';
             byId('receipt-title').textContent = confirmed ? (transfer ? 'Movimentação confirmada.' : 'Token registrado.') : validated ? (transfer ? 'Movimentação validada.' : 'Criação validada.') : pending ? (transfer ? 'Transação enviada.' : 'Aguardando validação.') : (transfer ? 'Movimentação não confirmada.' : 'Registro não confirmado.');
             byId('receipt-description').textContent = confirmed ? (transfer ? 'A transferência consta em um bloco validado da rede POVIX.' : 'A criação do token consta em um bloco validado da rede POVIX.') :
-                validated ? 'A operação foi aprovada pelo validador e aguarda a criação de seu próprio bloco. Os saldos e a taxa serão efetivados após a confirmação em bloco.' :
+                validated ? 'A operação foi aprovada pelo validador. Com validadores elegíveis, o bloco é produzido ao reunir 20 operações aprovadas ou após 10 segundos de espera. Os saldos e a taxa serão efetivados após a confirmação em bloco.' :
                 pending ? (data.waitingReason || 'A operação aguarda aprovação de uma carteira com garantia confirmada em bloco.') :
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : validated ? 'Validado' : pending ? (transfer ? 'Pendente' : 'Aguardando validação') : 'Não confirmado';
             byId('receipt-status').classList.toggle('waiting', !confirmed);
-            byId('receipt-confirmations').textContent = String(data.validations || 0);
-            byId('receipt-block').textContent = data.blockHeight == null ? 'Aguardando confirmação' : String(data.blockHeight);
-            byId('receipt-hash').textContent = data.blockHash || '—';
+            byId('receipt-validations').textContent = String(data.validations || 0);
+            byId('receipt-confirmations').textContent = String(confirmed ? data.confirmations || 0 : 0);
+            byId('receipt-block').textContent = confirmed ? String(data.blockHeight) : 'Aguardando confirmação';
+            byId('receipt-hash').textContent = confirmed ? data.blockHash || '—' : '—';
             byId('receipt-connectivity').textContent = data.peerCount + ' pares conectados · Atualização automática a cada 10 segundos';
         } catch (_) { byId('receipt-connectivity').textContent = 'Consulta indisponível no momento. A confirmação exibida será atualizada ao reconectar.'; }
         finally { refreshing = false; }

@@ -115,7 +115,7 @@
                 const url = new URL(app.dataset.receiptUrl.replace('__id__', entry.transactionId), location.origin);
                 if (url.origin !== location.origin) throw new Error('Comprovante inválido.');
                 const link = document.createElement('a'); link.href = url.href;
-                const status = entry.status === 'confirmed' ? 'Confirmado' : entry.status === 'pending' ? 'Pendente' : 'Não confirmado';
+                const status = entry.status === 'confirmed' ? 'Confirmado' : entry.status === 'validated' ? 'Validado' : entry.status === 'pending' ? 'Pendente' : 'Não confirmado';
                 link.textContent = wallet.formatAtomic(entry.amountAtomic, token.decimals) + ' ' + token.symbol + ' · ' + status;
                 const address = document.createElement('small'); address.textContent = entry.destinationAddress; link.appendChild(address);
                 return link;

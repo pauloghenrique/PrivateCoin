@@ -10,15 +10,18 @@ as chaves privadas não são enviadas ao servidor. O Core prepara a transação 
 chaves públicas e UTXOs confirmados; o navegador confere o conteúdo apresentado,
 assina com Web Crypto RSA/SHA-256 e envia apenas as assinaturas. O nó valida a
 transação novamente, salva a fila e a propaga por `PeerNode.BroadcastAsync`.
-O comprovante `/tokens/registro/{id}` diferencia pendente, confirmado e retirado
-da fila. Só um bloco recebido e validado pode confirmar o registro.
+O comprovante `/tokens/registro/{id}` diferencia pendente, aprovado aguardando
+bloco, confirmado e retirado da fila. A aprovação da operação aparece separada
+das confirmações em bloco. Só um bloco recebido e validado confirma o registro
+e efetiva os saldos e a taxa. Com validadores elegíveis, o Desktop produz um
+bloco ao reunir 20 operações aprovadas ou após 10 segundos de espera.
 
 ## Configurar a rede
 
 1. Execute o projeto ASP.NET MVC 5 em IIS/IIS Express com .NET Framework 4.8 e
    HTTPS. Restaure os pacotes NuGet de `packages.config` antes de compilar.
 2. Configure `PeerSeeds` em `Web.config` com pares **reais** da rede existente,
-   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 3
+   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 16
    e o gênese fixado no Core. Não são fornecidos endpoints fictícios.
 3. `DexListenPort` usa 4780 por padrão. Use uma porta livre; o Desktop e o
    explorer podem continuar em suas portas próprias. A criação aguarda ao menos
@@ -34,6 +37,12 @@ da fila. Só um bloco recebido e validado pode confirmar o registro.
 Sem pares configurados o formulário continua disponível, mas não transmite
 criações. Os validadores existentes precisam incluir a operação em um bloco;
 o DEX não confirma suas próprias transações.
+
+Ao adotar uma cadeia mais recente, o DEX devolve essa cadeia aos pares antes
+de reenviar as operações pendentes. Assim, um Desktop que recusou o cache
+inicial atrasado consegue concluir a sincronização e liberar sua fila de
+validação. Cadeias idênticas não provocam outra resposta de cadeia, evitando
+reenvios contínuos entre nós DEX.
 
 ## Abrir o arquivo de carteiras
 
