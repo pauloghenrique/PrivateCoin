@@ -21,6 +21,7 @@
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : validated ? 'Validado' : pending ? (transfer ? 'Pendente' : 'Aguardando validação') : 'Não confirmado';
             if (exchange) {
+                if (byId('receipt-pool-state')) byId('receipt-pool-state').textContent = data.poolStatusMessage || 'Aguardando atualização do estado da pool.';
                 byId('receipt-title').textContent = confirmed ? 'Operação confirmada.' : validated ? 'Operação validada.' : pending ? 'Aguardando validação.' : 'Operação não confirmada.';
                 if (confirmed) byId('receipt-description').textContent = 'A operação consta em um bloco validado da rede POVIX. As reservas e os saldos foram efetivados juntos.';
             }

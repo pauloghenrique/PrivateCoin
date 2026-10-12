@@ -10,6 +10,11 @@ namespace PrivateCoin.Core
     {
         public static UnsignedTokenTransfer Prepare(Blockchain chain, IEnumerable<Transaction> pending,
             IEnumerable<string> publicKeys, string tokenId, string destinationAddress, long amount, string changeAddress, long fee)
+        { return Prepare(chain, pending, publicKeys, tokenId, destinationAddress, amount, changeAddress, fee, null); }
+
+        public static UnsignedTokenTransfer Prepare(Blockchain chain, IEnumerable<Transaction> pending,
+            IEnumerable<string> publicKeys, string tokenId, string destinationAddress, long amount, string changeAddress, long fee,
+            IEnumerable<string> excludedInputs)
         {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pending == null) throw new ArgumentNullException(nameof(pending));
@@ -21,8 +26,9 @@ namespace PrivateCoin.Core
             if (!chain.GetTokens(queue).Any(token => token.Id == tokenId)) throw new ArgumentException("Token is not confirmed.");
             var keys = publicKeys.Distinct(StringComparer.Ordinal).ToDictionary(Crypto.Sha256, key => key, StringComparer.Ordinal);
             if (!keys.ContainsKey(changeAddress)) throw new ArgumentException("Change must belong to the signing wallet.");
-            var funding = Select(chain.GetSpendableOutputs(keys.Keys, queue), fee, "Insufficient POVIX for the transaction fee.");
-            var tokens = Select(chain.GetSpendableTokenOutputs(keys.Keys, queue, tokenId), amount, "Insufficient token balance.");
+            var excluded = new HashSet<string>(excludedInputs ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
+            var funding = Select(chain.GetSpendableOutputs(keys.Keys, queue).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)), fee, "Insufficient POVIX for the transaction fee.");
+            var tokens = Select(chain.GetSpendableTokenOutputs(keys.Keys, queue, tokenId).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)), amount, "Insufficient token balance.");
             var selected = funding.Concat(tokens).ToArray();
             var tx = new Transaction { Kind = TransactionKind.TokenTransfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee };
             tx.Inputs.AddRange(selected.Select(output => new TransactionInput { TransactionId = output.TransactionId,

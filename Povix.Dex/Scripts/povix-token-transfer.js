@@ -33,6 +33,7 @@
         return /^[0-9]+$/.test(value) && BigInt(value) >= 1n && BigInt(value) <= 100000000n ? value : null;
     }
     function tokenBalanceIssue(token) {
+        if (BigInt(token.poolReservedAtomic || '0') > 0n) return 'Há saldo deste token reservado em pools de liquidez. As movimentações usam somente o saldo livre; consulte Pools e trocas para usar essas reservas.';
         if (BigInt(token.confirmedAtomic) > 0n) return 'O saldo confirmado deste token está reservado por um envio pendente. Aguarde a confirmação ou a atualização da cadeia.';
         if (Array.isArray(token.receivingAddresses)) {
             const missing = token.receivingAddresses.some(item => !wallet.addresses().includes(item.address) && BigInt(item.confirmedAtomic) > 0n);
@@ -87,6 +88,7 @@
         byId('review-change-address').textContent = draft ? draft.changeAddress : 'Da carteira aberta';
         byId('token-balance').textContent = token ? 'Disponível: ' + wallet.formatAtomic(token.balanceAtomic, token.decimals) + ' ' + token.symbol +
             ' · Confirmado: ' + wallet.formatAtomic(token.confirmedAtomic, token.decimals) + ' ' + token.symbol : 'Somente tokens confirmados são listados.';
+        if (token && BigInt(token.poolReservedAtomic || '0') > 0n) byId('token-balance').textContent += ' · Em pools: ' + wallet.formatAtomic(token.poolReservedAtomic, token.decimals) + ' ' + token.symbol;
         byId('token-identifier').textContent = token ? token.tokenId : '';
         const receiving = byId('token-receiving-addresses');
         receiving.replaceChildren();
@@ -136,6 +138,7 @@
             byId('wallet-balance-detail').hidden = funds.confirmedAtomic == null;
             byId('wallet-balance-detail').textContent = funds.confirmedAtomic == null ? '' : 'Confirmado: ' + wallet.formatAtomic(funds.confirmedAtomic, 8) +
                 ' POVIX · Reservado: ' + wallet.formatAtomic(funds.reservedAtomic, 8) + ' POVIX · A receber após confirmação: ' + wallet.formatAtomic(funds.pendingIncomingAtomic, 8) + ' POVIX';
+            if (funds.confirmedAtomic != null && BigInt(funds.poolReservedAtomic || '0') > 0n) byId('wallet-balance-detail').textContent += ' · Em pools de liquidez: ' + wallet.formatAtomic(funds.poolReservedAtomic, 8) + ' POVIX';
             const current = byId('TokenId').value || app.dataset.tokenId;
             tokens = list.filter(token => /^[0-9a-f]{64}$/.test(token.tokenId) && addresses.includes(token.creatorAddress));
             if (!draft) {

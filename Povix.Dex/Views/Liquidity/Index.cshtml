@@ -1,6 +1,6 @@
 @model Povix.Dex.Models.TokenNetworkViewModel
 @{ ViewBag.Title = "Pools e troca de tokens"; }
-<main id="liquidity-app" data-network-id="@Model.NetworkId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
+<main id="liquidity-app" data-network-id="@Model.NetworkId" data-pool-id="@ViewBag.SelectedPoolId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
       data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
       data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")" data-propose-url="@Url.Action("ProposeSwap")" data-requests-url="@Url.Action("Requests")"
       data-accept-url="@Url.Action("AcceptSwap")" data-request-status-url="@Url.Action("RequestStatus")" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
@@ -29,7 +29,7 @@
             <form id="swap-form" class="card token-form">
                 <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>A pool só aceita trocas após a confirmação de suas reservas.</p></div></div>
                 <fieldset id="swap-fields" disabled>
-                    <label for="swap-pool">Pool disponível</label><select id="swap-pool" required></select><small id="swap-provider" class="address-input"></small>
+                    <label for="swap-pool">Pool para troca</label><select id="swap-pool" required></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
                     <label for="swap-side">Ativo que você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
                     <label for="swap-amount">Quantidade a trocar</label><input id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     <p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>

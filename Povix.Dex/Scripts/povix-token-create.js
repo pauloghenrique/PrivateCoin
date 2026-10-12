@@ -101,6 +101,7 @@
                 ' POVIX · Taxas das operações pendentes: ' + wallet.formatAtomic(result.pendingFeesAtomic || '0', 8) +
                 ' POVIX · Reservado (não é taxa): ' + wallet.formatAtomic(result.reservedAtomic, 8) +
                 ' POVIX · A receber após confirmação: ' + wallet.formatAtomic(result.pendingIncomingAtomic, 8) + ' POVIX';
+            if (BigInt(result.poolReservedAtomic || '0') > 0n) detail.textContent += ' · Em pools de liquidez: ' + wallet.formatAtomic(result.poolReservedAtomic, 8) + ' POVIX';
         } catch (_) {
             balance = null; byId('wallet-balance').textContent = 'Consulta indisponível';
             byId('wallet-balance-detail').hidden = true;

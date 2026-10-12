@@ -54,7 +54,10 @@ namespace Povix.Dex.Services
             {
                 RequireReady(); ReserveDraftSlot(owner);
                 var pool = Snapshot(model.PoolId);
-                if (pool == null || !pool.Available) throw new TokenOperationException("pool_unavailable", "A pool precisa ter reservas confirmadas e disponíveis.");
+                if (pool == null) throw new TokenOperationException("pool_unavailable", "A pool não foi encontrada nesta instalação do DEX.");
+                if (!pool.Available) throw new TokenOperationException(pool.Status == "pending" || pool.Status == "validated" ? "pool_unconfirmed" :
+                    pool.Status == "busy" ? "pool_reserved" : "pool_unavailable", pool.StatusMessage,
+                    pool.Status == "pending" || pool.Status == "validated" || pool.Status == "busy");
                 if (model.InputSide != 0 && model.InputSide != 1) throw new TokenOperationException("fields_invalid", "Selecione um lado da troca.");
                 var input = model.InputSide == 0 ? pool.AssetA : pool.AssetB;
                 var output = model.InputSide == 0 ? pool.AssetB : pool.AssetA;
@@ -166,10 +169,12 @@ namespace Povix.Dex.Services
                 var queued = pending.FirstOrDefault(item => item.Id == id);
                 var tx = block?.Transactions.First(item => item.Id == id) ?? queued ?? record.Transaction;
                 bool validated = block != null || queued != null && blockchain.HasValidTransactionApproval(queued, pending);
+                var pool = Snapshot(record.Exchange.PoolId);
                 return new ExchangeReceiptViewModel { TransactionId = id, PoolId = record.Exchange.PoolId, Operation = record.Exchange.Operation,
                     Status = block != null ? "confirmed" : queued == null ? "rejected" : validated ? "validated" : "pending",
                     Fee = tx.Fee, BlockHeight = block?.Height, BlockHash = block?.Hash, Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1,
                     PeerCount = node.ConnectedPeerCount, ValidationCount = validated ? 1 : 0,
+                    PoolAvailable = pool?.Available ?? false, PoolStatusMessage = pool?.StatusMessage ?? "A pool não foi encontrada nesta instalação do DEX.",
                     Outputs = tx.Outputs.Select((output, index) => {
                         var asset = output.AssetId == null ? NativeAsset() : output.AssetId == record.Exchange.AssetA.Id ? record.Exchange.AssetA : record.Exchange.AssetB;
                         return new ExchangeOutputViewModel { Amount = output.Amount, Symbol = asset.Symbol, Decimals = asset.Decimals, Address = output.OneTimeAddress,
@@ -262,19 +267,50 @@ namespace Povix.Dex.Services
             }
             string address = AddressFor(root.Exchange.ProviderKey);
             var outputs = blockchain.GetUnspentOutputs(new[] { address }).Where(item => item.TransactionId == current.Id && item.OutputIndex < 2).ToArray();
-            bool busy = pending.Any(tx => tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex < 2));
-            bool available = rootConfirmed && outputs.Length == 2 && !busy;
+            var blocking = pending.FirstOrDefault(tx => tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex < 2));
+            bool available = rootConfirmed && outputs.Length == 2 && blocking == null;
+            string status, reason, message;
+            if (!rootConfirmed) {
+                var creation = pending.FirstOrDefault(tx => tx.Id == id);
+                bool approved = creation != null && blockchain.HasValidTransactionApproval(creation, pending);
+                status = creation == null ? "rejected" : approved ? "validated" : "pending";
+                reason = creation == null ? "creation_rejected" : approved ? "awaiting_block" : "awaiting_validation";
+                message = creation == null ? "A criação da pool não está confirmada nem na fila atual. Confira o comprovante antes de criar outra pool." :
+                    approved ? "A criação foi validada e aguarda confirmação em bloco. A pool ficará disponível após essa confirmação." :
+                    "A criação aguarda validação da rede e confirmação em bloco. As reservas ainda não podem ser usadas em trocas.";
+                blocking = null;
+            } else if (outputs.Length != 2) {
+                blocking = blockchain.Blocks.Reverse().SelectMany(block => block.Transactions)
+                    .FirstOrDefault(tx => tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex < 2));
+                status = "unavailable"; reason = blocking == null ? "reserves_missing" : "reserves_spent";
+                message = blocking == null ? "As duas reservas não foram localizadas na cadeia atual. Confira os endereços e o comprovante da pool." :
+                    "Uma reserva foi movimentada pela transação " + blocking.Id + ". Confira o saldo livre da carteira para criar outra pool.";
+            } else if (blocking != null) {
+                bool swap = submitted.Any(item => item.Transaction.Id == blocking.Id && item.Exchange?.Operation == "swap");
+                status = "busy"; reason = swap ? "swap_pending" : "reserve_transaction_pending";
+                message = (swap ? "Uma troca" : "Uma movimentação das reservas") + " aguarda confirmação na transação " + blocking.Id + ". Aguarde a atualização da rede.";
+            } else {
+                status = "available"; reason = "confirmed_reserves";
+                message = "Criação confirmada e reservas disponíveis para troca.";
+            }
             return new PoolSnapshot { Id = id, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
                 AssetA = root.Exchange.AssetA, AssetB = root.Exchange.AssetB, Available = available,
-                Status = available ? "available" : busy ? "busy" : rootConfirmed ? "unavailable" : pending.Any(tx => tx.Id == id) ? "pending" : "rejected",
+                Status = status, StatusReason = reason, StatusMessage = message, BlockingTransactionId = blocking?.Id,
                 ReserveA = outputs.FirstOrDefault(item => item.OutputIndex == 0), ReserveB = outputs.FirstOrDefault(item => item.OutputIndex == 1) };
         }
-        private HashSet<string> PoolInputKeys() => new HashSet<string>(submitted.Where(item => item.Exchange != null)
-            .SelectMany(item => new[] { item.Transaction.Id + ":0", item.Transaction.Id + ":1" }), StringComparer.Ordinal);
+        private HashSet<string> PoolInputKeys()
+        {
+            var protectedPools = submitted.Where(item => item.Exchange?.Operation == "pool").Select(item => Snapshot(item.Transaction.Id))
+                .Where(pool => pool.Status != "unavailable" && pool.Status != "rejected");
+            var exchangeIds = new HashSet<string>(submitted.Where(item => item.Exchange != null).Select(item => item.Transaction.Id), StringComparer.Ordinal);
+            return new HashSet<string>(protectedPools.Select(pool => pool.Transaction.Id).Concat(pending.Where(tx => exchangeIds.Contains(tx.Id)).Select(tx => tx.Id))
+                .SelectMany(id => new[] { id + ":0", id + ":1" }), StringComparer.Ordinal);
+        }
         private static object PoolResponse(PoolSnapshot pool) => new {
             poolId = pool.Id, providerAddress = AddressFor(pool.ProviderKey), assetA = AssetResponse(pool.AssetA), assetB = AssetResponse(pool.AssetB),
             reserveTransactionId = pool.Transaction.Id, reserveAAtomic = Atomic(pool.Transaction.Outputs[0].Amount), reserveBAtomic = Atomic(pool.Transaction.Outputs[1].Amount),
-            status = pool.Status, available = pool.Available, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
+            status = pool.Status, available = pool.Available, statusReason = pool.StatusReason, statusMessage = pool.StatusMessage,
+            blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
             draftId = id, operation = draft.Operation, poolId = draft.PoolId, reserveTransactionId = draft.ReserveId,
             assetA = AssetResponse(draft.AssetA), assetB = AssetResponse(draft.AssetB), providerAddress = AddressFor(draft.ProviderKey),
@@ -311,7 +347,7 @@ namespace Povix.Dex.Services
         }
         private sealed class PoolSnapshot
         {
-            public string Id, ProviderKey, Status;
+            public string Id, ProviderKey, Status, StatusReason, StatusMessage, BlockingTransactionId;
             public Transaction Transaction;
             public TokenDefinition AssetA, AssetB;
             public UnspentOutput ReserveA, ReserveB;

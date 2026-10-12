@@ -9,6 +9,9 @@
     const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
+    const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
+    const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
+        pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada' };
     const atomicText = (value, decimals) => wallet.formatAtomic(String(value), decimals);
     function fee() {
         const index = { '1': 0, '2': 1, '4': 2 }[byId('exchange-priority').value];
@@ -35,9 +38,9 @@
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
     }
     function options(id, entries, label, empty) {
-        const element = byId(id), previous = element.value;
+        const element = byId(id), previous = element.value || (id === 'swap-pool' ? preferredPool : null);
         element.replaceChildren(new Option(empty, ''));
-        entries.forEach(item => element.add(new Option(label(item), item.id || item.poolId)));
+        entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false; element.add(option); });
         if (entries.some(item => (item.id || item.poolId) === previous)) element.value = previous;
     }
     function update() {
@@ -45,7 +48,7 @@
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
         byId('prepare-pool').disabled = !editing || !ready;
-        byId('prepare-swap').disabled = !editing || !ready || Boolean(requestId);
+        byId('prepare-swap').disabled = !editing || !ready || Boolean(requestId) || !selectedPool()?.available;
         byId('exchange-priority').disabled = !editing;
         byId('sign-exchange').disabled = busy || !draft || !ready || !backup || !byId('backup-confirmed').checked;
         byId('edit-exchange').disabled = busy; byId('download-backup').disabled = busy;
@@ -58,6 +61,8 @@
             byId('pool-balance-' + side).textContent = token ? 'Saldo livre: ' + atomicText(token.balanceAtomic, token.decimals) + ' ' + token.symbol : 'Escolha um ativo';
         }
         const pool = selectedPool();
+        byId('swap-pool-state').textContent = pool ? pool.statusMessage || poolStates[pool.status] || 'Consulte o comprovante da pool.' :
+            pools.length ? 'Selecione uma pool. A lista informa a disponibilidade de cada uma.' : 'Crie uma pool e aguarde a confirmação das reservas em bloco.';
         byId('swap-provider').textContent = pool ? 'Provedor: ' + pool.providerAddress : '';
         if (pool) {
             byId('swap-side').options[0].textContent = pool.assetA.symbol + ' → ' + pool.assetB.symbol;
@@ -130,7 +135,8 @@
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
         busy = true; message(''); update();
         try {
-            const pool = selectedPool(); if (!pool || !pool.available) throw new Error('Selecione uma pool disponível.');
+            const pool = selectedPool(); if (!pool) throw new Error('Selecione uma pool para a troca.');
+            if (!pool.available) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
             const inputSide = Number(byId('swap-side').value), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
             const receive = wallet.quoteExchange(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic);
@@ -208,15 +214,15 @@
             if (!draft) {
                 options('pool-asset-a', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o primeiro ativo');
                 options('pool-asset-b', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o segundo ativo');
-                options('swap-pool', pools.filter(item => item.available), item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12), 'Selecione uma pool');
+                options('swap-pool', pools, item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12) + ' · ' + (poolStates[item.status] || 'Indisponível'), 'Selecione uma pool');
             }
             byId('pool-list').replaceChildren(); byId('pools-empty').hidden = pools.length > 0;
-            const statuses = { available: 'Disponível', busy: 'Troca pendente', unavailable: 'Reservas indisponíveis', pending: 'Criação pendente', rejected: 'Criação não confirmada' };
             pools.forEach(pool => {
                 const entry = document.createElement('a'); entry.href = receipt(pool.poolId);
-                entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (statuses[pool.status] || 'Indisponível');
+                entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
-                entry.appendChild(detail); byId('pool-list').appendChild(entry);
+                const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
+                entry.append(detail, state); byId('pool-list').appendChild(entry);
             });
             if (wallet.isUnlocked()) {
                 const native = asset('povix'); byId('wallet-balance').textContent = native ? atomicText(native.balanceAtomic, 8) + ' POVIX livres' : 'Indisponível';
