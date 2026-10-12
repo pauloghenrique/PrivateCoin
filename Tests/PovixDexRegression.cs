@@ -217,7 +217,13 @@ internal static partial class PovixDexRegression
                     File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
                     service = OpenOfflineService(directory, dexPort);
                     Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate,
-                        "v15 cache upgrades to v16 without losing pending creation or charging again");
+                        "v15 cache upgrades without losing pending creation or charging again");
+                    service.Dispose();
+                    legacyCache["ConsensusVersion"] = 16;
+                    File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(legacyCache));
+                    service = OpenOfflineService(directory, dexPort);
+                    Check(service.GetRegistration(id).Status == "pending" && !service.GetNetwork().CanCreate,
+                        "v16 cache upgrades to v17 without losing pending creation or charging again");
                     controller = ControllerFor(service, "regression", sessionItems);
                     CheckRejection(controller, (string)conflictingDraft["draftId"], conflictingSignatures, "network_not_ready", 503);
                     Check((string)SubmitResult(ControllerFor(service, "regression", sessionItems), (string)draft["draftId"], signatures)["transactionId"] == id,

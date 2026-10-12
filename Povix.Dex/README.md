@@ -21,7 +21,7 @@ bloco ao reunir 20 operações aprovadas ou após 10 segundos de espera.
 1. Execute o projeto ASP.NET MVC 5 em IIS/IIS Express com .NET Framework 4.8 e
    HTTPS. Restaure os pacotes NuGet de `packages.config` antes de compilar.
 2. Configure `PeerSeeds` em `Web.config` com pares **reais** da rede existente,
-   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 16
+   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 17
    e o gênese fixado no Core. Não são fornecidos endpoints fictícios.
 3. `DexListenPort` usa 4780 por padrão. Use uma porta livre; o Desktop e o
    explorer podem continuar em suas portas próprias. A criação aguarda ao menos
@@ -270,19 +270,22 @@ com o consenso atual. Não são contratos de AMM autônoma: o Core exige
 assinaturas das chaves que controlam cada UTXO, inclusive as reservas. Cada
 pool pertence a um único provedor; não há emissão de cotas LP ou depósito de
 outros provedores. O servidor não guarda chaves nem pode assinar as reservas.
-O provedor continua podendo movimentá-las pela carteira fora da pool; a página
-detecta reservas gastas e deixa a pool indisponível. Os UTXOs das pools ativas
-são excluídos do saldo livre e da seleção de entradas nas telas de liquidez,
-criação e movimentação de tokens do DEX. Criar outro token ou pagar uma taxa
-pelo DEX preserva essas reservas. As consultas de saldo mostram separadamente
-os valores em pools. Essa proteção é local ao DEX; a carteira no Desktop e
-outros programas ainda podem movimentar as reservas sob as mesmas chaves.
+As reservas são bloqueadas **na blockchain**, inclusive contra transferências
+pelo Desktop ou por outro programa com as mesmas chaves. O Core rejeita
+movimentos comuns, criação de tokens, taxas, garantia de validador e novas
+pools que tentem gastar essas entradas. Os seletores de saldo livre também
+excluem ambas as reservas; o troco continua disponível após confirmação.
 
-A criação usa uma única `TokenTransfer`, com as duas reservas nas primeiras
-saídas e os trocos nas seguintes. Somente a confirmação em bloco torna essas
-reservas disponíveis. O identificador da pool é o da transação de criação;
-a classificação e o encadeamento das reservas ficam no cache público desta
-instalação do DEX. Guarde `App_Data/dex-network.json`: outro DEX não descobre
+A criação usa `LiquidityPool` (tipo 7), com as duas reservas nas primeiras
+saídas. `LiquiditySwap` (tipo 8) consome exatamente as duas reservas da mesma
+pool e recria ambas bloqueadas, com os mesmos ativos e provedor. A cotação de
+0,30% e a quantidade entregue constam no payload assinado e são verificadas
+por todos os validadores. As taxas da rede vêm do saldo livre, nunca das
+reservas. Somente a confirmação em bloco torna a pool disponível.
+
+O identificador da pool é o da transação de criação. O cadastro da pool fica
+no cache público desta instalação do DEX; as novas trocas e o encerramento
+confirmados são seguidos diretamente na cadeia. Guarde `App_Data/dex-network.json`: outro DEX não descobre
 automaticamente esse cadastro local apenas ao sincronizar a blockchain.
 
 A lista e o comprovante mostram o estado atual da pool separadamente do estado
@@ -293,8 +296,27 @@ reservas estão confirmadas e não são entradas de outra operação pendente.
 O comprovante identifica a transação que ocupa ou gastou uma reserva.
 Ao voltar dele para a tela de liquidez, a mesma pool fica selecionada e é
 habilitada automaticamente quando a confirmação chega, sem reabrir a carteira
-já selecionada nessa tela. Saídas remanescentes de uma pool incompleta voltam
-ao saldo livre local; o provedor pode usá-las para criar outra pool.
+já selecionada nessa tela.
+
+Para liberar os valores, abra a carteira provedora e use **Revisar encerramento
+da pool** na lista. Confira as quantidades e os endereços, guarde o backup e
+assine. `LiquidityClose` (tipo 9) exige as assinaturas das duas reservas e
+retorna ambos os valores intactos ao provedor, sem novo bloqueio. A taxa é
+paga separadamente em POVIX livre. Até a confirmação, a pool fica ocupada;
+após confirmar, aparece como **Encerrada** e os valores voltam ao saldo livre.
+Não há liberação por timeout, reinício ou simples perda do cadastro local.
+
+Pools criadas nas versões anteriores mantêm seus UTXOs e assinaturas originais;
+não recebem um bloqueio retroativo. A lista as identifica como **Reservas antigas
+sem bloqueio** e desabilita trocas até o provedor usar **Bloquear reservas desta
+pool**, revisar e assinar a migração. Ambos os valores são preservados. Se as
+reservas antigas já foram gastas, essa migração não recupera os valores.
+
+**Ativação:** esta proteção exige consenso 17 no DEX e nos nós da rede. O
+handshake rejeita versões diferentes. Coordene a atualização antes de produzir
+blocos v17; este pull request não atualiza uma rede em funcionamento. O Core
+preserva a validação dos blocos v16 e anteriores e o DEX revalida os caches
+antigos antes de migrar. Publicar apenas a interface não bloqueia pools antigas.
 
 Para trocar, use a **carteira já selecionada**, escolha uma pool disponível, o ativo
 que entrega, sua quantidade e o **mínimo a receber**. A cotação é calculada

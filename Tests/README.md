@@ -31,8 +31,12 @@ assinaturas falsas das reservas e sessões diferentes.
 Inclui a regressão de disponibilidade: criações e movimentações normais no DEX
 não podem pagar taxas ou quantidades com reservas de pools ativas. Verifica
 o saldo livre em todas as telas, a criação pendente/validada/confirmada, a
-habilitação automática da pool na interface, a identificação de reservas
-gastas fora do DEX e a liberação do saldo remanescente de pools incompletas.
+habilitação automática da pool na interface e o bloqueio na validação da
+blockchain contra gastos com assinaturas válidas do dono, desvios de reservas,
+alteração do provedor, cotação adulterada e combinação de pools diferentes.
+Confere o encerramento assinado, taxa paga pelo saldo livre, devolução intacta
+dos dois ativos após confirmação, restauração dos bloqueios sem cadastro DEX,
+migração assinada de reservas antigas e restauração de caches v16 em v17.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos

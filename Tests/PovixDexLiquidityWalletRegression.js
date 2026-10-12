@@ -37,7 +37,7 @@ const d = fixture.draft;
         draft => { draft.inputs[0].transactionId = '0'.repeat(64); },
         draft => { draft.expiresUtc = '2000-01-01T00:00:00Z'; },
         draft => { draft.assetA.id = draft.assetB.id; },
-        draft => { draft.feeAtomic = '0'; }])
+        draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
         await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId, fixture.provider));
     if (d.operation === 'swap') {
         assert.equal(wallet.quoteExchange(d.inputSide === 0 ? d.reserveAAtomic : d.reserveBAtomic, d.inputSide === 0 ? d.reserveBAtomic : d.reserveAAtomic, d.amountAtomic), d.receiveAtomic);
@@ -47,7 +47,7 @@ const d = fixture.draft;
     assert(BigInt(wallet.quoteExchange('4611686018427387903', '9223372036854775807', '4611686018427387903')) > 0n);
     wallet.lock();
     const app = byId('liquidity-app');
-    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'submitPoolUrl', 'submitSwapUrl', 'proposeUrl', 'requestsUrl', 'acceptUrl', 'requestStatusUrl']) app.dataset[key] = '/' + key;
+    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl', 'proposeUrl', 'requestsUrl', 'acceptUrl', 'requestStatusUrl']) app.dataset[key] = '/' + key;
     app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__';
     const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available);
     let poolPhase = lifecyclePool ? 'pending' : 'available';
@@ -68,7 +68,11 @@ const d = fixture.draft;
         }
         else if (url === '/requestsUrl') result = fixture.provider ? [d] : [];
         else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
-        else if (url === '/submitPoolUrl' || url === '/submitSwapUrl' || url === '/acceptUrl' || url === '/proposeUrl') {
+        else if (url === '/prepareReservesUrl') {
+            preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
+            assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
+        }
+        else if (url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl' || url === '/acceptUrl' || url === '/proposeUrl') {
             assert.equal(body.get('draftId'), d.draftId); captured = body.getAll('signatures');
             submittedUrl = url;
             result = url === '/proposeUrl' ? { requestId: d.draftId, status: 'awaiting_provider' } : { transactionId: 'a'.repeat(64), receiptUrl: '/liquidez/operacao/' + 'a'.repeat(64) };
@@ -108,6 +112,12 @@ const d = fixture.draft;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);
         byId('pool-amount-b').value = wallet.formatAtomic(d.reserveBAtomic, d.assetB.decimals);
         byId('pool-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    } else if (d.operation === 'lock' || d.operation === 'close') {
+        const pool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
+        assert(pool.canManage); assert.equal(pool.locked, d.operation === 'close');
+        const button = [...byId('pool-list').querySelectorAll('button')].find(button =>
+            button.previousElementSibling.href.includes(d.poolId));
+        assert(button); button.click();
     } else {
         byId('swap-pool').value = d.poolId; byId('swap-side').value = String(d.inputSide);
         const input = d.inputSide === 0 ? d.assetA : d.assetB, output = d.inputSide === 0 ? d.assetB : d.assetA;
@@ -128,7 +138,8 @@ const d = fixture.draft;
     assert.equal(byId('sign-exchange').disabled, true, 'backup and review confirmation are required');
     byId('download-backup').click(); byId('backup-confirmed').checked = true; byId('backup-confirmed').dispatchEvent(new w.Event('change'));
     assert.equal(byId('sign-exchange').disabled, false); byId('sign-exchange').click(); await wait(() => captured !== null);
-    assert.equal(captured.length, fixture.provider ? 2 : ownPool ? d.inputs.length : d.userInputCount);
+    assert.equal(captured.length, fixture.provider ? 2 : ownPool || d.operation === 'lock' || d.operation === 'close' ? d.inputs.length : d.userInputCount);
+    if (d.operation === 'lock' || d.operation === 'close') assert.equal(submittedUrl, '/submitReservesUrl');
     if (ownPool) {
         assert.equal(submittedUrl, '/submitSwapUrl', 'the same wallet sends all signatures directly');
         assert.equal(byId('request-wait').hidden, true, 'no separate provider approval is requested');

@@ -73,9 +73,16 @@ internal static class PrivateCoinBlockProductionRegression
         Transaction[] registrations = Registrations(bootstrap, 21, "limit-");
         Reject(() => bootstrap.AddBlock(registrations), "the producer rejects more than twenty self-validated operations");
         Block fullBootstrap = bootstrap.AddBlock(registrations.Take(20));
-        Check(fullBootstrap.ConsensusVersion == 16 && fullBootstrap.Transactions.Count == 20 && bootstrap.IsValid(), "twenty registrations form a valid bootstrap block");
+        Check(fullBootstrap.ConsensusVersion == Blockchain.ConsensusVersion && fullBootstrap.Transactions.Count == 20 && bootstrap.IsValid(), "twenty registrations form a valid bootstrap block");
         bootstrap.AddBlock(registrations.Skip(20));
         Check(new Blockchain(Copy(bootstrap.Blocks.ToList())).IsValid(), "full and partial bootstrap blocks survive restoration");
+        var v16History = Copy(bootstrap.Blocks.ToList());
+        v16History.RemoveAt(v16History.Count - 1);
+        v16History[1].ConsensusVersion = 16; LegacyConsensusFixture.Mine(v16History[1]);
+        var migrated = new Blockchain(v16History);
+        migrated.AddBlock(Registrations(migrated, 2, "v17-migration-"));
+        Check(migrated.IsValid() && migrated.Blocks[1].ConsensusVersion == 16 && migrated.Blocks.Last().ConsensusVersion == 17,
+            "historical full v16 batches extend into v17 without changing original transaction hashes");
         var received = Copy(bootstrap.Blocks.ToList());
         received.RemoveAt(received.Count - 1); received.Last().Transactions.Add(registrations[20]);
         LegacyConsensusFixture.Mine(received.Last());
@@ -88,11 +95,11 @@ internal static class PrivateCoinBlockProductionRegression
         Block oldBlock = v15.AddBlock(old); oldBlock.ConsensusVersion = 15; LegacyConsensusFixture.Mine(oldBlock);
         v15 = new Blockchain(Copy(v15.Blocks.ToList()));
         Check(v15.IsValid() && v15.Blocks.Last().ConsensusVersion == 15, "historical single-operation v15 bootstrap blocks remain valid");
-        v15.AddBlock(Registrations(v15, 2, "v16-"));
-        Check(new Blockchain(Copy(v15.Blocks.ToList())).IsValid(), "v15 history extends with a multi-operation v16 block");
+        v15.AddBlock(Registrations(v15, 2, "current-"));
+        Check(new Blockchain(Copy(v15.Blocks.ToList())).IsValid(), "v15 history extends with a multi-operation current-consensus block");
         Block downgrade = v15.AddBlock(Registrations(v15, 1, "downgrade-"));
         downgrade.ConsensusVersion = 15; LegacyConsensusFixture.Mine(downgrade);
-        Reject(() => new Blockchain(Copy(v15.Blocks.ToList())), "a chain cannot return to v15 after activating v16");
+        Reject(() => new Blockchain(Copy(v15.Blocks.ToList())), "a chain cannot return to v15 after activating current consensus");
 
         using (var payer = new Wallet()) using (var first = new Wallet()) using (var second = new Wallet())
         {
