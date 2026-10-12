@@ -101,6 +101,8 @@
         if (busy || !draft || !el('confirm-profile').checked) return;
         busy = true; message(''); update();
         try {
+            if (typeof wallet.authorizeProfile !== 'function')
+                throw new Error('A carteira carregada está desatualizada. Recarregue a página para continuar.');
             if (!signature) signature = await wallet.authorizeProfile(draft, expected, app.dataset.networkId);
             await post(app.dataset.submitUrl, { draftId: draft.draftId, signature });
             resetDraft(); await loadTokens(); message('Perfil salvo com autorização do criador.');
