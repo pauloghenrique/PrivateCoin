@@ -28,6 +28,11 @@ Também verifica trocas POVIX/token e token/token com a carteira já selecionada
 controlando o saldo livre e a pool: uma única revisão assina todas as entradas,
 sem solicitar outra carteira. O envio direto rejeita assinaturas incompletas,
 assinaturas falsas das reservas e sessões diferentes.
+Inclui a regressão de disponibilidade: criações e movimentações normais no DEX
+não podem pagar taxas ou quantidades com reservas de pools ativas. Verifica
+o saldo livre em todas as telas, a criação pendente/validada/confirmada, a
+habilitação automática da pool na interface, a identificação de reservas
+gastas fora do DEX e a liberação do saldo remanescente de pools incompletas.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos

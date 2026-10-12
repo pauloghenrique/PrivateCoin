@@ -271,9 +271,12 @@ assinaturas das chaves que controlam cada UTXO, inclusive as reservas. Cada
 pool pertence a um único provedor; não há emissão de cotas LP ou depósito de
 outros provedores. O servidor não guarda chaves nem pode assinar as reservas.
 O provedor continua podendo movimentá-las pela carteira fora da pool; a página
-detecta reservas gastas e deixa a pool indisponível. Os UTXOs de reserva são
-excluídos do saldo livre e da seleção de entradas **nesta página**. Isso não
-acrescenta um bloqueio ao consenso ou às outras telas da carteira.
+detecta reservas gastas e deixa a pool indisponível. Os UTXOs das pools ativas
+são excluídos do saldo livre e da seleção de entradas nas telas de liquidez,
+criação e movimentação de tokens do DEX. Criar outro token ou pagar uma taxa
+pelo DEX preserva essas reservas. As consultas de saldo mostram separadamente
+os valores em pools. Essa proteção é local ao DEX; a carteira no Desktop e
+outros programas ainda podem movimentar as reservas sob as mesmas chaves.
 
 A criação usa uma única `TokenTransfer`, com as duas reservas nas primeiras
 saídas e os trocos nas seguintes. Somente a confirmação em bloco torna essas
@@ -281,6 +284,17 @@ reservas disponíveis. O identificador da pool é o da transação de criação;
 a classificação e o encadeamento das reservas ficam no cache público desta
 instalação do DEX. Guarde `App_Data/dex-network.json`: outro DEX não descobre
 automaticamente esse cadastro local apenas ao sincronizar a blockchain.
+
+A lista e o comprovante mostram o estado atual da pool separadamente do estado
+da criação. Uma criação pode estar confirmada e ter reservas movimentadas
+posteriormente. A criação pendente informa que aguarda validação; a validada
+informa que aguarda um bloco. A pool fica disponível somente quando as duas
+reservas estão confirmadas e não são entradas de outra operação pendente.
+O comprovante identifica a transação que ocupa ou gastou uma reserva.
+Ao voltar dele para a tela de liquidez, a mesma pool fica selecionada e é
+habilitada automaticamente quando a confirmação chega, sem reabrir a carteira
+já selecionada nessa tela. Saídas remanescentes de uma pool incompleta voltam
+ao saldo livre local; o provedor pode usá-las para criar outra pool.
 
 Para trocar, use a **carteira já selecionada**, escolha uma pool disponível, o ativo
 que entrega, sua quantidade e o **mínimo a receber**. A cotação é calculada

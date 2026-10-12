@@ -49,13 +49,23 @@ const d = fixture.draft;
     const app = byId('liquidity-app');
     for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'submitPoolUrl', 'submitSwapUrl', 'proposeUrl', 'requestsUrl', 'acceptUrl', 'requestStatusUrl']) app.dataset[key] = '/' + key;
     app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__';
+    const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available);
+    let poolPhase = lifecyclePool ? 'pending' : 'available';
+    if (lifecyclePool) app.dataset.poolId = lifecyclePool.poolId;
     let captured = null, preparations = 0, submittedUrl = null;
     w.fetch = async (url, options = {}) => {
         const body = options.body || new URLSearchParams();
         if (options.method === 'POST') assert.equal(body.get('__RequestVerificationToken'), 'test-csrf');
         let result;
         if (url === '/networkUrl') result = { CanCreate: true, PeerCount: 1, Height: 10, Fees: [1, 2, 4] };
-        else if (url === '/catalogueUrl') result = fixture.catalogue;
+        else if (url === '/catalogueUrl') {
+            result = JSON.parse(JSON.stringify(fixture.catalogue));
+            if (lifecyclePool && poolPhase !== 'available') {
+                const pool = result.pools.find(item => item.poolId === lifecyclePool.poolId);
+                pool.status = poolPhase; pool.available = false;
+                pool.statusMessage = poolPhase === 'pending' ? 'A criação aguarda validação da rede e confirmação em bloco.' : 'A criação foi validada e aguarda confirmação em bloco.';
+            }
+        }
         else if (url === '/requestsUrl') result = fixture.provider ? [d] : [];
         else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
         else if (url === '/submitPoolUrl' || url === '/submitSwapUrl' || url === '/acceptUrl' || url === '/proposeUrl') {
@@ -76,6 +86,19 @@ const d = fixture.draft;
     byId('wallet-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
     await wait(() => !byId('wallet-connected').hidden && !byId('wallet-lock').disabled);
     await intervals[0](); await wait(() => !byId('prepare-pool').disabled);
+    if (lifecyclePool) {
+        const selected = () => byId('swap-pool').options[byId('swap-pool').selectedIndex];
+        assert.equal(byId('swap-pool').value, lifecyclePool.poolId);
+        assert(selected().disabled); assert(byId('prepare-swap').disabled);
+        assert(byId('swap-pool-state').textContent.includes('aguarda validação'));
+        poolPhase = 'validated'; await intervals[0]();
+        assert(selected().disabled); assert(byId('prepare-swap').disabled);
+        assert(byId('swap-pool-state').textContent.includes('validada'));
+        poolPhase = 'available'; await intervals[0]();
+        assert.equal(byId('swap-pool').value, lifecyclePool.poolId, 'confirmation keeps the newly created pool selected');
+        assert.equal(selected().disabled, false); assert.equal(byId('prepare-swap').disabled, false);
+        assert.equal(byId('wallet-form').hidden, true, 'confirmation does not require choosing the wallet again');
+    }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
     if (fixture.provider) {
         await wait(() => byId('provider-requests').children.length > 0);

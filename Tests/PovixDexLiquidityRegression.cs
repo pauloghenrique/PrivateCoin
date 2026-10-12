@@ -68,15 +68,32 @@ internal static partial class PovixDexRegression
                         string poolId = (string)result["transactionId"];
                         Check(((string)result["receiptUrl"]).Contains("liquidez/operacao/"), "pool submission returns a dedicated receipt route");
                         Check(service.GetExchangeReceipt(poolId).Status == "pending" && !(bool)ExchangePool(service, poolId)["available"], "pending pool cannot quote or spend unconfirmed reserves");
+                        Check((string)ExchangePool(service, poolId)["statusReason"] == "awaiting_validation", "new pool reports that validation is pending instead of missing reserves");
+                        RejectExchange(() => service.PrepareSwap(new SwapViewModel { PoolId = poolId, InputSide = 0, Amount = "0,1", MinimumReceive = "9", FeeAtomic = 2 },
+                            PublicKeys(buyer), buyerAddress, "before-pool-confirmation"), "pool_unconfirmed");
                         Wait(() => { lock (received) return received.ContainsKey(poolId); }, "pool transaction propagates over the existing P2P protocol");
                         Transaction poolTransaction; lock (received) poolTransaction = received[poolId];
                         Check(poolTransaction.Kind == TransactionKind.TokenTransfer && poolTransaction.Outputs[0].Amount == Blockchain.OneCoin && poolTransaction.Outputs[1].Amount == 10000,
                             "pool separates native POVIX reserves from token quantities without a consensus upgrade");
+                        poolTransaction.TransactionApproval = chain.CreateTransactionApproval(poolTransaction, new[] { poolTransaction }, validators.Take(1));
+                        peer.BroadcastAsync(poolTransaction).GetAwaiter().GetResult();
+                        Wait(() => service.GetExchangeReceipt(poolId).Status == "validated", "pool creation approval is distinct from its confirmation block");
+                        Check((string)ExchangePool(service, poolId)["status"] == "validated" && (string)ExchangePool(service, poolId)["statusReason"] == "awaiting_block" &&
+                            !service.GetExchangeReceipt(poolId).PoolAvailable, "approved pool explains its wait for a block and cannot release reserves early");
                         batches.Confirm(chain, new[] { poolTransaction }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(poolId).Status == "confirmed", "pool opens only after its real confirmation block");
                         var catalogue = ExchangeData(service.GetExchangeCatalogue(PublicKeys(provider)));
                         Check((string)((Dictionary<string, object>)((object[])catalogue["assets"]).Single(item => (string)((Dictionary<string, object>)item)["id"] == "povix"))["balanceAtomic"] ==
                             (chain.GetBalance(new[] { address }) - Blockchain.OneCoin).ToString(), "liquidity reserves do not appear as free provider balance");
+                        long freeTokens = chain.GetTokenBalance(new[] { address }, tokenA.Token.Id) - 10000;
+                        bool poolOverdrawRejected = false;
+                        try {
+                            service.PrepareTransfer(new TokenTransferViewModel { TokenId = tokenA.Token.Id,
+                                Amount = ((freeTokens + 1) / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                                DestinationAddress = buyerAddress, FeeAtomic = 2 }, PublicKeys(provider), address, "pool-reserve-overdraw");
+                        } catch (InvalidOperationException error) { poolOverdrawRejected = error.Message == "Insufficient token balance."; }
+                        Check(poolOverdrawRejected, "ordinary DEX transfers cannot fund their amount from confirmed pool reserves");
+                        ExerciseOrdinaryDexOperations(directory, service, chain, peer, received, provider, batches, validators, poolId, tokenA.Token.Id);
                         var secondDraft = ExchangeData(service.PreparePool(new CreatePoolViewModel { AssetA = tokenA.Token.Id, AssetB = tokenB.Token.Id,
                             AmountA = "50", AmountB = "100", FeeAtomic = 2 }, PublicKeys(provider), address, "second-pool"));
                         var secondSignatures = BrowserExchange(directory, nodeExecutable, service, secondDraft, provider, false);
@@ -135,7 +152,7 @@ internal static partial class PovixDexRegression
                             PublicKeys(buyer), buyerAddress, "reverse"));
                         BrowserExchange(directory, nodeExecutable, service, reverse, buyer, false);
                         Check((string)((Dictionary<string, object>)((object[])reverse["outputs"])[2])["assetId"] == "povix", "reverse direction returns native POVIX and still requires a native network fee");
-                        Check(((object[])Json.DeserializeObject(Json.Serialize(service.GetTransferHistory(PublicKeys(provider), tokenA.Token.Id)))).Length == 0, "liquidity receipts do not enter the restricted creator-transfer history");
+                        Check(((object[])Json.DeserializeObject(Json.Serialize(service.GetTransferHistory(PublicKeys(provider), tokenA.Token.Id)))).Length == 1, "liquidity receipts do not enter the restricted creator-transfer history");
                         var tokensDraft = ExchangeData(service.PrepareSwap(new SwapViewModel { PoolId = secondPool, InputSide = 0, Amount = "1", MinimumReceive = "1,9", FeeAtomic = 2 },
                             PublicKeys(buyer), buyerAddress, "token-token"));
                         var tokensUserSignatures = BrowserExchange(directory, nodeExecutable, service, tokensDraft, buyer, false);
@@ -168,6 +185,28 @@ internal static partial class PovixDexRegression
                         Check(outsideTransaction.Inputs.Any(input => input.TransactionId == tokensSwapId && input.OutputIndex == 0), "provider retains control of its own reserves outside the DEX");
                         batches.Confirm(chain, new[] { outsideTransaction }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => (string)ExchangePool(service, secondPool)["status"] == "unavailable", "spending registered reserves outside the DEX disables the pool");
+                        var spendingPool = ExchangePool(service, secondPool);
+                        Check((string)spendingPool["statusReason"] == "reserves_spent" && (string)spendingPool["blockingTransactionId"] == outsideTransaction.Id,
+                            "unavailable confirmed pool identifies the transaction that spent its reserves");
+                        long freeBeforeRelease = TokenFree(service, provider, tokenA.Token.Id);
+                        var release = new Transaction { Kind = TransactionKind.Transfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = 2 };
+                        release.Inputs.Add(new TransactionInput { TransactionId = ownNativeSwap.Id, OutputIndex = 0, PublicKey = PublicKeys(provider)[0] });
+                        release.Outputs.Add(new TransactionOutput { Amount = ownNativeSwap.Outputs[0].Amount - 2, OneTimeAddress = address });
+                        string payload = release.TimestampUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" + ownNativeSwap.Id + ":0|" +
+                            release.Outputs[0].Amount.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + address + "|fee:2";
+                        release.Inputs[0].Signature = SignBytes(provider, address, System.Text.Encoding.UTF8.GetBytes(payload));
+                        release.Id = LegacyConsensusFixture.Id(release);
+                        batches.Confirm(chain, new[] { release }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                        Wait(() => (string)ExchangePool(service, poolId)["status"] == "unavailable", "spending one reserve outside the DEX disables the incomplete pool");
+                        Check(TokenFree(service, provider, tokenA.Token.Id) == freeBeforeRelease + ownNativeSwap.Outputs[1].Amount,
+                            "remaining reserve of an incomplete pool returns to the free wallet balance");
+                        Check(service.GetExchangeReceipt(poolId).Status == "confirmed" && !service.GetExchangeReceipt(poolId).PoolAvailable &&
+                            service.GetExchangeReceipt(poolId).PoolStatusMessage.Contains(release.Id), "receipt distinguishes a confirmed creation from currently spent pool reserves");
+                        var replacement = ExchangeData(service.PreparePool(new CreatePoolViewModel { AssetA = "povix", AssetB = tokenA.Token.Id, AmountA = "1",
+                            AmountB = (TokenFree(service, provider, tokenA.Token.Id) / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), FeeAtomic = 2 },
+                            PublicKeys(provider), address, "replacement-pool"));
+                        Check(((object[])replacement["inputs"]).Cast<Dictionary<string, object>>().Any(input => (string)input["transactionId"] == ownNativeSwap.Id && (int)input["outputIndex"] == 1),
+                            "provider can reuse the remaining tokens to create a replacement pool");
                         Check(!File.ReadAllText(Path.Combine(directory, "dex-network.json")).Contains("<D>"), "persisted liquidity state contains no private RSA keys");
                         service.Dispose(); service = OpenOfflineService(directory, dexPort);
                         Check(service.GetExchangeReceipt(swapId).Status == "confirmed" && (string)ExchangePool(service, poolId)["reserveTransactionId"] == ownNativeSwap.Id &&
@@ -189,6 +228,44 @@ internal static partial class PovixDexRegression
         Console.WriteLine(checks + " liquidity checks passed");
     }
     private static Dictionary<string, object> ExchangeData(object data) => (Dictionary<string, object>)Json.DeserializeObject(Json.Serialize(data));
+    private static long TokenFree(TokenNetworkService service, Wallet wallet, string tokenId) =>
+        long.Parse((string)((Dictionary<string, object>)((object[])ExchangeData(service.GetExchangeCatalogue(PublicKeys(wallet)))["assets"])
+            .Single(item => (string)((Dictionary<string, object>)item)["id"] == tokenId))["balanceAtomic"]);
+    private static void ExerciseOrdinaryDexOperations(string directory, TokenNetworkService service, Blockchain chain, PeerNode peer,
+        Dictionary<string, Transaction> received, Wallet wallet, ValidationBatchFixture batches, ValidatorStake[] validators, string poolId, string tokenId)
+    {
+        string address = wallet.OwnedOneTimeAddresses.First();
+        var funds = ExchangeData(service.GetBalanceDetails(new[] { address }));
+        Check((string)funds["poolReservedAtomic"] == Blockchain.OneCoin.ToString() && long.Parse((string)funds["balanceAtomic"]) == chain.GetBalance(new[] { address }) - Blockchain.OneCoin,
+            "all DEX native balance endpoints exclude pool coins from the free fee balance");
+        var token = ((object[])Json.DeserializeObject(Json.Serialize(service.GetCreatedTokens(PublicKeys(wallet)))))
+            .Cast<Dictionary<string, object>>().Single(item => (string)item["tokenId"] == tokenId);
+        Check((string)token["poolReservedAtomic"] == "10000" && long.Parse((string)token["balanceAtomic"]) == chain.GetTokenBalance(new[] { address }, tokenId) - 10000,
+            "creator transfer screen separates token reserves from free tokens");
+        var creation = ExchangeData(service.Prepare(new CreateTokenViewModel { Name = "Reserve protection", Symbol = "RSV", Decimals = 0,
+            Supply = "1", DestinationAddress = address, FeeAtomic = 2 }, PublicKeys(wallet), address, "token-after-pool"));
+        Check(((object[])creation["inputs"]).Cast<Dictionary<string, object>>().All(input => (string)input["transactionId"] != poolId || (int)input["outputIndex"] > 1),
+            "new token creation funds its fee without consuming pool reserves");
+        string id = service.SubmitAsync((string)creation["draftId"], SignPrepared(creation, wallet), "token-after-pool").GetAwaiter().GetResult();
+        Wait(() => { lock (received) return received.ContainsKey(id); }, "token creation after the pool reaches the peer");
+        Check((bool)ExchangePool(service, poolId)["available"], "pending token creation does not occupy pool reserves");
+        Transaction tx; lock (received) tx = received[id];
+        batches.Confirm(chain, new[] { tx }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+        Wait(() => service.GetRegistration(id).Status == "confirmed", "ordinary token creation confirms after the pool");
+        Check((bool)ExchangePool(service, poolId)["available"], "confirmed token creation leaves the pool available");
+        var transfer = ExchangeData(service.PrepareTransfer(new TokenTransferViewModel { TokenId = tokenId, Amount = "1", DestinationAddress = address, FeeAtomic = 2 },
+            PublicKeys(wallet), address, "transfer-after-pool"));
+        Check(((object[])transfer["inputs"]).Cast<Dictionary<string, object>>().All(input => (string)input["transactionId"] != poolId || (int)input["outputIndex"] > 1),
+            "ordinary token movement excludes both native and token pool reserves");
+        string creatorSignature = SignBytes(wallet, (string)transfer["creatorAddress"], Convert.FromBase64String((string)transfer["authorizationPayload"]));
+        id = service.SubmitTransferAsync((string)transfer["draftId"], SignPrepared(transfer, wallet), creatorSignature, "transfer-after-pool").GetAwaiter().GetResult();
+        Wait(() => { lock (received) return received.ContainsKey(id); }, "ordinary movement after the pool reaches the peer");
+        Check((bool)ExchangePool(service, poolId)["available"], "pending ordinary movement does not mark the pool busy");
+        lock (received) tx = received[id];
+        batches.Confirm(chain, new[] { tx }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+        Wait(() => service.GetTransferReceipt(id).Status == "confirmed", "ordinary movement confirms after the pool");
+        Check((bool)ExchangePool(service, poolId)["available"], "confirmed ordinary movement preserves the pool liquidity");
+    }
     private static Transaction SwapWithSelectedWallet(string directory, string node, TokenNetworkService service, Blockchain chain, PeerNode peer,
         Dictionary<string, Transaction> received, Wallet wallet, ValidationBatchFixture batches, ValidatorStake[] validators, SwapViewModel model, string owner)
     {
