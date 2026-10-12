@@ -123,6 +123,22 @@ namespace Povix.Dex.Services
             await Relay(tx).ConfigureAwait(false); return tx.Id;
         }
 
+        public async Task<string> SubmitSwapAsync(string draftId, string[] signatures, string owner)
+        {
+            Transaction tx;
+            lock (sync)
+            {
+                var prior = PriorExchange(draftId, "swap", signatures, false);
+                if (prior != null) return prior.Transaction.Id;
+                RequireReady();
+                var draft = ExchangeDraft(draftId, owner, "swap");
+                RequireCurrentReserves(draft);
+                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.Inputs.Count);
+                tx = AcceptExchange(draftId, draft, signatures);
+            }
+            await Relay(tx).ConfigureAwait(false); return tx.Id;
+        }
+
         public async Task<string> AcceptSwapAsync(string draftId, string[] signatures)
         {
             Transaction tx;

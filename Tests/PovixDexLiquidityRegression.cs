@@ -94,6 +94,9 @@ internal static partial class PovixDexRegression
                             "server rejects a quote below the user minimum before any signature");
                         var swapDraft = ExchangeData(service.PrepareSwap(swapModel, PublicKeys(buyer), buyerAddress, "buyer"));
                         var buyerSignatures = BrowserExchange(directory, nodeExecutable, service, swapDraft, buyer, false);
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], buyerSignatures, "buyer").GetAwaiter().GetResult(), "signatures_invalid");
+                        var unsignedReserveSignatures = buyerSignatures.Concat(new[] { Convert.ToBase64String(new byte[256]), Convert.ToBase64String(new byte[256]) }).ToArray();
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], unsignedReserveSignatures, "buyer").GetAwaiter().GetResult(), "signature_invalid");
                         var concurrent = ExchangeData(service.PrepareSwap(swapModel, PublicKeys(buyer), buyerAddress, "concurrent"));
                         var concurrentSignatures = BrowserExchange(directory, nodeExecutable, service, concurrent, buyer, false);
                         RejectExchange(() => service.ProposeSwap((string)swapDraft["draftId"], buyerSignatures, "another-session"), "draft_session_changed");
@@ -147,8 +150,15 @@ internal static partial class PovixDexRegression
                         Check(chain.IsValid() && chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == oldA - 100 &&
                             chain.GetTokenBalance(new[] { buyerAddress }, tokenB.Token.Id) == oldB + long.Parse((string)tokensDraft["receiveAtomic"]) &&
                             chain.GetBalance(new[] { buyerAddress }) == oldNative - 2, "token/token swaps conserve both token supplies and use POVIX only for the fee");
+                        var ownNativeSwap = SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
+                            batches, validators, new SwapViewModel { PoolId = poolId, InputSide = 0, Amount = "0,05", MinimumReceive = "3", FeeAtomic = 2 }, "own-native");
+                        ownNativeSwap = SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
+                            batches, validators, new SwapViewModel { PoolId = poolId, InputSide = 1, Amount = "1", MinimumReceive = "0,01", FeeAtomic = 2 }, "own-native-reverse");
+                        tokensSwap = SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
+                            batches, validators, new SwapViewModel { PoolId = secondPool, InputSide = 0, Amount = "1", MinimumReceive = "1,8", FeeAtomic = 2 }, "own-tokens");
+                        tokensSwapId = tokensSwap.Id;
                         var allProviderOutputs = chain.GetUnspentOutputs(new[] { address });
-                        var nativeFeeInput = allProviderOutputs.First(output => output.Output.AssetId == null && output.TransactionId != swapId);
+                        var nativeFeeInput = allProviderOutputs.First(output => output.Output.AssetId == null && output.TransactionId != ownNativeSwap.Id);
                         var allowedInputs = new[] { tokensSwapId + ":0", tokensSwapId + ":1", nativeFeeInput.TransactionId + ":" + nativeFeeInput.OutputIndex };
                         var excluded = allProviderOutputs.Where(output => !allowedInputs.Contains(output.TransactionId + ":" + output.OutputIndex))
                             .Select(output => output.TransactionId + ":" + output.OutputIndex).ToArray();
@@ -160,7 +170,7 @@ internal static partial class PovixDexRegression
                         Wait(() => (string)ExchangePool(service, secondPool)["status"] == "unavailable", "spending registered reserves outside the DEX disables the pool");
                         Check(!File.ReadAllText(Path.Combine(directory, "dex-network.json")).Contains("<D>"), "persisted liquidity state contains no private RSA keys");
                         service.Dispose(); service = OpenOfflineService(directory, dexPort);
-                        Check(service.GetExchangeReceipt(swapId).Status == "confirmed" && (string)ExchangePool(service, poolId)["reserveTransactionId"] == swapId &&
+                        Check(service.GetExchangeReceipt(swapId).Status == "confirmed" && (string)ExchangePool(service, poolId)["reserveTransactionId"] == ownNativeSwap.Id &&
                             service.SubmitPoolAsync((string)draft["draftId"], poolSignatures, "provider").GetAwaiter().GetResult() == poolId,
                             "pools, reserve lineage, confirmed receipts and accepted retries survive restart");
                         peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult(); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
@@ -179,6 +189,36 @@ internal static partial class PovixDexRegression
         Console.WriteLine(checks + " liquidity checks passed");
     }
     private static Dictionary<string, object> ExchangeData(object data) => (Dictionary<string, object>)Json.DeserializeObject(Json.Serialize(data));
+    private static Transaction SwapWithSelectedWallet(string directory, string node, TokenNetworkService service, Blockchain chain, PeerNode peer,
+        Dictionary<string, Transaction> received, Wallet wallet, ValidationBatchFixture batches, ValidatorStake[] validators, SwapViewModel model, string owner)
+    {
+        var addresses = wallet.OwnedOneTimeAddresses.ToArray();
+        var balances = chain.GetTokens().ToDictionary(token => token.Id, token => chain.GetTokenBalance(addresses, token.Id));
+        long native = chain.GetBalance(addresses);
+        var controller = LiquidityControllerFor(service, owner, new SessionStateItemCollection());
+        var draft = ExchangeData(((JsonResult)controller.PrepareSwap(model, TransportKeys(wallet), addresses[0])).Data);
+        Check(draft.ContainsKey("draftId") && controller.Response.StatusCode == 200, "selected provider wallet can prepare a swap with its own pool");
+        var signatures = BrowserExchange(directory, node, service, draft, wallet, false);
+        RejectExchange(() => service.SubmitSwapAsync((string)draft["draftId"], signatures, "another-session").GetAwaiter().GetResult(), "draft_session_changed");
+        var forged = signatures.ToArray(); forged[forged.Length - 1] = Convert.ToBase64String(new byte[256]);
+        RejectExchange(() => service.SubmitSwapAsync((string)draft["draftId"], forged, owner).GetAwaiter().GetResult(), "signature_invalid");
+        var result = ExchangeData(((JsonResult)controller.SubmitSwap((string)draft["draftId"], signatures).GetAwaiter().GetResult()).Data);
+        Check(controller.Response.StatusCode == 200 && ((string)result["receiptUrl"]).Contains("liquidez/operacao/"), "one wallet sends the complete swap through the MVC endpoint");
+        string id = (string)result["transactionId"];
+        Check(service.SubmitSwapAsync((string)draft["draftId"], signatures, owner).GetAwaiter().GetResult() == id, "retrying the fully signed swap is idempotent");
+        Check(service.GetExchangeReceipt(id).Status == "pending" && chain.GetBalance(addresses) == native &&
+            balances.All(item => chain.GetTokenBalance(addresses, item.Key) == item.Value), "same-wallet signing cannot change balances before confirmation");
+        Wait(() => { lock (received) return received.ContainsKey(id); }, "same-wallet atomic swap propagates to the network");
+        Transaction tx; lock (received) tx = received[id];
+        Check(tx.Inputs.Select(input => input.TransactionId + ":" + input.OutputIndex).Distinct().Count() == tx.Inputs.Count &&
+            tx.Inputs[tx.Inputs.Count - 2].TransactionId == (string)draft["reserveTransactionId"], "free funding and pool reserves remain distinct inputs for one wallet");
+        batches.Confirm(chain, new[] { tx }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+        Wait(() => service.GetExchangeReceipt(id).Status == "confirmed", "same-wallet swap confirms without a separate provider request");
+        Check(chain.IsValid() && chain.GetBalance(addresses) == native - tx.Fee &&
+            balances.All(item => chain.GetTokenBalance(addresses, item.Key) == item.Value), "same-wallet swaps conserve all tokens and deduct only the network fee from the total wallet balance");
+        Check((string)ExchangePool(service, model.PoolId)["reserveTransactionId"] == id && (bool)ExchangePool(service, model.PoolId)["available"], "pool tracks confirmed reserves after a same-wallet swap");
+        return tx;
+    }
     private static Dictionary<string, object> ExchangePool(TokenNetworkService service, string id) => ((object[])ExchangeData(service.GetExchangeCatalogue(new string[0]))["pools"])
         .Cast<Dictionary<string, object>>().Single(item => (string)item["poolId"] == id);
     private static void RejectExchange(Action action, string code)

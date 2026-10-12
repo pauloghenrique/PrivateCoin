@@ -24,6 +24,10 @@ das reservas do saldo livre, cotações sem overflow, os dois sentidos da troca,
 sessão, assinaturas falsas, concorrência, autorização de ambas as carteiras,
 propagação P2P, aprovação separada da confirmação, conservação independente
 dos ativos, taxa nativa, idempotência, reinício e reorganização da cadeia.
+Também verifica trocas POVIX/token e token/token com a carteira já selecionada
+controlando o saldo livre e a pool: uma única revisão assina todas as entradas,
+sem solicitar outra carteira. O envio direto rejeita assinaturas incompletas,
+assinaturas falsas das reservas e sessões diferentes.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos
