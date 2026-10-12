@@ -11,6 +11,11 @@ namespace PrivateCoin.Core
         public static UnsignedTokenCreation Prepare(Blockchain chain, IEnumerable<Transaction> pending,
             IEnumerable<string> publicKeys, string name, string symbol, int decimals, long supply,
             string destinationAddress, string changeAddress, long fee)
+        { return Prepare(chain, pending, publicKeys, name, symbol, decimals, supply, destinationAddress, changeAddress, fee, null); }
+
+        public static UnsignedTokenCreation Prepare(Blockchain chain, IEnumerable<Transaction> pending,
+            IEnumerable<string> publicKeys, string name, string symbol, int decimals, long supply,
+            string destinationAddress, string changeAddress, long fee, IEnumerable<string> excludedInputs)
         {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pending == null) throw new ArgumentNullException(nameof(pending));
@@ -24,8 +29,9 @@ namespace PrivateCoin.Core
             var keys = publicKeys.Distinct(StringComparer.Ordinal).ToDictionary(Crypto.Sha256, key => key, StringComparer.Ordinal);
             if (!keys.ContainsKey(changeAddress)) throw new ArgumentException("Change must belong to the signing wallet.");
             var selected = new List<UnspentOutput>();
+            var excluded = new HashSet<string>(excludedInputs ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
             long total = 0;
-            foreach (var output in chain.GetSpendableOutputs(keys.Keys, pending))
+            foreach (var output in chain.GetSpendableOutputs(keys.Keys, pending).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)))
             {
                 selected.Add(output);
                 total = checked(total + output.Output.Amount);

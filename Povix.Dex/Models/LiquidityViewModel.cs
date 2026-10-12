@@ -34,6 +34,8 @@ namespace Povix.Dex.Models
         public string PoolId { get; set; }
         public string Operation { get; set; }
         public string Status { get; set; }
+        public bool PoolAvailable { get; set; }
+        public string PoolStatusMessage { get; set; }
         public long Fee { get; set; }
         public int? BlockHeight { get; set; }
         public string BlockHash { get; set; }

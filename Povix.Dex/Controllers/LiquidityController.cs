@@ -13,8 +13,9 @@ namespace Povix.Dex.Controllers
     public sealed class LiquidityController : Controller
     {
         [HttpGet]
-        public ActionResult Index()
-        { NoCache(); return View(MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel()); }
+        public ActionResult Index(string poolId)
+        { NoCache(); ViewBag.SelectedPoolId = ValidId(poolId) ? poolId : "";
+            return View(MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel()); }
 
         [HttpPost, ValidateAntiForgeryToken]
         public ActionResult Catalogue(string[] publicKeys) => Read(() => MvcApplication.TokenNetwork.GetExchangeCatalogue(
@@ -92,6 +93,7 @@ namespace Povix.Dex.Controllers
             NoCache();
             var receipt = ValidId(id) ? MvcApplication.TokenNetwork?.GetExchangeReceipt(id) : null;
             return receipt == null ? (ActionResult)HttpNotFound() : Json(new { status = receipt.Status, confirmations = receipt.Confirmations,
+                poolAvailable = receipt.PoolAvailable, poolStatusMessage = receipt.PoolStatusMessage,
                 validations = receipt.ValidationCount, blockHeight = receipt.BlockHeight, blockHash = receipt.BlockHash, peerCount = receipt.PeerCount }, JsonRequestBehavior.AllowGet);
         }
 

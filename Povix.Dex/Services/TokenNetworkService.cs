@@ -68,7 +68,10 @@ namespace Povix.Dex.Services
 
         public long GetBalance(string[] addresses)
         {
-            lock (sync) return blockchain.GetSpendableBalance(addresses, pending);
+            lock (sync) {
+                var poolInputs = PoolInputKeys();
+                return blockchain.GetSpendableOutputs(addresses, pending).Where(item => !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex)).Sum(item => item.Output.Amount);
+            }
         }
 
         public object GetBalanceDetails(string[] addresses)
@@ -76,24 +79,27 @@ namespace Povix.Dex.Services
             lock (sync)
             {
                 var confirmed = blockchain.GetUnspentOutputs(addresses).Where(item => item.Output.AssetId == null).ToArray();
+                var poolInputs = PoolInputKeys();
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input =>
                     input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 var pendingIds = new HashSet<string>(pending.Select(tx => tx.Id), StringComparer.Ordinal);
-                var available = new HashSet<string>(blockchain.GetSpendableOutputs(addresses, pending).Select(item =>
+                var available = new HashSet<string>(blockchain.GetSpendableOutputs(addresses, pending)
+                    .Where(item => !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex)).Select(item =>
                     item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 long reservedAmount = confirmed.Where(item => item.TransactionKind != TransactionKind.StakeLock &&
-                    reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
+                    !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .Sum(item => item.Output.Amount);
                 long incoming = blockchain.GetUnspentOutputs(addresses, pending).Where(item => item.Output.AssetId == null &&
-                    item.TransactionKind != TransactionKind.StakeLock && pendingIds.Contains(item.TransactionId) &&
+                    item.TransactionKind != TransactionKind.StakeLock && !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && pendingIds.Contains(item.TransactionId) &&
                     !available.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture))).Sum(item => item.Output.Amount);
                 var owned = new HashSet<string>(addresses, StringComparer.Ordinal);
                 long pendingFees = pending.Where(tx => tx.Inputs.Any(input => owned.Contains(AddressFor(input.PublicKey))))
                     .Sum(tx => tx.Fee);
                 return new {
                     pendingFeesAtomic = pendingFees.ToString(CultureInfo.InvariantCulture),
-                    balanceAtomic = blockchain.GetSpendableBalance(addresses, pending).ToString(CultureInfo.InvariantCulture),
+                    balanceAtomic = confirmed.Where(item => available.Contains(item.TransactionId + ":" + item.OutputIndex)).Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
                     confirmedAtomic = confirmed.Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
+                    poolReservedAtomic = confirmed.Where(item => poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex)).Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
                     reservedAtomic = reservedAmount.ToString(CultureInfo.InvariantCulture),
                     pendingIncomingAtomic = incoming.ToString(CultureInfo.InvariantCulture)
                 };
@@ -123,7 +129,7 @@ namespace Povix.Dex.Services
                     throw new ArgumentException("Quantidade inválida.");
                 long fee = GetSelectedFee(model.FeePriority, model.FeeAtomic);
                 var creation = TokenCreation.Prepare(blockchain, pending, publicKeys, model.Name, model.Symbol,
-                    model.Decimals, amount, model.DestinationAddress, changeAddress, fee);
+                    model.Decimals, amount, model.DestinationAddress, changeAddress, fee, PoolInputKeys());
                 string draftId = Guid.NewGuid().ToString("N");
                 var draft = new PreparedToken { Creation = creation, Owner = owner, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 drafts.Add(draftId, draft);

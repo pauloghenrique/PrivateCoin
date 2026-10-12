@@ -35,7 +35,10 @@ namespace Povix.Dex.Services
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(input =>
                     input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture)), StringComparer.Ordinal);
                 var confirmed = outputs.GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
-                var available = outputs.Where(item => !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
+                var poolInputs = PoolInputKeys();
+                var poolAmounts = outputs.Where(item => poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex))
+                    .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
+                var available = outputs.Where(item => !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
                 return creations.Select(tx => new {
                         tokenId = tx.Token.Id, name = tx.Token.Name, symbol = tx.Token.Symbol, decimals = tx.Token.Decimals,
@@ -47,6 +50,7 @@ namespace Povix.Dex.Services
                                 confirmedAtomic = (receivingBalances.ContainsKey(tx.Token.Id + ":" + address) ? receivingBalances[tx.Token.Id + ":" + address] : 0).ToString(CultureInfo.InvariantCulture)
                             }).ToArray(),
                         balanceAtomic = (available.ContainsKey(tx.Token.Id) ? available[tx.Token.Id] : 0).ToString(CultureInfo.InvariantCulture),
+                        poolReservedAtomic = (poolAmounts.ContainsKey(tx.Token.Id) ? poolAmounts[tx.Token.Id] : 0).ToString(CultureInfo.InvariantCulture),
                         confirmedAtomic = (confirmed.ContainsKey(tx.Token.Id) ? confirmed[tx.Token.Id] : 0).ToString(CultureInfo.InvariantCulture)
                     }).ToArray();
             }
@@ -71,7 +75,7 @@ namespace Povix.Dex.Services
                 if (!CreateTokenViewModel.TryParseSupply(model.Amount, creation.Token.Decimals, out amount))
                     throw new TokenOperationException("amount_invalid", "Confira a quantidade e as casas decimais do token.");
                 var transfer = TokenTransfer.Prepare(blockchain, pending, publicKeys, model.TokenId, model.DestinationAddress,
-                    amount, changeAddress, GetSelectedFee(model.FeePriority, model.FeeAtomic));
+                    amount, changeAddress, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
                 if (transfer.Inputs.Count > 1000) throw new TokenOperationException("inputs_limit", "Esta movimentação precisa de mais entradas do que a tela permite. Tente uma quantidade menor.");
                 string draftId = Guid.NewGuid().ToString("N");
                 var draft = new PreparedTransfer { Transfer = transfer, Owner = owner, CreatorKey = creatorKey, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
