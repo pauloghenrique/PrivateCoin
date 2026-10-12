@@ -210,7 +210,8 @@
             if (!id(input.transactionId) || !id(input.address) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 ||
                 !allowed.has(input.assetId) || !atomic(input.amountAtomic) || BigInt(input.amountAtomic) <= 0n || seen.has(key)) fail();
             seen.add(key); payload += '|' + key;
-            const owned = draft.operation === 'pool' || (provider ? index >= draft.userInputCount : index < draft.userInputCount);
+            const owned = draft.operation === 'pool' || (provider ? index >= draft.userInputCount :
+                index < draft.userInputCount || wallet.keys.has(draft.providerAddress));
             if (owned && !wallet.keys.has(input.address)) fail();
             if (index < draft.userInputCount) totals.set(input.assetId, (totals.get(input.assetId) || 0n) + BigInt(input.amountAtomic));
         });
@@ -227,7 +228,7 @@
                 draft.providerAddress !== expected.providerAddress || draft.inputSide !== expected.inputSide ||
                 draft.amountAtomic !== expected.amountAtomic || draft.minimumReceiveAtomic !== expected.minimumReceiveAtomic ||
                 !atomic(draft.amountAtomic) || !atomic(draft.minimumReceiveAtomic) || BigInt(draft.minimumReceiveAtomic) <= 0n ||
-                (draft.inputSide !== 0 && draft.inputSide !== 1) || (!provider && wallet.keys.has(draft.providerAddress))) fail();
+                (draft.inputSide !== 0 && draft.inputSide !== 1)) fail();
             for (let side = 0; side < 2; side++) {
                 const input = draft.inputs[draft.userInputCount + side], asset = side === 0 ? draft.assetA : draft.assetB;
                 if (input.transactionId !== expected.reserveTransactionId || input.outputIndex !== side || input.address !== draft.providerAddress ||

@@ -2,11 +2,11 @@
 @{ ViewBag.Title = "Pools e troca de tokens"; }
 <main id="liquidity-app" data-network-id="@Model.NetworkId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
       data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
-      data-submit-pool-url="@Url.Action("SubmitPool")" data-propose-url="@Url.Action("ProposeSwap")" data-requests-url="@Url.Action("Requests")"
+      data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")" data-propose-url="@Url.Action("ProposeSwap")" data-requests-url="@Url.Action("Requests")"
       data-accept-url="@Url.Action("AcceptSwap")" data-request-status-url="@Url.Action("RequestStatus")" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
     <div class="page-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>Crie uma pool. Troque tokens.</h1><p>Use tokens nativos confirmados ou um par com POVIX. Cada troca recebe a assinatura do comprador e do provedor de liquidez.</p></div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
-    <div class="review-note"><strong>Pools com assinatura do provedor</strong><p>As reservas permanecem sob as chaves do provedor. Ele precisa abrir sua carteira e aprovar cada troca nesta página. O provedor pode movimentar suas reservas fora da pool; nesse caso ela fica indisponível. As duas partes da troca são confirmadas juntas, sem enviar chaves privadas ao servidor.</p></div>
+    <div class="review-note"><strong>Troque com a carteira selecionada</strong><p>Quando sua carteira também controla as reservas da pool, ela assina e envia a troca numa única revisão. Nas demais pools, o provedor aprova a solicitação com sua assinatura. As reservas permanecem sob as chaves do provedor; movimentá-las fora da pool pode torná-la indisponível. As duas partes da troca são confirmadas juntas, sem enviar chaves privadas ao servidor.</p></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div id="request-wait" class="notice" role="status" hidden></div>
     <div class="create-grid liquidity-grid">

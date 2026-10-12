@@ -282,7 +282,7 @@ a classificação e o encadeamento das reservas ficam no cache público desta
 instalação do DEX. Guarde `App_Data/dex-network.json`: outro DEX não descobre
 automaticamente esse cadastro local apenas ao sincronizar a blockchain.
 
-Para trocar, abra **outra carteira**, selecione uma pool disponível, o ativo
+Para trocar, use a **carteira já selecionada**, escolha uma pool disponível, o ativo
 que entrega, sua quantidade e o **mínimo a receber**. A cotação é calculada
 com inteiros, sem arredondamento para cima, pela fórmula:
 
@@ -294,8 +294,12 @@ recebimento = reservaSaida × quantidade × 9970
 A divisão descarta a fração atômica. A taxa de 0,30% permanece nas reservas,
 e a taxa da rede é cobrada separadamente em POVIX do comprador. A revisão
 mostra o recebimento, o mínimo, os novos valores das reservas e os trocos.
-Assinar essa revisão cria uma solicitação ao provedor; ainda não transmite
-uma transferência nem debita saldo. Mantenha as entradas disponíveis.
+Se a carteira selecionada também controla as reservas da pool, ela assina
+todas as entradas e envia a troca numa única revisão, sem selecionar outra
+carteira ou criar uma solicitação separada. O servidor exige as assinaturas
+do saldo livre e das duas reservas; a mesma chave pode assinar ambos os lados.
+Nas demais pools, assinar a revisão cria uma solicitação ao provedor; ainda
+não transmite uma transferência nem debita saldo. Mantenha as entradas disponíveis.
 
 O provedor abre a carteira na mesma instalação e consulta **Suas solicitações
 como provedor**. Ao revisar e assinar, autoriza somente as duas entradas de

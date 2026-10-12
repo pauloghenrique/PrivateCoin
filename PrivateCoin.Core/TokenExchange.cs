@@ -44,8 +44,8 @@ namespace PrivateCoin.Core
             ValidatePair(chain, queue, reserveA.Output.AssetId, reserveB.Output.AssetId);
             var keys = Keys(publicKeys, address, fee);
             string provider = Crypto.Sha256(providerKey);
-            if (reserveA.Output.OneTimeAddress != provider || reserveB.Output.OneTimeAddress != provider || keys.ContainsKey(provider))
-                throw new ArgumentException("Use another wallet to swap with this provider.");
+            if (reserveA.Output.OneTimeAddress != provider || reserveB.Output.OneTimeAddress != provider)
+                throw new ArgumentException("Pool reserves must belong to the provider.");
             var reserved = new HashSet<string>(queue.SelectMany(tx => tx.Inputs).Select(Key));
             var confirmed = chain.GetUnspentOutputs(new[] { provider }).ToDictionary(Key);
             foreach (var reserve in new[] { reserveA, reserveB })
@@ -67,7 +67,7 @@ namespace PrivateCoin.Core
             Fund(chain, queue, keys, new Dictionary<string, long> { { input.Output.AssetId ?? "povix", amount } },
                 address, fee, selected, outputs, new HashSet<string>((excludedInputs ?? new string[0]).Concat(new[] { Key(reserveA), Key(reserveB) })));
             int userCount = selected.Count;
-            selected.Add(reserveA); selected.Add(reserveB); keys.Add(provider, providerKey);
+            selected.Add(reserveA); selected.Add(reserveB); keys[provider] = providerKey;
             return Build(selected, keys, outputs, userCount, fee);
         }
 

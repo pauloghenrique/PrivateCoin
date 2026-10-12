@@ -57,15 +57,19 @@ namespace Povix.Dex.Controllers
         public Task<ActionResult> SubmitPool(string draftId, string[] signatures) => Submit(draftId, signatures, false);
 
         [HttpPost, ValidateAntiForgeryToken]
+        public Task<ActionResult> SubmitSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true, true);
+
+        [HttpPost, ValidateAntiForgeryToken]
         public Task<ActionResult> AcceptSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true);
 
-        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap)
+        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool completeSwap = false)
         {
             NoCache();
             if (!ValidDraft(draftId) || !ValidSignatures(signatures)) return Error("Assinaturas inválidas.", 400, "signatures_invalid");
             if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503, "network_unavailable");
             try {
-                string id = swap ? await MvcApplication.TokenNetwork.AcceptSwapAsync(draftId, signatures) :
+                string id = completeSwap ? await MvcApplication.TokenNetwork.SubmitSwapAsync(draftId, signatures, Session.SessionID) :
+                    swap ? await MvcApplication.TokenNetwork.AcceptSwapAsync(draftId, signatures) :
                     await MvcApplication.TokenNetwork.SubmitPoolAsync(draftId, signatures, Session.SessionID);
                 return Json(new { transactionId = id, receiptUrl = Url.Action("Details", new { id }) });
             }
@@ -101,7 +105,6 @@ namespace Povix.Dex.Controllers
                 string message = error.Message == "Insufficient POVIX for the transaction fee." ? "POVIX insuficiente para a operação e a taxa." :
                     error.Message == "Insufficient token balance." ? "Saldo disponível do token insuficiente." :
                     error.Message == "Minimum receive is not met." ? "A cotação não atende ao mínimo a receber. Atualize e revise outra troca." :
-                    error.Message == "Use another wallet to swap with this provider." ? "Use outra carteira para trocar com esta pool." :
                     "Não foi possível preparar a operação. Confira os ativos, os saldos e a carteira.";
                 return Error(message, 400, "preparation_invalid");
             }

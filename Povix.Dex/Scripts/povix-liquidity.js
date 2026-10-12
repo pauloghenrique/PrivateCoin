@@ -78,10 +78,13 @@
     async function review(result, wanted, asProvider) {
         await wallet.verifyExchangeDraft(result, wanted, app.dataset.networkId, asProvider);
         draft = result; expected = wanted; provider = asProvider; signatures = null; backup = false;
+        const ownPool = result.operation === 'swap' && !asProvider && wallet.addresses().includes(result.providerAddress);
         byId('backup-confirmed').checked = false; byId('exchange-review').replaceChildren();
-        byId('review-title').textContent = result.operation === 'pool' ? 'Criação da pool' : asProvider ? 'Aprovar troca da sua pool' : 'Solicitar troca';
+        byId('review-title').textContent = result.operation === 'pool' ? 'Criação da pool' : asProvider ? 'Aprovar troca da sua pool' : ownPool ? 'Executar troca' : 'Solicitar troca';
         byId('review-description').textContent = result.operation === 'pool' ? 'A pool ficará disponível após a confirmação das reservas em bloco.' :
-            asProvider ? 'Sua assinatura autoriza somente esta troca atômica das reservas.' : 'A assinatura solicita a troca ao provedor. Aguarde a aprovação e a confirmação em bloco.';
+            asProvider ? 'Sua assinatura autoriza somente esta troca atômica das reservas.' : ownPool ?
+                'A carteira selecionada assina a troca e as reservas da pool. A operação será enviada à rede após sua confirmação.' :
+                'A assinatura solicita a troca ao provedor. Aguarde a aprovação e a confirmação em bloco.';
         if (result.operation === 'swap') {
             const input = result.inputSide === 0 ? result.assetA : result.assetB, output = result.inputSide === 0 ? result.assetB : result.assetA;
             addReview('Quantidade entregue pelo comprador', atomicText(result.amountAtomic, input.decimals) + ' ' + input.symbol);
@@ -95,7 +98,7 @@
                 atomicText(output.amountAtomic, token.decimals) + ' ' + token.symbol);
             addReview('Endereço', output.address);
         });
-        byId('sign-exchange').textContent = result.operation === 'pool' ? 'Assinar e criar pool' : asProvider ? 'Assinar e executar troca' : 'Assinar solicitação ao provedor';
+        byId('sign-exchange').textContent = result.operation === 'pool' ? 'Assinar e criar pool' : asProvider || ownPool ? 'Assinar e executar troca' : 'Assinar solicitação ao provedor';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function ensureFunds(requirements) {
@@ -128,7 +131,6 @@
         busy = true; message(''); update();
         try {
             const pool = selectedPool(); if (!pool || !pool.available) throw new Error('Selecione uma pool disponível.');
-            if (wallet.addresses().includes(pool.providerAddress)) throw new Error('Use outra carteira para trocar com sua pool.');
             const inputSide = Number(byId('swap-side').value), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
             const receive = wallet.quoteExchange(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic);
@@ -176,13 +178,15 @@
         busy = true; message(''); update();
         try {
             await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId, provider);
+            const ownPool = draft.operation === 'swap' && !provider && wallet.addresses().includes(draft.providerAddress);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(provider ? draft.userInputCount : 0, provider ? undefined : draft.userInputCount).map(item => item.address) });
-            if (draft.operation === 'swap' && !provider) {
+                inputAddresses: draft.inputs.slice(provider ? draft.userInputCount : 0, provider || ownPool ? undefined : draft.userInputCount).map(item => item.address) });
+            if (draft.operation === 'swap' && !provider && !ownPool) {
                 requestId = draft.draftId; try { sessionStorage.setItem('povix-dex-swap-request', requestId); } catch (_) { }
                 await post(app.dataset.proposeUrl, { draftId: draft.draftId, signatures }); reset(); await requestStatus();
             } else {
-                const result = await post(provider ? app.dataset.acceptUrl : app.dataset.submitPoolUrl, { draftId: draft.draftId, signatures });
+                const result = await post(provider ? app.dataset.acceptUrl : ownPool ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
+                    { draftId: draft.draftId, signatures });
                 wallet.lock(); location.assign(receipt(result.transactionId));
             }
         } catch (error) { if (error.rejected) reset(); message(error.message + (error.rejected ? '' : ' Repita o mesmo envio para recuperar o resultado.')); }
