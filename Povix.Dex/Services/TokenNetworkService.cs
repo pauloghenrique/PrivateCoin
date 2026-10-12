@@ -48,6 +48,7 @@ namespace Povix.Dex.Services
                 pending = new List<Transaction>();
                 submitted = new List<SubmittedToken>();
             }
+            LoadProfiles();
             node = new PeerNode(port, false, Path.Combine(dataDirectory, "dex-peers.dat"));
             node.ChainReceived += ReceiveChain;
             node.TransactionReceived += ReceiveTransaction;

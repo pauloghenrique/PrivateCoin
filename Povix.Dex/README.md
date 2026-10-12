@@ -230,3 +230,24 @@ nós locais descartáveis; não publica tokens na rede configurada pelo operador
 O navegador exige HTTPS (ou localhost para desenvolvimento) e suporte a Web
 Crypto, BigInt e armazenamento local. A hospedagem de produção permanece no
 ambiente IIS do projeto.
+
+## Edição do perfil e renúncia
+
+Acesse **Editar tokens** (`/tokens/editar`) e abra a carteira do criador.
+Somente criações confirmadas dessa carteira são listadas. Nome e símbolo de
+exibição, descrição e site HTTPS podem ser alterados no perfil local do DEX.
+A revisão exige confirmação explícita; o navegador reconstrói a autorização
+e assina com a chave do criador. O servidor verifica a assinatura, a sessão,
+a validade de 15 minutos, a criação atual e a revisão do perfil.
+
+**Renunciar à edição** bloqueia permanentemente novas alterações deste perfil
+nesta instalação, inclusive preparações anteriores ainda não enviadas. Não
+renuncia a um contrato, não altera consenso, saldos ou transferências e não
+modifica nome, símbolo, quantidade ou precisão registrados na blockchain.
+Não há taxa de rede para esta operação local.
+
+`App_Data/dex-token-profiles.json` persiste os perfis e renúncias com suas
+autorizações assinadas. Preserve esse arquivo entre publicações e backups,
+junto do cache da rede. A assinatura é verificada ao iniciar; arquivo inválido
+interrompe o serviço. Como o estado é local, outras instalações não recebem
+a alteração, e restaurar um backup antigo pode restaurar permissões antigas.

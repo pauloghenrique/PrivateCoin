@@ -273,6 +273,7 @@ internal static partial class PovixDexRegression
                         "confirmed change becomes spendable without changing the wallet keys or counting token supply as POVIX");
                     string[] updatedKeys = DecryptWallet((Dictionary<string, object>)result["encryptedWallet"]);
                     using (var restored = Wallet.FromPrivateKeys(updatedKeys)) Check(restored.OwnedOneTimeAddresses.Contains((string)result["newAddress"]), "locally generated browser address restores in the Core");
+                    RunProfiles(directory, nodeExecutable, issuer, chain, service);
                     RunTransfers(directory, nodeExecutable, issuer, chain, service, peer, validators, batches);
                     var fork = new Blockchain(commonChain);
                     while (fork.ChainWork <= chain.ChainWork)

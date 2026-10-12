@@ -13,7 +13,7 @@ mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
   -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
   -r:System.ComponentModel.DataAnnotations -out:work/PovixDexRegression.exe \
-  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs Tests/PovixDexProfileRegression.cs Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=Povix.Dex/bin mono work/PovixDexRegression.exe \
   work/dex-regression "$(command -v node)"
 ```
@@ -333,3 +333,20 @@ aprovações, saldo, taxas, criação de tokens, bloqueio/desbloqueio e restaura
 Blocos recebidos com 21 operações, lotes v15 com mais de uma e retrocesso de versão
 são rejeitados. As regressões de aprovação também restauram um bloco assinado v15
 e estendem sua cadeia com um lote v16 de 20 operações.
+
+A regressão também verifica a edição do perfil local: assinatura Web Crypto
+validada pelo servidor, rejeição de carteira alheia, sessão diferente, site
+inseguro e payload alterado; repetição do envio, preservação dos dados da
+blockchain, renúncia bloqueando preparações anteriores, persistência após
+reinício e rejeição de perfil salvo com assinatura adulterada.
+
+Para testar o fluxo da tela de edição sem servidor:
+
+```sh
+node Tests/PovixDexProfileUiRegression.js
+```
+
+Confere seleção explícita da carteira e do token, revisão, confirmação antes
+de assinar, nova tentativa após HTTP 503, bloqueio após renúncia e limpeza
+dos campos ao bloquear a carteira. A validação visual em IIS/HTTPS permanece
+necessária; o teste usa um DOM simulado.
