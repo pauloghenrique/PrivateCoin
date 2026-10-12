@@ -24,3 +24,11 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 @media (max-width: 950px) { .create-grid { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 17px; } .form-section, .wallet-card, .review-card { padding: 22px; } .form-bottom { flex-direction: column; align-items: stretch; } .form-bottom p { max-width: none; } .fee-options { grid-template-columns: 1fr; } .fee-option small { display: inline; margin-left: 10px; } .network-strip-end { display: none; } .site-footer { margin: 0 32px; } }
 @media (max-width: 740px) { .site-header { height: 77px; padding: 0 20px; } nav { gap: 15px; } .network-label { display: none; } .page-shell { padding: 30px 20px 45px; } .create-grid { grid-template-columns: 1fr; } .review-column { position: static; } .review-card { padding: 25px; } .field-grid { grid-template-columns: 1fr; gap: 16px; } .wallet-form { grid-template-columns: 1fr; } .card-heading > .small-pill { display: none; } .network-strip { gap: 13px; font-size: 11px; padding: 11px; } .status-pill { font-size: 10px; } .field-caption { align-items: start; flex-direction: column; gap: 4px; } .fee-options { grid-template-columns: repeat(3, 1fr); } .fee-option small { display: block; margin-left: 0; font-size: 8px; } .fee-option { padding: 10px 6px; } .fee-option strong { font-size: 10px; } .site-footer { margin: 0 20px; flex-direction: column; } .receipt-card { padding: 22px; } .receipt-stats { grid-template-columns: 1fr; gap: 20px; } }
 @media (max-width: 480px) { .site-header { height: auto; min-height: 90px; flex-wrap: wrap; gap: 8px; padding-top: 12px; padding-bottom: 12px; } .site-header nav { width: 100%; justify-content: space-between; } }
+
+#profile-app .token-form { padding: 27px; }
+#profile-app .token-form > label, #profile-fields > label { margin-top: 18px; }
+#profile-app textarea { font: inherit; width: 100%; padding: 11px 12px; border: 1px solid #ccd7d6; border-radius: 7px; resize: vertical; }
+#profile-app .button { margin-top: 18px; }
+#profile-app #chain-details { overflow-wrap: anywhere; }
+#profile-review { margin-top: 25px; border-top: 1px solid var(--line); padding-top: 20px; }
+#profile-review p { overflow-wrap: anywhere; white-space: pre-wrap; }

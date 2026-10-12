@@ -1,0 +1,34 @@
+@{ ViewBag.Title = "Editar tokens"; }
+<main id="profile-app" data-tokens-url="@Url.Action("WalletTokens")" data-prepare-url="@Url.Action("Prepare")" data-submit-url="@Url.Action("Submit")" data-network-id="@PrivateCoin.Core.Blockchain.NetworkId" data-token-id="@ViewBag.TokenId">
+    <div class="page-intro"><span class="eyebrow">PERFIL E PERMISSÕES</span><h1>Edite o perfil do seu token.</h1><p>A carteira do criador autoriza cada alteração com uma assinatura local.</p></div>
+    <div id="app-message" class="notice" role="alert" hidden></div>
+    <div class="create-grid"><div>
+        @Html.Partial("_Wallet")
+        <form id="profile-form" class="card token-form">
+            @Html.AntiForgeryToken()
+            <label for="TokenId">Token confirmado criado por você</label><select id="TokenId" required disabled><option value="">Abra a carteira para consultar</option></select>
+            <p id="profile-status" aria-live="polite"></p>
+            <fieldset id="profile-fields" disabled>
+                <label for="Name">Nome no DEX</label><input id="Name" maxlength="64" required />
+                <label for="Symbol">Símbolo no DEX</label><input id="Symbol" maxlength="10" pattern="[A-Z]{1,10}" required />
+                <label for="Description">Descrição</label><textarea id="Description" maxlength="1000" rows="4"></textarea>
+                <label for="Website">Site HTTPS</label><input id="Website" type="url" maxlength="300" pattern="https://.*" placeholder="https://" />
+                <label><input id="Renounce" type="checkbox" /> Renunciar permanentemente à edição deste perfil nesta instalação do DEX</label>
+                <small>Depois de salvar a renúncia, nenhuma nova edição será aceita, mesmo com a carteira do criador.</small>
+            </fieldset>
+            <button id="prepare-profile" type="submit" class="button button-primary" disabled>Revisar alteração</button>
+        </form>
+    </div><aside class="card token-form">
+        <h2>Dados registrados na blockchain</h2><p id="chain-details">Selecione um token.</p>
+        <small>Nome e símbolo originais, identificador, quantidade e precisão permanecem registrados na rede. O perfil editado é salvo nesta instalação do DEX. A renúncia bloqueia apenas sua edição aqui.</small>
+        <section id="profile-review" hidden aria-live="polite"><h2>Confira antes de assinar</h2><p id="review-details"></p><p id="review-description"></p><p id="review-website"></p><p id="review-permission"></p>
+            <label><input id="confirm-profile" type="checkbox" /> Conferi os dados e entendi o efeito da renúncia, quando selecionada.</label>
+            <button id="sign-profile" type="button" class="button button-primary" disabled>Assinar e salvar</button>
+            <button id="cancel-profile" type="button" class="text-button">Voltar à edição</button>
+        </section>
+    </aside></div>
+</main>
+@section scripts {
+    <script src="@Url.Content("~/Scripts/povix-token-wallet.js")"></script>
+    <script src="@Url.Content("~/Scripts/povix-token-profile.js")"></script>
+}

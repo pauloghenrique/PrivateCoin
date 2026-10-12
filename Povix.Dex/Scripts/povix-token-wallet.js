@@ -294,6 +294,21 @@
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
         createAddress, verifyDraft, verifyTransferDraft, parseSupply, formatAtomic,
+        async authorizeProfile(draft, expected, networkId) {
+            const creator = requireWallet().keys.get(expected.creatorAddress);
+            if (!creator || draft.networkId !== networkId || draft.creatorAddress !== expected.creatorAddress ||
+                draft.tokenId !== expected.tokenId || draft.name !== expected.name || draft.symbol !== expected.symbol ||
+                draft.description !== expected.description || draft.website !== expected.website || draft.renounced !== expected.renounced ||
+                draft.revision !== expected.revision + 1 || !/^[0-9a-f]{32}$/.test(draft.draftId) || !/^[0-9a-f]{64}$/.test(draft.creationId))
+                throw new Error('A preparação não corresponde ao perfil revisado.');
+            const payload = toBase64(encoder.encode([
+                'povix-dex-token-profile-v1', networkId, draft.draftId, draft.tokenId, draft.creationId,
+                draft.creatorAddress, String(draft.revision), draft.renounced ? '1' : '0',
+                ...[draft.name, draft.symbol, draft.description, draft.website].map(value => toBase64(encoder.encode(value)))
+            ].join('|')));
+            if (payload !== draft.authorizationPayload) throw new Error('A autorização do perfil foi alterada.');
+            return toBase64(await crypto.subtle.sign(algorithm.name, creator.key, fromBase64(payload)));
+        },
         async authorizeTransfer(draft) {
             const wallet = requireWallet(), creator = wallet.keys.get(draft.creatorAddress);
             if (!creator || transferAuthorization(draft) !== draft.authorizationPayload)
