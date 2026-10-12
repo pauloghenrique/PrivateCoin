@@ -49,6 +49,13 @@ async function run() {
     assert.equal(get('review-description').textContent, '<script>text</script>');
     assert.equal(get('sign-profile').disabled, true); await get('sign-profile').fire('click'); assert.equal(submits, 0);
     get('confirm-profile').checked = true; await get('confirm-profile').fire('change');
+    const authorizeProfile = wallet.authorizeProfile;
+    delete wallet.authorizeProfile;
+    await get('sign-profile').fire('click');
+    assert.equal(submits, 0);
+    assert.match(get('app-message').textContent, /desatualizada.*Recarregue/);
+    assert.equal(get('profile-review').hidden, false);
+    wallet.authorizeProfile = authorizeProfile;
     failure = true; await get('sign-profile').fire('click');
     assert.equal(get('profile-review').hidden, false); assert.equal(get('sign-profile').disabled, false);
     failure = false; await get('sign-profile').fire('click'); assert.equal(submits, 2); assert.equal(get('profile-review').hidden, true);
@@ -58,6 +65,6 @@ async function run() {
     assert.equal(renounced, true); assert.equal(get('profile-fields').disabled, true); assert.equal(get('prepare-profile').disabled, true);
     const before = requests.length; await get('profile-form').fire('submit'); assert.equal(requests.length, before);
     await get('wallet-lock').fire('click'); assert.equal(unlocked, false); assert.equal(get('Name').value, '');
-    console.log('PASS profile UI: explicit wallet choice, selection, review, confirmation, retry, renunciation and locking');
+    console.log('PASS profile UI: explicit wallet choice, selection, review, confirmation, outdated wallet rejection, retry, renunciation and locking');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -225,6 +225,10 @@ uma nova tentativa, sem criar outra transferência.
 
 ## Verificação
 
+As telas de criação, movimentação e edição carregam a carteira e seu script em
+um único bundle com URL versionada pelo conteúdo, inclusive em modo Debug.
+Isso evita reutilizar uma carteira antiga do cache após atualizar o DEX.
+
 Veja `../Tests/README.md` para executar a regressão do DEX. Ela usa carteiras e
 nós locais descartáveis; não publica tokens na rede configurada pelo operador.
 O navegador exige HTTPS (ou localhost para desenvolvimento) e suporte a Web
