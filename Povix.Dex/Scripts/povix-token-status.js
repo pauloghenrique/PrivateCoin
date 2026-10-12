@@ -13,12 +13,17 @@
             const data = await response.json();
             const confirmed = data.status === 'confirmed' && data.blockHeight != null, pending = data.status === 'pending', validated = data.status === 'validated' || (data.status === 'confirmed' && data.blockHeight == null);
             const transfer = app.dataset.operation === 'transfer';
+            const exchange = app.dataset.operation === 'exchange';
             byId('receipt-title').textContent = confirmed ? (transfer ? 'Movimentação confirmada.' : 'Token registrado.') : validated ? (transfer ? 'Movimentação validada.' : 'Criação validada.') : pending ? (transfer ? 'Transação enviada.' : 'Aguardando validação.') : (transfer ? 'Movimentação não confirmada.' : 'Registro não confirmado.');
             byId('receipt-description').textContent = confirmed ? (transfer ? 'A transferência consta em um bloco validado da rede POVIX.' : 'A criação do token consta em um bloco validado da rede POVIX.') :
                 validated ? 'A operação foi aprovada pelo validador. Com validadores elegíveis, o bloco é produzido ao reunir 20 operações aprovadas ou após 10 segundos de espera. Os saldos e a taxa serão efetivados após a confirmação em bloco.' :
                 pending ? (data.waitingReason || 'A operação aguarda aprovação de uma carteira com garantia confirmada em bloco.') :
                     'A transação deixou a fila após a atualização da cadeia. Confira o saldo antes de tentar novamente.';
             byId('receipt-status').textContent = confirmed ? 'Confirmado' : validated ? 'Validado' : pending ? (transfer ? 'Pendente' : 'Aguardando validação') : 'Não confirmado';
+            if (exchange) {
+                byId('receipt-title').textContent = confirmed ? 'Operação confirmada.' : validated ? 'Operação validada.' : pending ? 'Aguardando validação.' : 'Operação não confirmada.';
+                if (confirmed) byId('receipt-description').textContent = 'A operação consta em um bloco validado da rede POVIX. As reservas e os saldos foram efetivados juntos.';
+            }
             byId('receipt-status').classList.toggle('waiting', !confirmed);
             byId('receipt-validations').textContent = String(data.validations || 0);
             byId('receipt-confirmations').textContent = String(confirmed ? data.confirmations || 0 : 0);

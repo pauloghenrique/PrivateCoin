@@ -17,6 +17,8 @@ namespace Povix.Dex
                 "~/Scripts/povix-token-wallet.js", "~/Scripts/povix-token-transfer.js"));
             bundles.Add(new Bundle("~/bundles/povix-token-profile").Include(
                 "~/Scripts/povix-token-wallet.js", "~/Scripts/povix-token-profile.js"));
+            bundles.Add(new Bundle("~/bundles/povix-liquidity").Include(
+                "~/Scripts/povix-token-wallet.js", "~/Scripts/povix-liquidity.js"));
 
             bundles.Add(new ScriptBundle("~/bundles/jquery").Include(
                         "~/Scripts/jquery-{version}.js"));

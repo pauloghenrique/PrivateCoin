@@ -127,6 +127,9 @@
     <Compile Include="Models\EditTokenViewModel.cs" />
     <Compile Include="Services\TokenProfileService.cs" />
     <Compile Include="Controllers\TokenTransfersController.cs" />
+    <Compile Include="Controllers\LiquidityController.cs" />
+    <Compile Include="Models\LiquidityViewModel.cs" />
+    <Compile Include="Services\LiquidityService.cs" />
     <Compile Include="Models\TokenTransferViewModel.cs" />
     <Compile Include="Services\TokenTransferService.cs" />
     <Compile Include="Models\CreateTokenViewModel.cs" />
@@ -166,6 +169,9 @@
     <Content Include="Views\Tokens\Details.cshtml" />
     <Content Include="Views\Shared\_Wallet.cshtml" />
     <Content Include="Views\TokenTransfers\Index.cshtml" />
+    <Content Include="Views\Liquidity\Index.cshtml" />
+    <Content Include="Views\Liquidity\Details.cshtml" />
+    <Content Include="Scripts\povix-liquidity.js" />
     <Content Include="Views\TokenTransfers\Details.cshtml" />
     <Content Include="Scripts\povix-token-transfer.js" />
     <Content Include="Scripts\bootstrap.bundle.js" />
