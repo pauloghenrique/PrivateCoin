@@ -1,5 +1,36 @@
 # Regressão do cadastro e da movimentação de tokens
 
+## Pools e trocas atômicas
+
+Após compilar `Povix.Dex` e `PrivateCoin.Core` em Release e restaurar NuGet:
+
+```sh
+npm install --prefix work/liquidity-tools --cache work/npm-cache --no-audit --no-fund jsdom@26
+mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
+  -r:Povix.Dex/bin/System.Web.Mvc.dll \
+  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
+  -r:System.ComponentModel.DataAnnotations -main:PovixDexLiquidityMain \
+  -out:work/PovixDexLiquidityRegression.exe \
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs \
+  Tests/PovixDexLiquidityRegression.cs Tests/PovixDexProfileRegression.cs \
+  Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=Povix.Dex/bin mono work/PovixDexLiquidityRegression.exe \
+  work/liquidity-regression "$(command -v node)"
+```
+
+Use um diretório de execução vazio. Os testes geram somente carteiras, tokens
+e nós descartáveis locais. Verificam pools POVIX/token e token/token, exclusão
+das reservas do saldo livre, cotações sem overflow, os dois sentidos da troca,
+sessão, assinaturas falsas, concorrência, autorização de ambas as carteiras,
+propagação P2P, aprovação separada da confirmação, conservação independente
+dos ativos, taxa nativa, idempotência, reinício e reorganização da cadeia.
+O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
+carteira pelo formulário, rejeita preparações alteradas e assina com Web
+Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos
+locais. jsdom é usado somente pelos testes, sem dependência nova na aplicação.
+
+## Cadastro e movimentação existentes
+
 Compile `Povix.Dex` e `PrivateCoin.Core` em Release, após restaurar os pacotes
 NuGet. A regressão exige Node.js 20+ com Web Crypto e .NET Framework 4.8 (ou Mono).
 Ela cria carteiras descartáveis, usa dois nós TCP locais e grava apenas dados

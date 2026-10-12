@@ -59,7 +59,8 @@ namespace Povix.Dex.Services
                 RequireReady();
                 foreach (string id in transferDrafts.Where(item => item.Value.ExpiresUtc <= DateTime.UtcNow).Select(item => item.Key).ToArray()) transferDrafts.Remove(id);
                 foreach (string id in drafts.Where(item => item.Value.ExpiresUtc <= DateTime.UtcNow).Select(item => item.Key).ToArray()) drafts.Remove(id);
-                if (drafts.Count + transferDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) >= 5)
+                ExpireExchangeDrafts();
+                if (drafts.Count + transferDrafts.Count + exchangeDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) + exchangeDrafts.Values.Count(item => item.Owner == owner) >= 5)
                     throw new TokenOperationException("draft_limit", "Há preparações em andamento. Aguarde alguns minutos e tente novamente.");
                 Transaction creation = FindCreation(model.TokenId);
                 if (creation == null) throw new TokenOperationException("token_unconfirmed", "O token precisa ter sua criação confirmada em bloco.");
@@ -141,7 +142,7 @@ namespace Povix.Dex.Services
             lock (sync)
             {
                 Block block = blockchain.Blocks.FirstOrDefault(item => item.Transactions.Any(tx => tx.Id == id));
-                var record = submitted.FirstOrDefault(item => item.Transaction.Id == id);
+                var record = submitted.FirstOrDefault(item => item.Transaction.Id == id && item.Exchange == null);
                 var transaction = block?.Transactions.FirstOrDefault(tx => tx.Id == id) ??
                     pending.FirstOrDefault(tx => tx.Id == id) ?? record?.Transaction;
                 if (record == null || transaction == null || transaction.Kind != TransactionKind.TokenTransfer) return null;
@@ -165,7 +166,7 @@ namespace Povix.Dex.Services
             {
                 var creation = FindCreation(tokenId);
                 if (creation == null || !publicKeys.Contains(creation.Inputs[0].PublicKey, StringComparer.Ordinal)) return new object[0];
-                return submitted.Where(item => item.Transaction.Kind == TransactionKind.TokenTransfer && item.Transaction.Outputs[0].AssetId == tokenId)
+                return submitted.Where(item => item.Exchange == null && item.Transaction.Kind == TransactionKind.TokenTransfer && item.Transaction.Outputs[0].AssetId == tokenId)
                     .OrderByDescending(item => item.Transaction.TimestampUtcTicks).Take(20).Select(item => {
                         var receipt = GetTransferReceipt(item.Transaction.Id);
                         return new { transactionId = receipt.TransactionId, amountAtomic = receipt.Amount.ToString(CultureInfo.InvariantCulture),

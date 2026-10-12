@@ -1,4 +1,4 @@
-# Cadastro e movimentação de tokens no Povix.Dex
+# Tokens, pools de liquidez e trocas no Povix.Dex
 
 A tela `/tokens/criar` cadastra tokens nativos de quantidade fixa na **blockchain
 POVIX existente**, com as regras `TokenCreate` do `PrivateCoin.Core`. A página
@@ -255,3 +255,69 @@ autorizações assinadas. Preserve esse arquivo entre publicações e backups,
 junto do cache da rede. A assinatura é verificada ao iniciar; arquivo inválido
 interrompe o serviço. Como o estado é local, outras instalações não recebem
 a alteração, e restaurar um backup antigo pode restaurar permissões antigas.
+
+## Pools e troca de tokens
+
+Abra **Pools e trocas** no menu (`/liquidez`). A página usa a mesma carteira
+local das telas de tokens. Escolha dois ativos distintos e as quantidades
+iniciais, revise as reservas, os trocos, os endereços e a taxa em POVIX,
+guarde seu backup e assine a criação. São aceitos dois tokens nativos
+confirmados ou um token nativo com POVIX. ETH, BTC e tokens de outras redes
+não são ativos dessa blockchain.
+
+As pools desta versão são **pools com assinatura do provedor**, compatíveis
+com o consenso atual. Não são contratos de AMM autônoma: o Core exige
+assinaturas das chaves que controlam cada UTXO, inclusive as reservas. Cada
+pool pertence a um único provedor; não há emissão de cotas LP ou depósito de
+outros provedores. O servidor não guarda chaves nem pode assinar as reservas.
+O provedor continua podendo movimentá-las pela carteira fora da pool; a página
+detecta reservas gastas e deixa a pool indisponível. Os UTXOs de reserva são
+excluídos do saldo livre e da seleção de entradas **nesta página**. Isso não
+acrescenta um bloqueio ao consenso ou às outras telas da carteira.
+
+A criação usa uma única `TokenTransfer`, com as duas reservas nas primeiras
+saídas e os trocos nas seguintes. Somente a confirmação em bloco torna essas
+reservas disponíveis. O identificador da pool é o da transação de criação;
+a classificação e o encadeamento das reservas ficam no cache público desta
+instalação do DEX. Guarde `App_Data/dex-network.json`: outro DEX não descobre
+automaticamente esse cadastro local apenas ao sincronizar a blockchain.
+
+Para trocar, abra **outra carteira**, selecione uma pool disponível, o ativo
+que entrega, sua quantidade e o **mínimo a receber**. A cotação é calculada
+com inteiros, sem arredondamento para cima, pela fórmula:
+
+```text
+recebimento = reservaSaida × quantidade × 9970
+              / (reservaEntrada × 10000 + quantidade × 9970)
+```
+
+A divisão descarta a fração atômica. A taxa de 0,30% permanece nas reservas,
+e a taxa da rede é cobrada separadamente em POVIX do comprador. A revisão
+mostra o recebimento, o mínimo, os novos valores das reservas e os trocos.
+Assinar essa revisão cria uma solicitação ao provedor; ainda não transmite
+uma transferência nem debita saldo. Mantenha as entradas disponíveis.
+
+O provedor abre a carteira na mesma instalação e consulta **Suas solicitações
+como provedor**. Ao revisar e assinar, autoriza somente as duas entradas de
+reserva da transação apresentada. O navegador de cada participante reconstrói
+o payload e verifica quantidades, taxa, endereços, reservas e fórmula antes
+de assinar. O servidor confere ambas as assinaturas, as reservas atuais e os
+UTXOs antes de persistir e retransmitir a transação completa. Todos os ativos
+são conservados independentemente; não há uma transferência separada de cada
+lado nem pagamentos parciais.
+
+Preparações e solicitações expiram em 15 minutos e ficam em memória; reiniciar
+descarta as que ainda não foram aceitas. A criação e a solicitação do comprador
+exigem a sessão que preparou a revisão. A autorização do provedor depende das
+assinaturas das reservas, e não de conhecer sua chave pública. Uma troca
+aceita ocupa as reservas até confirmar; solicitações concorrentes com as
+mesmas entradas devem ser preparadas novamente. Envios aceitos, comprovantes
+e identificação das pools persistem, e repetir as mesmas assinaturas recupera
+o comprovante sem outra operação.
+
+O comprovante `/liquidez/operacao/{id}` distingue pendente, validado,
+confirmado e rejeitado. Uma aprovação sem bloco não muda saldos ou reservas.
+Após a confirmação, a pool segue as duas primeiras saídas da troca como novas
+reservas. Mudanças de cadeia removem confirmações antigas e impedem o uso de
+reservas órfãs. Os endpoints de criação/movimentação de tokens e a exigência
+do criador na tela de movimentação continuam com suas regras existentes.

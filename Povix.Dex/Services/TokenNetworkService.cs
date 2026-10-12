@@ -115,7 +115,8 @@ namespace Povix.Dex.Services
                 RequireReady();
                 foreach (string id in drafts.Where(item => item.Value.ExpiresUtc < DateTime.UtcNow).Select(item => item.Key).ToArray()) drafts.Remove(id);
                 foreach (string id in transferDrafts.Where(item => item.Value.ExpiresUtc < DateTime.UtcNow).Select(item => item.Key).ToArray()) transferDrafts.Remove(id);
-                if (drafts.Count + transferDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) >= 5)
+                ExpireExchangeDrafts();
+                if (drafts.Count + transferDrafts.Count + exchangeDrafts.Count >= 200 || drafts.Values.Count(item => item.Owner == owner) + transferDrafts.Values.Count(item => item.Owner == owner) + exchangeDrafts.Values.Count(item => item.Owner == owner) >= 5)
                     throw new InvalidOperationException("Há preparações em andamento. Aguarde alguns minutos e tente novamente.");
                 long amount;
                 if (!CreateTokenViewModel.TryParseSupply(model.Supply, model.Decimals, out amount))
@@ -345,6 +346,7 @@ namespace Povix.Dex.Services
         [DataContract]
         private sealed class SubmittedToken
         {
+            [DataMember(EmitDefaultValue = false)] public ExchangeOperation Exchange { get; set; }
             [DataMember] public string DraftId { get; set; }
             [DataMember] public Transaction Transaction { get; set; }
             [DataMember(EmitDefaultValue = false)] public TokenDefinition Token { get; set; }

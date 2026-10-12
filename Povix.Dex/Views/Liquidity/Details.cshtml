@@ -1,0 +1,14 @@
+@model Povix.Dex.Models.ExchangeReceiptViewModel
+@using Povix.Dex.Models
+@{ ViewBag.Title = Model.Operation == "pool" ? "Comprovante da pool" : "Comprovante da troca"; }
+<main id="registration-app" class="receipt-page" data-operation="exchange" data-status-url="@Url.Action("Status", new { id = Model.TransactionId })">
+    <a class="back-link" href="@Url.Action("Index")">← Pools e troca de tokens</a>
+    <div class="page-intro"><span class="eyebrow">@(Model.Operation == "pool" ? "CRIAÇÃO DA POOL" : "TROCA ATÔMICA")</span><h1 id="receipt-title">@(Model.Status == "confirmed" ? "Operação confirmada." : Model.Status == "validated" ? "Operação validada." : Model.Status == "pending" ? "Aguardando validação." : "Operação não confirmada.")</h1><p id="receipt-description">Os saldos e as reservas são efetivados somente após a confirmação em bloco pela rede POVIX.</p></div>
+    <section class="card receipt-card"><span id="receipt-status" class="status-pill">@Model.Status</span>
+        <div class="receipt-stats"><div><span>Taxa da rede em POVIX</span><strong>@TokenNetworkViewModel.FormatPovix(Model.Fee)</strong></div><div><span>Confirmações em bloco</span><strong id="receipt-confirmations">@Model.Confirmations</strong></div></div>
+        <dl class="receipt-data"><dt>Pool</dt><dd>@Model.PoolId</dd><dt>Transação</dt><dd>@Model.TransactionId</dd><dt>Aprovações</dt><dd id="receipt-validations">@Model.ValidationCount</dd><dt>Bloco</dt><dd id="receipt-block">@(Model.BlockHeight.HasValue ? Model.BlockHeight.Value.ToString() : "Aguardando confirmação")</dd><dt>Hash do bloco</dt><dd id="receipt-hash">@(Model.BlockHash ?? "—")</dd>
+        @foreach (var output in Model.Outputs) { <dt>@output.Purpose</dt><dd>@TokenNetworkViewModel.FormatToken(output.Amount, output.Decimals) @output.Symbol</dd><dt>Endereço</dt><dd>@output.Address</dd> }
+        </dl><p id="receipt-connectivity" class="muted-text">@Model.PeerCount pares conectados · Atualização a cada 10 segundos</p>
+    </section>
+</main>
+@section scripts { <script src="@Url.Content("~/Scripts/povix-token-status.js")"></script> }

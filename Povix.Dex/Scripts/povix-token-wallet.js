@@ -177,6 +177,85 @@
         if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) throw new Error('A preparação expirou. Prepare novamente.');
         return true;
     }
+    function quoteExchange(reserveIn, reserveOut, amount) {
+        const rIn = BigInt(reserveIn), rOut = BigInt(reserveOut), value = BigInt(amount);
+        if (rIn <= 0n || rOut <= 0n || value <= 0n) throw new Error('Quantidade ou reservas inválidas.');
+        const adjusted = value * 9970n, result = rOut * adjusted / (rIn * 10000n + adjusted);
+        if (result <= 0n || result >= rOut) throw new Error('Liquidez insuficiente para esta quantidade.');
+        return result.toString();
+    }
+    async function verifyExchangeDraft(draft, expected, networkId, provider) {
+        const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+        const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
+        const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
+        if (draft.networkId !== networkId || draft.consensusVersion !== 16 || draft.operation !== expected.operation ||
+            !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
+            draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
+            draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
+            draft.changeAddress !== expected.changeAddress || !Array.isArray(draft.inputs) || !draft.inputs.length || draft.inputs.length > 1000 ||
+            !Array.isArray(draft.outputs) || !Number.isSafeInteger(draft.userInputCount) || draft.userInputCount < 1 ||
+            !Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) fail();
+        for (const side of ['assetA', 'assetB']) {
+            const actual = draft[side], wanted = expected[side];
+            if (!actual || !wanted || actual.id !== wanted.id || actual.name !== wanted.name || actual.symbol !== wanted.symbol || actual.decimals !== wanted.decimals ||
+                !(actual.id === 'povix' || id(actual.id)) || !Number.isInteger(actual.decimals) || actual.decimals < 0 || actual.decimals > 8) fail();
+        }
+        if (draft.assetA.id === draft.assetB.id || !atomic(draft.reserveAAtomic) || !atomic(draft.reserveBAtomic) ||
+            draft.reserveAAtomic !== expected.reserveAAtomic || draft.reserveBAtomic !== expected.reserveBAtomic ||
+            BigInt(draft.reserveAAtomic) <= 0n || BigInt(draft.reserveBAtomic) <= 0n) fail();
+        const allowed = new Set(['povix', draft.assetA.id, draft.assetB.id]), seen = new Set(), totals = new Map();
+        let payload = draft.timestampUtcTicks;
+        draft.inputs.forEach((input, index) => {
+            const key = input.transactionId + ':' + input.outputIndex;
+            if (!id(input.transactionId) || !id(input.address) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 ||
+                !allowed.has(input.assetId) || !atomic(input.amountAtomic) || BigInt(input.amountAtomic) <= 0n || seen.has(key)) fail();
+            seen.add(key); payload += '|' + key;
+            const owned = draft.operation === 'pool' || (provider ? index >= draft.userInputCount : index < draft.userInputCount);
+            if (owned && !wallet.keys.has(input.address)) fail();
+            if (index < draft.userInputCount) totals.set(input.assetId, (totals.get(input.assetId) || 0n) + BigInt(input.amountAtomic));
+        });
+        const output = (assetId, amount, address) => ({ assetId, amountAtomic: String(amount), address });
+        const spends = new Map([['povix', BigInt(draft.feeAtomic)]]), wantedOutputs = [];
+        const addSpend = (assetId, amount) => spends.set(assetId, (spends.get(assetId) || 0n) + BigInt(amount));
+        const a = BigInt(draft.reserveAAtomic), b = BigInt(draft.reserveBAtomic);
+        if (draft.operation === 'pool') {
+            if (provider || draft.userInputCount !== draft.inputs.length || draft.providerAddress !== draft.changeAddress || !wallet.keys.has(draft.changeAddress)) fail();
+            wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
+            addSpend(draft.assetA.id, a); addSpend(draft.assetB.id, b);
+        } else if (draft.operation === 'swap') {
+            if (draft.inputs.length !== draft.userInputCount + 2 || draft.poolId !== expected.poolId || draft.reserveTransactionId !== expected.reserveTransactionId ||
+                draft.providerAddress !== expected.providerAddress || draft.inputSide !== expected.inputSide ||
+                draft.amountAtomic !== expected.amountAtomic || draft.minimumReceiveAtomic !== expected.minimumReceiveAtomic ||
+                !atomic(draft.amountAtomic) || !atomic(draft.minimumReceiveAtomic) || BigInt(draft.minimumReceiveAtomic) <= 0n ||
+                (draft.inputSide !== 0 && draft.inputSide !== 1) || (!provider && wallet.keys.has(draft.providerAddress))) fail();
+            for (let side = 0; side < 2; side++) {
+                const input = draft.inputs[draft.userInputCount + side], asset = side === 0 ? draft.assetA : draft.assetB;
+                if (input.transactionId !== expected.reserveTransactionId || input.outputIndex !== side || input.address !== draft.providerAddress ||
+                    input.assetId !== asset.id || input.amountAtomic !== (side === 0 ? draft.reserveAAtomic : draft.reserveBAtomic)) fail();
+            }
+            const amount = BigInt(draft.amountAtomic), receive = BigInt(quoteExchange(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount));
+            if (draft.receiveAtomic !== receive.toString() || receive < BigInt(draft.minimumReceiveAtomic)) fail();
+            wantedOutputs.push(output(draft.assetA.id, draft.inputSide === 0 ? a + amount : a - receive, draft.providerAddress),
+                output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - receive, draft.providerAddress),
+                output(draft.inputSide === 0 ? draft.assetB.id : draft.assetA.id, receive, draft.changeAddress));
+            addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, amount);
+        } else fail();
+        for (const assetId of Array.from(new Set([...spends.keys(), ...totals.keys()])).sort((x, y) => x === 'povix' ? -1 : y === 'povix' ? 1 : x.localeCompare(y))) {
+            const change = (totals.get(assetId) || 0n) - (spends.get(assetId) || 0n);
+            if (change < 0n || !spends.has(assetId)) fail();
+            if (change > 0n) wantedOutputs.push(output(assetId, change, draft.changeAddress));
+        }
+        if (draft.outputs.length !== wantedOutputs.length) fail();
+        draft.outputs.forEach((item, index) => {
+            const wanted = wantedOutputs[index];
+            if (!atomic(item.amountAtomic) || BigInt(item.amountAtomic) <= 0n || item.amountAtomic !== wanted.amountAtomic || item.address !== wanted.address || item.assetId !== wanted.assetId) fail();
+            payload += '|' + item.amountAtomic + ':' + item.address;
+        });
+        payload += '|fee:' + draft.feeAtomic + '|kind:4|validator:|reward:|owned:|assets-v1|';
+        draft.outputs.forEach(item => { payload += field(item.assetId === 'povix' ? null : item.assetId); });
+        if (toBase64(encoder.encode(payload)) !== draft.signingPayload) fail();
+        return true;
+    }
     function transferAuthorization(draft) {
         return toBase64(encoder.encode('povix-dex-token-transfer-authorize-v1|' + draft.networkId + '|' + draft.draftId + '|' + draft.tokenId + '|' + draft.signingPayload));
     }
@@ -293,7 +372,7 @@
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
-        createAddress, verifyDraft, verifyTransferDraft, parseSupply, formatAtomic,
+        createAddress, verifyDraft, verifyTransferDraft, verifyExchangeDraft, quoteExchange, parseSupply, formatAtomic,
         async authorizeProfile(draft, expected, networkId) {
             const creator = requireWallet().keys.get(expected.creatorAddress);
             if (!creator || draft.networkId !== networkId || draft.creatorAddress !== expected.creatorAddress ||
