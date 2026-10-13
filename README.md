@@ -394,3 +394,51 @@ A escolha da cadeia é determinística: maior trabalho acumulado e, em empate,
 menor hash da ponta. Essa proteção evita produção isolada no Desktop atualizado,
 mas não estabelece finalização nem obriga nós antigos ou outros clientes a
 seguir a mesma política. Uma cadeia válida com maior trabalho ainda pode substituir a local.
+
+
+## Regras comprometidas no bloco gênesis
+
+O gênesis contém `Rules`: total de 18.000.000 POVIX em unidades atômicas,
+180.000 para a distribuição de 6 POVIX às primeiras 30.000 carteiras,
+17.820.000 para validadores, todas as quatro fases de emissão, divisão de
+30%/70%, precisão, taxas, alvo da prova de trabalho, limite de operações e
+prazo de produção. O gênesis não emite moedas antecipadamente.
+`Blockchain.MaximumSupply` continua sendo o teto da distribuição de carteiras;
+`Rules.TotalSupplyAtomicUnits` explicita a soma desse teto com o dos validadores.
+
+O produtor escolhe até 20 operações prontas e elegíveis e inicia um lote ao
+atingir esse limite ou após 10 segundos desde a primeira observação local.
+O prazo local não pode ser comprovado por outro nó: tempo decorrido não dispensa
+aprovações, assinaturas, garantia confirmada, conservação de ativos nem mineração.
+Filas vazias ou sem operações elegíveis não produzem blocos.
+
+Todos os fontes compilados do `PrivateCoin.Core` são incorporados como recursos.
+Seu compromisso SHA-256 ordenado é registrado em `Rules.ImplementationHash`;
+assim, alterações em regras numéricas ou em lógica de validação também alteram
+`RulesHash`, o gênesis determinístico e o `NetworkId`.
+Os fontes são normalizados para LF para manter a identidade entre Windows/Linux
+e Debug/Release. Por ser uma política estrita, até alterações de comentários ou
+de código auxiliar do Core mudam a identidade; alterações apenas no Desktop não.
+Compile pelo `.csproj`: a ausência dos recursos impede inicializar o protocolo.
+
+Cada mensagem P2P exige a mesma rede, versão e `RulesHash`, antes de aprender
+endereços, entregar eventos ou retransmitir mensagens. Cadeias recebidas também
+são validadas no Core antes da entrega e retransmissão. Um gênesis adulterado,
+ausente ou redefinido em outro bloco é rejeitado, mesmo após nova mineração.
+
+O `Blockchain.json` do Desktop usa esquema 5: `Genesis` é a projeção legível do
+bloco zero, que também permanece no payload `Data` protegido por SHA-256.
+O carregamento valida ambas as cópias. O arquivo é um registro público, não uma
+configuração que autoriza editar as regras da rede.
+
+Esta mudança cria uma rede com outro gênesis. Arquivos da rede antiga são
+rejeitados e preservados; não há migração automática, remintagem, reescrita de
+histórico nem exclusão de carteiras. Atualizar uma rede já existente exige uma
+estratégia de migração separada. Os números de versão de consenso históricos
+continuam disponíveis apenas em cadeias ancoradas no novo gênesis.
+
+O compromisso detecta incompatibilidades entre builds normais. Não é atestação
+remota: software malicioso pode anunciar os hashes oficiais ou adulterar seu
+binário/recursos. Os nós honestos continuam validando toda cadeia e rejeitando
+resultados contrários às suas regras; nenhum hash anunciado prova que um peer
+executa exatamente o código oficial.

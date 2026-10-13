@@ -49,6 +49,7 @@
     <Reference Include="System.Xml"/>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GenesisRules.cs" />
     <Compile Include="Blockchain.cs" />
     <Compile Include="BlockProductionScheduler.cs" />
     <Compile Include="BlockchainQueryApi.cs" />
@@ -65,6 +66,12 @@
     <Compile Include="TokenTransfer.cs" />
     <Compile Include="TokenExchange.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Commit all compiled Core source rules, including nested/new files. Normalize line
+         endings at runtime so Windows and Linux builds share a network identity. -->
+    <EmbeddedResource Include="@(Compile)">
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
  </Project>

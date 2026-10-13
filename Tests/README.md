@@ -403,3 +403,27 @@ Confere seleção explícita da carteira e do token, revisão, confirmação ant
 de assinar, nova tentativa após HTTP 503, bloqueio após renúncia e limpeza
 dos campos ao bloquear a carteira. A validação visual em IIS/HTTPS permanece
 necessária; o teste usa um DOM simulado.
+
+
+## Gênesis e compatibilidade das regras
+
+Compile o Core pelo projeto para incorporar os compromissos dos fontes:
+
+```sh
+xbuild PrivateCoin.Core/PrivateCoin.Core.csproj /p:Configuration=Release
+mkdir -p work
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -r:System.Numerics -r:System.Security \
+  -out:work/PrivateCoinGenesisRulesRegression.exe \
+  Tests/PrivateCoinGenesisRulesRegression.cs PrivateCoin.Desktop/WalletStore.cs \
+  PrivateCoin.Desktop/RecoveryPhraseGenerator.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinGenesisRulesRegression.exe
+```
+
+São 42 verificações: gênesis determinístico, total e fases de emissão, alteração
+de cada campo mesmo após mineração, ausência de regras, redefinição em outro
+bloco, isolamento do cache canônico, persistência real no `Blockchain.json`,
+adulteração da projeção legível e peers TCP reais. Verifica desconexão por
+hash divergente ou ausente, rede antiga, versão diferente e cadeia inválida
+mesmo quando o peer anuncia o hash oficial. Um peer compatível entrega a cadeia.
+O teste usa somente diretórios e sockets locais descartáveis.

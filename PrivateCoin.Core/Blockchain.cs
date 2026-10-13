@@ -35,10 +35,11 @@ namespace PrivateCoin.Core
         public const int MaxOperationsPerBlock = 20;
         public const int BlockWaitSeconds = 10;
         private const int LegacyValidationsPerBlock = 20;
-        public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
-        public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
+        private static readonly Block canonicalGenesis = BuildCanonicalGenesis();
+        public static readonly string GenesisHash = canonicalGenesis.Hash;
+        public static readonly string RulesHash = canonicalGenesis.Rules.CalculateHash();
+        public static readonly string NetworkId = "povix-mainnet-rules-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
-        private const long GenesisNonce = 4995L;
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
 
@@ -497,7 +498,7 @@ namespace PrivateCoin.Core
                     for (int i = 0; i < blocks.Count; i++)
                     {
                         var block = blocks[i];
-                        if (block == null || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
+                        if (block == null || (i > 0 && block.Rules != null) || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
                         if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
                     }
                     ValidateWholeChain(); return true;
@@ -1168,15 +1169,30 @@ namespace PrivateCoin.Core
                 block.ValidationProofPayload();
         }
 
+        private static Block BuildCanonicalGenesis()
+        {
+            var block = new Block
+            {
+                Height = 0,
+                PreviousHash = new string('0', 64),
+                TimestampUtcTicks = GenesisTimestampUtcTicks,
+                Rules = GenesisRules.CreateCanonical()
+            };
+            Mine(block);
+            return block;
+        }
+
         private static Block CreateGenesisBlock()
         {
+            // Never expose the cached block/manifest through the mutable Blocks API.
             return new Block
             {
                 Height = 0,
                 PreviousHash = new string('0', 64),
                 TimestampUtcTicks = GenesisTimestampUtcTicks,
-                Nonce = GenesisNonce,
-                Hash = GenesisHash
+                Nonce = canonicalGenesis.Nonce,
+                Hash = GenesisHash,
+                Rules = GenesisRules.CreateCanonical()
             };
         }
 
@@ -1185,9 +1201,10 @@ namespace PrivateCoin.Core
             return block != null && block.Height == 0 &&
                 block.PreviousHash == new string('0', 64) &&
                 block.TimestampUtcTicks == GenesisTimestampUtcTicks &&
-                block.Nonce == GenesisNonce && block.Hash == GenesisHash &&
+                block.Nonce == canonicalGenesis.Nonce && block.Hash == GenesisHash &&
+                block.ConsensusVersion == 0 && block.TransactionValidations == null &&
                 block.Transactions != null && block.Transactions.Count == 0 &&
-                (block.Validators == null || block.Validators.Count == 0) &&
+                block.Validators == null && block.Rules != null && block.Rules.IsCanonical() &&
                 block.CalculateHash() == GenesisHash;
         }
 
