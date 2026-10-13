@@ -120,11 +120,6 @@ namespace PrivateCoin.Desktop
                 BeginInvoke(new Action(() => CheckForUpdatesAsync(false)));
         }
 
-        private async void UpdateButtonClick(object sender, EventArgs e)
-        {
-            await CheckForUpdatesAsync(true);
-        }
-
         private async Task CheckForUpdatesAsync(bool interactive)
         {
             if (updateCheckInProgress) return;
@@ -137,8 +132,6 @@ namespace PrivateCoin.Desktop
             }
 
             updateCheckInProgress = true;
-            updateButton.Enabled = false;
-            updateButton.Text = "Verificando...";
             try
             {
                 var updater = new DesktopUpdater(manifestUrl.Trim());
@@ -155,9 +148,8 @@ namespace PrivateCoin.Desktop
                     "\n\nBaixar, instalar e reiniciar agora? Seus arquivos de carteira e blockchain serão preservados.",
                     "Atualização do POVIX", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
 
-                updateButton.Text = "Baixando 0%";
-                var progress = new Progress<int>(value => updateButton.Text = "Baixando " + value + "%");
-                string payload = await updater.DownloadAsync(update, progress);
+                Log("Baixando atualização " + update.Version + "...", true);
+                string payload = await updater.DownloadAsync(update, null);
                 SaveState();
                 DesktopUpdater.LaunchInstaller(payload);
                 Application.Exit();
@@ -171,8 +163,6 @@ namespace PrivateCoin.Desktop
             finally
             {
                 updateCheckInProgress = false;
-                updateButton.Enabled = true;
-                updateButton.Text = "Buscar atualização";
             }
         }
 
@@ -404,6 +394,7 @@ namespace PrivateCoin.Desktop
             {
                 if (peerNode != null) peerNode.Dispose();
                 peerNode = null;
+                UpdatePeerStatus();
                 Log("Não foi possível iniciar o nó: " + error.Message, false);
             }
         }
@@ -429,11 +420,19 @@ namespace PrivateCoin.Desktop
         private void UpdatePeerStatus()
         {
             PeerNode node = peerNode;
-            if (node == null) return;
-            nodeStatusLabel.Text = "Nó ativo na porta " + listenPortTextBox.Text.Trim() +
-                "   |   Pares: " + node.ConnectedPeerCount.ToString(CultureInfo.InvariantCulture) +
-                "   |   Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture);
-            nodeStatusLabel.Text += "   |   " + (networkReadiness.IsReady && IsNetworkConnected() ? "Sincronizado" : "Aguardando sincronização") + "   |   NAT: " + node.NatTraversalStatus;
+            int connectedPeers = node == null ? 0 : node.ConnectedPeerCount;
+            bool connected = connectedPeers > 0;
+            networkConnectionLabel.Text = connected ? "●  Conectado" : "●  Desconectado";
+            networkConnectionLabel.ForeColor = connected ? UiTheme.Success : UiTheme.Danger;
+            if (node == null)
+            {
+                nodeStatusLabel.Text = "Nó parado. Nenhum par conectado.";
+                return;
+            }
+            nodeStatusLabel.Text = "Pares conectados: " + connectedPeers.ToString(CultureInfo.InvariantCulture) +
+                "  |  Conhecidos: " + node.KnownPeers.Length.ToString(CultureInfo.InvariantCulture) +
+                "\n" + (!connected ? "Aguardando conexão com pares" : networkReadiness.IsReady ? "Sincronizado" : "Aguardando sincronização") +
+                "\nPorta: " + listenPortTextBox.Text.Trim() + "  |  NAT: " + node.NatTraversalStatus;
         }
 
         private async void ConnectButtonClick(object sender, EventArgs e)

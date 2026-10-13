@@ -31,7 +31,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Label chainStatusLabel;
         private System.Windows.Forms.ListView validationListView;
         private System.Windows.Forms.ToolTip toolTip;
-        private System.Windows.Forms.Button updateButton;
+        private System.Windows.Forms.Label networkConnectionLabel;
         private System.Windows.Forms.Button tokensButton;
         private System.Windows.Forms.Button walletFolderButton;
 
@@ -72,7 +72,7 @@ namespace PrivateCoin.Desktop
             this.miningStatusLabel = CreateValueLabel("Aguardando uma transferência válida");
             this.chainStatusLabel = CreateMutedLabel("");
             this.validationListView = new System.Windows.Forms.ListView();
-            this.updateButton = CreateButton("Buscar atualização", false);
+            this.networkConnectionLabel = CreateValueLabel("●  Desconectado");
             this.tokensButton = CreateButton("Ver tokens", false);
             this.walletFolderButton = CreateButton("Pasta da carteira", false);
 
@@ -86,9 +86,8 @@ namespace PrivateCoin.Desktop
             subtitle.SetBounds(80, 54, 260, 20);
             var security = CreateHeaderLabel("CARTEIRA LOCAL   •   REDE P2P   •   SUAS CHAVES", 8.5F, UiTheme.HeaderText);
             security.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            security.SetBounds(430, 35, 385, 24);
-            updateButton.SetBounds(842, 31, 168, 32);
-            header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security, updateButton });
+            security.SetBounds(430, 35, 580, 24);
+            header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
 
             var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
             tokensButton.SetBounds(492, 14, 120, 28);
@@ -131,6 +130,15 @@ namespace PrivateCoin.Desktop
             validatorCard.Controls.AddRange(new System.Windows.Forms.Control[] { stakeAmountTextBox,
                 activateValidatorButton, unlockStakeButton, validatorStatusLabel });
 
+            var networkCard = CreateCard(684, 254, 332, 216, "Conexão à rede", "Estado da conexão P2P em tempo real");
+            networkConnectionLabel.SetBounds(20, 72, 292, 28);
+            networkConnectionLabel.ForeColor = UiTheme.Danger;
+            nodeStatusLabel.SetBounds(20, 106, 292, 64);
+            nodeStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8.5F);
+            nodeStatusLabel.Text = "Nó parado. Nenhum par conectado.";
+            showPeersButton.SetBounds(192, 176, 120, 28);
+            networkCard.Controls.AddRange(new System.Windows.Forms.Control[] { networkConnectionLabel, nodeStatusLabel, showPeersButton });
+
             var activityCard = CreateCard(24, 490, 992, 246, "Atividade da rede", "Acompanhe sincronização, mineração e validações");
             miningStatusLabel.SetBounds(24, 67, 570, 24);
             chainStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
@@ -159,7 +167,6 @@ namespace PrivateCoin.Desktop
             createTransactionButton.Click += new System.EventHandler(this.CreateTransactionButtonClick);
             activateValidatorButton.Click += new System.EventHandler(this.ActivateValidatorButtonClick);
             unlockStakeButton.Click += new System.EventHandler(this.UnlockStakeButtonClick);
-            updateButton.Click += new System.EventHandler(this.UpdateButtonClick);
             tokensButton.Click += new System.EventHandler(this.TokensButtonClick);
             walletFolderButton.Click += new System.EventHandler(this.WalletFolderButtonClick);
             connectButton.Enabled = false;
@@ -172,7 +179,7 @@ namespace PrivateCoin.Desktop
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.BackColor = UiTheme.Background;
             this.ClientSize = new System.Drawing.Size(1040, 760);
-            this.Controls.AddRange(new System.Windows.Forms.Control[] { walletCard, validatorCard, activityCard, header });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { walletCard, validatorCard, networkCard, activityCard, header });
             this.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
