@@ -23,6 +23,7 @@
         const root = byId('market-candles'); root.replaceChildren();
         byId('market-chart-empty').hidden = candles.length > 0;
         root.hidden = !candles.length;
+        byId('market-chart-empty').textContent = 'Ainda não há trocas confirmadas nesta pool. Os candles aparecerão após a primeira troca confirmada.';
         if (!candles.length) return;
         const values = candles.flatMap(c => [Number(c.low), Number(c.high)]);
         const low = Math.min(...values), high = Math.max(...values), pad = (high - low || high * .01 || .01) * .15;
@@ -54,24 +55,34 @@
         byId('market-reserve-b').textContent = atomic(p.reserveBAtomic, p.assetB.decimals).replace(/^\+/, '') + ' ' + p.assetB.symbol;
         if (p.status === 'closed') { byId('market-reserve-a').textContent = '0'; byId('market-reserve-b').textContent = '0'; }
         byId('market-state').textContent = p.statusMessage;
+        byId('market-label-a').textContent = 'Reserva de ' + p.assetA.symbol;
+        byId('market-label-b').textContent = 'Reserva de ' + p.assetB.symbol;
         byId('market-heading-a').textContent = 'Movimento ' + p.assetA.symbol;
         byId('market-heading-b').textContent = 'Movimento ' + p.assetB.symbol;
         byId('market-ledger-count').textContent = 'Últimas ' + data.ledger.length + ' de ' + data.ledgerTotal + ' movimentações · Horário local';
         const body = byId('market-ledger'); body.replaceChildren();
+        if (!data.ledger.length) {
+            const row = document.createElement('tr'), cell = document.createElement('td');
+            cell.setAttribute('colspan', '7'); cell.className = 'market-empty';
+            cell.textContent = 'Nenhuma movimentação registrada nesta pool.'; row.appendChild(cell); body.appendChild(row);
+        }
         data.ledger.forEach(item => {
             const row = document.createElement('tr');
             [new Date(item.time * 1000).toLocaleString('pt-BR'), operations[item.operation] || item.operation, statuses[item.status] || item.status,
-                atomic(item.deltaAAtomic, p.assetA.decimals), atomic(item.deltaBAtomic, p.assetB.decimals), item.blockHeight == null ? '—' : item.blockHeight].forEach(text => {
-                    const cell = document.createElement('td'); cell.textContent = text; row.appendChild(cell);
+                atomic(item.deltaAAtomic, p.assetA.decimals), atomic(item.deltaBAtomic, p.assetB.decimals), item.blockHeight == null ? '—' : item.blockHeight].forEach((text, index) => {
+                    const cell = document.createElement('td'); cell.textContent = text;
+                    if (index === 2) cell.setAttribute('data-status', item.status);
+                    if (index === 3 || index === 4) cell.className = 'market-amount' + (item.status === 'confirmed' ? (String(text).startsWith('−') ? ' market-negative' : ' market-positive') : '');
+                    row.appendChild(cell);
                 });
             const cell = document.createElement('td');
             // Receipts exist only for operations submitted by this installation.
-            cell.textContent = item.transactionId; cell.className = 'market-tx'; row.appendChild(cell); body.appendChild(row);
+            cell.textContent = item.transactionId; cell.setAttribute('title', item.transactionId); cell.className = 'market-tx'; row.appendChild(cell); body.appendChild(row);
         });
         const info = byId('market-token-info'); info.replaceChildren();
         (data.tokens || [p.assetA, p.assetB]).forEach(token => {
             const card = document.createElement('section'), title = document.createElement('h3');
-            title.textContent = token.name + ' (' + token.symbol + ')'; card.appendChild(title);
+            title.textContent = (token.name || token.symbol) + ' (' + token.symbol + ')'; card.appendChild(title);
             const fields = [['Identificador', token.id], ['Precisão', token.decimals + ' casas decimais'],
                 ['Oferta total', token.supplyAtomic == null ? 'Ativo nativo POVIX' : atomic(token.supplyAtomic, token.decimals).replace(/^\+/, '') + ' ' + token.symbol]];
             const list = document.createElement('dl');
@@ -81,6 +92,7 @@
             info.appendChild(card);
         });
         chart(data.candles, data.interval);
+        byId('market-connection').setAttribute('data-state', 'ready');
         byId('market-connection').textContent = 'Atualizado às ' + new Date(data.updatedUtc).toLocaleTimeString('pt-BR') + ' · ' + data.peerCount + ' pares · Consulta a cada 5 segundos';
     }
     async function refresh() {
@@ -97,7 +109,10 @@
             if (!response.ok) throw new Error(response.status === 404 ? 'Pool não encontrada.' : 'Não foi possível consultar a rede.');
             const data = await response.json(); if (current === generation) render(data);
         } catch (error) {
-            if (current === generation && !stopped && !document.hidden) byId('market-connection').textContent = (error.name === 'AbortError' ? 'Consulta interrompida.' : error.message) + ' Os dados exibidos podem estar desatualizados. Nova tentativa em 5 segundos.';
+            if (current === generation && !stopped && !document.hidden) {
+                byId('market-connection').setAttribute('data-state', 'error');
+                byId('market-connection').textContent = (error.name === 'AbortError' ? 'Consulta interrompida.' : error.message) + ' Os dados exibidos podem estar desatualizados. Nova tentativa em 5 segundos.';
+            }
         } finally {
             clearTimeout(timeout);
             if (current === generation && !stopped && !document.hidden) timer = setTimeout(refresh, 5000);
