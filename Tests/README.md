@@ -21,13 +21,16 @@ MONO_PATH=Povix.Dex/bin mono work/PovixDexLiquidityRegression.exe \
 Use um diretório de execução vazio. Os testes geram somente carteiras, tokens
 e nós descartáveis locais. Verificam pools POVIX/token e token/token, exclusão
 das reservas do saldo livre, cotações sem overflow, os dois sentidos da troca,
-sessão, assinaturas falsas, concorrência, autorização de ambas as carteiras,
+sessão, assinaturas falsas, concorrência, troca com assinatura somente do comprador,
 propagação P2P, aprovação separada da confirmação, conservação independente
 dos ativos, taxa nativa, idempotência, reinício e reorganização da cadeia.
 Também verifica trocas POVIX/token e token/token com a carteira já selecionada
-controlando o saldo livre e a pool: uma única revisão assina todas as entradas,
+controlando o saldo livre e a pool: uma única revisão assina as entradas livres,
 sem solicitar outra carteira. O envio direto rejeita assinaturas incompletas,
-assinaturas falsas das reservas e sessões diferentes.
+assinaturas falsas do comprador e sessões diferentes. A tela Liquidity/Market
+acompanha pendente → validada → confirmada sem navegar, restaura o comprovante
+após recarregar, preserva o status em falhas e limpa confirmações após uma
+reorganização. Repetir um HTTP 503 reutiliza as mesmas assinaturas.
 Inclui a regressão de disponibilidade: criações e movimentações normais no DEX
 não podem pagar taxas ou quantidades com reservas de pools ativas. Verifica
 o saldo livre em todas as telas, a criação pendente/validada/confirmada, a
@@ -36,7 +39,13 @@ blockchain contra gastos com assinaturas válidas do dono, desvios de reservas,
 alteração do provedor, cotação adulterada e combinação de pools diferentes.
 Confere o encerramento assinado, taxa paga pelo saldo livre, devolução intacta
 dos dois ativos após confirmação, restauração dos bloqueios sem cadastro DEX,
-migração assinada de reservas antigas e restauração de caches v16 em v17.
+migração assinada de reservas antigas e restauração de caches v16/v17 em v18.
+Confere pools e trocas históricas v17 com assinaturas do provedor, rejeição de
+reservas sem assinatura em blocos v17 e ativação de trocas automáticas em v18.
+Verifica também a renúncia assinada pelo criador: bloqueio de encerramento no
+servidor, rejeição de preparação assinada antes da renúncia, reservas fora do
+saldo livre, preservação das trocas e persistência após reinício. Exercita o
+token em ambos os lados da pool e preserva as permissões de outros provedores.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos
@@ -394,3 +403,27 @@ Confere seleção explícita da carteira e do token, revisão, confirmação ant
 de assinar, nova tentativa após HTTP 503, bloqueio após renúncia e limpeza
 dos campos ao bloquear a carteira. A validação visual em IIS/HTTPS permanece
 necessária; o teste usa um DOM simulado.
+
+
+## Gênesis e compatibilidade das regras
+
+Compile o Core pelo projeto para incorporar os compromissos dos fontes:
+
+```sh
+xbuild PrivateCoin.Core/PrivateCoin.Core.csproj /p:Configuration=Release
+mkdir -p work
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -r:System.Numerics -r:System.Security \
+  -out:work/PrivateCoinGenesisRulesRegression.exe \
+  Tests/PrivateCoinGenesisRulesRegression.cs PrivateCoin.Desktop/WalletStore.cs \
+  PrivateCoin.Desktop/RecoveryPhraseGenerator.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinGenesisRulesRegression.exe
+```
+
+São 42 verificações: gênesis determinístico, total e fases de emissão, alteração
+de cada campo mesmo após mineração, ausência de regras, redefinição em outro
+bloco, isolamento do cache canônico, persistência real no `Blockchain.json`,
+adulteração da projeção legível e peers TCP reais. Verifica desconexão por
+hash divergente ou ausente, rede antiga, versão diferente e cadeia inválida
+mesmo quando o peer anuncia o hash oficial. Um peer compatível entrega a cadeia.
+O teste usa somente diretórios e sockets locais descartáveis.

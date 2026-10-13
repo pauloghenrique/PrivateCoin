@@ -25,6 +25,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 6)] public string[] Peers { get; set; }
         [DataMember(Order = 7)] public string NetworkId { get; set; }
         [DataMember(Order = 8)] public int ConsensusVersion { get; set; }
+        [DataMember(Order = 9)] public string RulesHash { get; set; }
     }
 
     /// <summary>A TCP gossip node with Bitcoin-style bootstrap seeds and peer address exchange.</summary>
@@ -271,7 +272,8 @@ namespace PrivateCoin.Core
                 Transaction = transaction,
                 Blocks = blocks,
                 NetworkId = Blockchain.NetworkId,
-                ConsensusVersion = Blockchain.ConsensusVersion
+                ConsensusVersion = Blockchain.ConsensusVersion,
+                RulesHash = Blockchain.RulesHash
             };
         }
 
@@ -290,8 +292,8 @@ namespace PrivateCoin.Core
                     using (var memory = new MemoryStream(body))
                         message = (PeerMessage)new DataContractJsonSerializer(typeof(PeerMessage)).ReadObject(memory);
                     if (message == null || message.NetworkId != Blockchain.NetworkId ||
-                        message.ConsensusVersion != Blockchain.ConsensusVersion)
-                        throw new InvalidDataException("Peer belongs to an incompatible network or consensus version.");
+                        message.ConsensusVersion != Blockchain.ConsensusVersion || message.RulesHash != Blockchain.RulesHash)
+                        throw new InvalidDataException("Peer belongs to an incompatible genesis, protocol rules or consensus version.");
                     if (message == null || string.IsNullOrEmpty(message.MessageId) || !seen.TryAdd(message.MessageId, 0)) continue;
 
                     if (message.Type == "hello" || message.Type == "addr") LearnAddresses(client, message);
@@ -299,14 +301,18 @@ namespace PrivateCoin.Core
                     else if (message.Type == "transaction" && message.Transaction != null)
                         TransactionReceived?.Invoke(this, new TransactionReceivedEventArgs(message.Transaction));
                     else if (message.Type == "chain" && message.Blocks != null && message.Blocks.Length > 0)
+                    {
+                        if (!new Blockchain(message.Blocks).IsValid())
+                            throw new InvalidDataException("Peer supplied an invalid chain.");
                         ChainReceived?.Invoke(this, new ChainReceivedEventArgs(message.Blocks));
+                    }
                     else if (message.Type == "sync-request")
                         SynchronizationRequested?.Invoke(this, EventArgs.Empty);
 
                     if (message.Type != "hello") await SendToAll(message, client).ConfigureAwait(false);
                 }
             }
-            catch (Exception error) when (error is IOException || error is SocketException || error is ObjectDisposedException || error is OperationCanceledException || error is SerializationException) { }
+            catch (Exception error) when (error is IOException || error is SocketException || error is ObjectDisposedException || error is OperationCanceledException || error is SerializationException || error is InvalidOperationException) { }
             finally { RemovePeer(client); }
         }
 

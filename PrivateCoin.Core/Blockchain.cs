@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 17;
+        public const int ConsensusVersion = 18;
+        private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
         private const int LegacyImmediateTransferVersion = 14;
@@ -34,10 +35,11 @@ namespace PrivateCoin.Core
         public const int MaxOperationsPerBlock = 20;
         public const int BlockWaitSeconds = 10;
         private const int LegacyValidationsPerBlock = 20;
-        public const string GenesisHash = "0008127acee1ee9328acdc860e2497340d4923426da9b391088d5c83ef46b673";
-        public const string NetworkId = "povix-mainnet-v1-" + GenesisHash;
+        private static readonly Block canonicalGenesis = BuildCanonicalGenesis();
+        public static readonly string GenesisHash = canonicalGenesis.Hash;
+        public static readonly string RulesHash = canonicalGenesis.Rules.CalculateHash();
+        public static readonly string NetworkId = "povix-mainnet-rules-v1-" + GenesisHash;
         private const long GenesisTimestampUtcTicks = 639028224000000000L;
-        private const long GenesisNonce = 4995L;
         private readonly object sync = new object();
         private readonly List<Block> blocks = new List<Block>();
 
@@ -496,7 +498,7 @@ namespace PrivateCoin.Core
                     for (int i = 0; i < blocks.Count; i++)
                     {
                         var block = blocks[i];
-                        if (block == null || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
+                        if (block == null || (i > 0 && block.Rules != null) || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
                         if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
                     }
                     ValidateWholeChain(); return true;
@@ -553,7 +555,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -564,7 +566,7 @@ namespace PrivateCoin.Core
                         throw new InvalidOperationException("Immediate wallet distributions require consensus version 9.");
                     if (block.ConsensusVersion < ApprovalVersion && tx.TransactionApproval != null)
                         throw new InvalidOperationException("Token creation approvals require consensus version 11.");
-                    if (block.ConsensusVersion < 17 && (TokenExchange.IsPoolOperation(tx.Kind) || tx.LiquiditySwap != null))
+                    if (block.ConsensusVersion < PoolReserveVersion && (TokenExchange.IsPoolOperation(tx.Kind) || tx.LiquiditySwap != null))
                         throw new InvalidOperationException("Pool reserve locks require consensus version 17.");
                     if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
                 }
@@ -635,7 +637,7 @@ namespace PrivateCoin.Core
                     if (block.ConsensusVersion < SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
                         throw new InvalidOperationException("Historical collateral operations require their original minimum fee.");
                     ValidateWalletIssuance(operation, ref issued);
-                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation));
+                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation), block.ConsensusVersion);
                 }
             }
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
@@ -853,7 +855,7 @@ namespace PrivateCoin.Core
                         if (proof == null || proof.ProofPayload() != operation.TransactionApproval.Proof.ProofPayload())
                             throw new InvalidOperationException("The fee must belong to the approving locked validator.");
                     }
-                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation));
+                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation), block.ConsensusVersion);
                 }
                 return;
             }
@@ -925,7 +927,7 @@ namespace PrivateCoin.Core
             return result;
         }
 
-        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false)
+        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false, int consensusVersion = ConsensusVersion)
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
             if (transaction.TransactionApproval != null && !RequiresLockedTokenApproval(transaction))
@@ -974,11 +976,18 @@ namespace PrivateCoin.Core
                 if (source.TransactionKind != TransactionKind.StakeLock && transaction.Kind == TransactionKind.StakeUnlock)
                     throw new InvalidOperationException("An unlock transaction may only spend validator collateral.");
                 if (Crypto.Sha256(input.PublicKey) != source.Output.OneTimeAddress) throw new InvalidOperationException("Input does not own the output.");
-                using (var rsa = new RSACryptoServiceProvider())
+                // Only a validated AMM swap may spend paired, locked reserves without
+                // the provider signing. Free funding and pool closure still require ownership signatures.
+                bool automaticReserve = consensusVersion >= 18 && transaction.Kind == TransactionKind.LiquiditySwap && source.IsPoolReserve;
+                if (!automaticReserve || !string.IsNullOrEmpty(input.Signature))
                 {
-                    rsa.PersistKeyInCsp = false;
-                    rsa.FromXmlString(input.PublicKey);
-                    if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
+                    if (string.IsNullOrEmpty(input.Signature)) throw new InvalidOperationException("Missing ownership signature.");
+                    using (var rsa = new RSACryptoServiceProvider())
+                    {
+                        rsa.PersistKeyInCsp = false;
+                        rsa.FromXmlString(input.PublicKey);
+                        if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
+                    }
                 }
                 if (source.Output.AssetId == null) inputTotal = checked(inputTotal + source.Output.Amount);
                 else
@@ -1160,15 +1169,30 @@ namespace PrivateCoin.Core
                 block.ValidationProofPayload();
         }
 
+        private static Block BuildCanonicalGenesis()
+        {
+            var block = new Block
+            {
+                Height = 0,
+                PreviousHash = new string('0', 64),
+                TimestampUtcTicks = GenesisTimestampUtcTicks,
+                Rules = GenesisRules.CreateCanonical()
+            };
+            Mine(block);
+            return block;
+        }
+
         private static Block CreateGenesisBlock()
         {
+            // Never expose the cached block/manifest through the mutable Blocks API.
             return new Block
             {
                 Height = 0,
                 PreviousHash = new string('0', 64),
                 TimestampUtcTicks = GenesisTimestampUtcTicks,
-                Nonce = GenesisNonce,
-                Hash = GenesisHash
+                Nonce = canonicalGenesis.Nonce,
+                Hash = GenesisHash,
+                Rules = GenesisRules.CreateCanonical()
             };
         }
 
@@ -1177,9 +1201,10 @@ namespace PrivateCoin.Core
             return block != null && block.Height == 0 &&
                 block.PreviousHash == new string('0', 64) &&
                 block.TimestampUtcTicks == GenesisTimestampUtcTicks &&
-                block.Nonce == GenesisNonce && block.Hash == GenesisHash &&
+                block.Nonce == canonicalGenesis.Nonce && block.Hash == GenesisHash &&
+                block.ConsensusVersion == 0 && block.TransactionValidations == null &&
                 block.Transactions != null && block.Transactions.Count == 0 &&
-                (block.Validators == null || block.Validators.Count == 0) &&
+                block.Validators == null && block.Rules != null && block.Rules.IsCanonical() &&
                 block.CalculateHash() == GenesisHash;
         }
 

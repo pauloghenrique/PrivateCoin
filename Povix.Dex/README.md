@@ -21,7 +21,7 @@ bloco ao reunir 20 operações aprovadas ou após 10 segundos de espera.
 1. Execute o projeto ASP.NET MVC 5 em IIS/IIS Express com .NET Framework 4.8 e
    HTTPS. Restaure os pacotes NuGet de `packages.config` antes de compilar.
 2. Configure `PeerSeeds` em `Web.config` com pares **reais** da rede existente,
-   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 17
+   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 18
    e o gênese fixado no Core. Não são fornecidos endpoints fictícios.
 3. `DexListenPort` usa 4780 por padrão. Use uma porta livre; o Desktop e o
    explorer podem continuar em suas portas próprias. A criação aguarda ao menos
@@ -244,10 +244,14 @@ A revisão exige confirmação explícita; o navegador reconstrói a autorizaç�
 e assina com a chave do criador. O servidor verifica a assinatura, a sessão,
 a validade de 15 minutos, a criação atual e a revisão do perfil.
 
-**Renunciar à edição** bloqueia permanentemente novas alterações deste perfil
-nesta instalação, inclusive preparações anteriores ainda não enviadas. Não
-renuncia a um contrato, não altera consenso, saldos ou transferências e não
-modifica nome, símbolo, quantidade ou precisão registrados na blockchain.
+**Renunciar** bloqueia permanentemente novas alterações deste perfil e o
+encerramento das pools deste token administradas pelo criador nesta instalação,
+inclusive preparações anteriores ainda não enviadas. A regra consulta os dois
+ativos da pool e vincula a renúncia à criação confirmada e à chave do criador.
+As reservas continuam excluídas do saldo livre, e as trocas permanecem disponíveis.
+Pools antigas ainda podem ter suas reservas bloqueadas; depois, seu encerramento
+também é impedido. Saldos livres e pools de outros provedores mantêm suas operações.
+A renúncia não altera o consenso nem os dados originais do token na blockchain.
 Não há taxa de rede para esta operação local.
 
 `App_Data/dex-token-profiles.json` persiste os perfis e renúncias com suas
@@ -265,11 +269,13 @@ guarde seu backup e assine a criação. São aceitos dois tokens nativos
 confirmados ou um token nativo com POVIX. ETH, BTC e tokens de outras redes
 não são ativos dessa blockchain.
 
-As pools desta versão são **pools com assinatura do provedor**, compatíveis
-com o consenso atual. Não são contratos de AMM autônoma: o Core exige
-assinaturas das chaves que controlam cada UTXO, inclusive as reservas. Cada
-pool pertence a um único provedor; não há emissão de cotas LP ou depósito de
-outros provedores. O servidor não guarda chaves nem pode assinar as reservas.
+As pools desta versão permitem **trocas sem aprovação do criador**, validadas
+pelas regras nativas do consenso 18. O comprador assina suas entradas de saldo
+livre; as duas reservas bloqueadas são consumidas pela regra da pool e recriadas
+com os mesmos ativos e provedor, seguindo a cotação de 0,30%. Criação, migração
+e encerramento continuam exigindo as assinaturas do dono. Cada pool pertence a
+um único provedor; não há emissão de cotas LP ou depósito de outros provedores.
+O servidor não guarda chaves privadas.
 As reservas são bloqueadas **na blockchain**, inclusive contra transferências
 pelo Desktop ou por outro programa com as mesmas chaves. O Core rejeita
 movimentos comuns, criação de tokens, taxas, garantia de validador e novas
@@ -304,19 +310,25 @@ assine. `LiquidityClose` (tipo 9) exige as assinaturas das duas reservas e
 retorna ambos os valores intactos ao provedor, sem novo bloqueio. A taxa é
 paga separadamente em POVIX livre. Até a confirmação, a pool fica ocupada;
 após confirmar, aparece como **Encerrada** e os valores voltam ao saldo livre.
+O encerramento fica bloqueado neste DEX quando o provedor é o criador de um
+dos tokens da pool e salvou sua renúncia. Uma revisão preparada antes da
+renúncia também é rejeitada no envio. As trocas continuam disponíveis.
 Não há liberação por timeout, reinício ou simples perda do cadastro local.
 
-Pools criadas nas versões anteriores mantêm seus UTXOs e assinaturas originais;
+Pools criadas antes do consenso 17 mantêm seus UTXOs e assinaturas originais;
 não recebem um bloqueio retroativo. A lista as identifica como **Reservas antigas
 sem bloqueio** e desabilita trocas até o provedor usar **Bloquear reservas desta
 pool**, revisar e assinar a migração. Ambos os valores são preservados. Se as
 reservas antigas já foram gastas, essa migração não recupera os valores.
 
-**Ativação:** esta proteção exige consenso 17 no DEX e nos nós da rede. O
-handshake rejeita versões diferentes. Coordene a atualização antes de produzir
-blocos v17; este pull request não atualiza uma rede em funcionamento. O Core
-preserva a validação dos blocos v16 e anteriores e o DEX revalida os caches
-antigos antes de migrar. Publicar apenas a interface não bloqueia pools antigas.
+**Ativação:** as trocas automáticas exigem consenso 18 no DEX e nos nós da
+rede. O handshake rejeita versões diferentes. Atualize também os clientes e
+validadores antes de produzir blocos v18. Atualizar só a interface não ativa
+esse fluxo numa rede v17. O Core preserva a validação original dos blocos v17:
+reservas em trocas históricas ainda precisam das assinaturas do provedor. Os
+caches v17 e anteriores são revalidados ao restaurar. Pools v17 já bloqueadas
+podem receber trocas automáticas após a ativação; reservas antigas sem bloqueio
+continuam exigindo a migração assinada pelo dono.
 
 Para trocar, use a **carteira já selecionada**, escolha uma pool disponível, o ativo
 que entrega, sua quantidade e o **mínimo a receber**. A cotação é calculada
@@ -330,30 +342,21 @@ recebimento = reservaSaida × quantidade × 9970
 A divisão descarta a fração atômica. A taxa de 0,30% permanece nas reservas,
 e a taxa da rede é cobrada separadamente em POVIX do comprador. A revisão
 mostra o recebimento, o mínimo, os novos valores das reservas e os trocos.
-Se a carteira selecionada também controla as reservas da pool, ela assina
-todas as entradas e envia a troca numa única revisão, sem selecionar outra
-carteira ou criar uma solicitação separada. O servidor exige as assinaturas
-do saldo livre e das duas reservas; a mesma chave pode assinar ambos os lados.
-Nas demais pools, assinar a revisão cria uma solicitação ao provedor; ainda
-não transmite uma transferência nem debita saldo. Mantenha as entradas disponíveis.
+O comprador assina e envia a troca diretamente à rede, inclusive quando a
+pool pertence a outra carteira. Não há solicitação ou aprovação do criador.
+O navegador reconstrói o payload e verifica quantidades, taxa, endereços,
+reservas e fórmula antes de assinar. O servidor verifica as assinaturas do
+comprador, a sessão, as reservas atuais e os UTXOs antes de persistir e
+retransmitir a transação. O Core dispensa assinaturas somente nas duas entradas
+de reservas de uma `LiquiditySwap` válida a partir de v18. Todas as entradas de
+saldo livre e os encerramentos continuam exigindo assinaturas. Os ativos são
+conservados independentemente; não há pagamentos parciais.
 
-O provedor abre a carteira na mesma instalação e consulta **Suas solicitações
-como provedor**. Ao revisar e assinar, autoriza somente as duas entradas de
-reserva da transação apresentada. O navegador de cada participante reconstrói
-o payload e verifica quantidades, taxa, endereços, reservas e fórmula antes
-de assinar. O servidor confere ambas as assinaturas, as reservas atuais e os
-UTXOs antes de persistir e retransmitir a transação completa. Todos os ativos
-são conservados independentemente; não há uma transferência separada de cada
-lado nem pagamentos parciais.
-
-Preparações e solicitações expiram em 15 minutos e ficam em memória; reiniciar
-descarta as que ainda não foram aceitas. A criação e a solicitação do comprador
-exigem a sessão que preparou a revisão. A autorização do provedor depende das
-assinaturas das reservas, e não de conhecer sua chave pública. Uma troca
-aceita ocupa as reservas até confirmar; solicitações concorrentes com as
-mesmas entradas devem ser preparadas novamente. Envios aceitos, comprovantes
-e identificação das pools persistem, e repetir as mesmas assinaturas recupera
-o comprovante sem outra operação.
+Preparações expiram em 15 minutos e ficam em memória; reiniciar descarta as
+que ainda não foram aceitas. Uma troca aceita ocupa as reservas até confirmar;
+preparações concorrentes com as mesmas entradas devem ser refeitas. Envios
+aceitos, comprovantes e identificação das pools persistem. Repetir as mesmas
+assinaturas recupera o comprovante sem criar outra operação.
 
 O comprovante `/liquidez/operacao/{id}` distingue pendente, validado,
 confirmado e rejeitado. Uma aprovação sem bloco não muda saldos ou reservas.
@@ -383,7 +386,12 @@ Validação da interface: `node Tests/PovixDexPoolMarketUiRegression.js`.
 
 A tela de mercado também integra a carteira, a cotação, o mínimo a receber,
 a taxa e a revisão/assinatura da troca da pool aberta. O envio permanece na
-tela e oferece acesso ao comprovante. As informações dos dois ativos mostram
+tela e mostra seu status automaticamente a cada cinco segundos: pendente,
+validado, confirmado ou não confirmado. O painel mostra recebimento, taxa,
+confirmações, altura e hash do bloco, com acesso ao comprovante completo.
+A última transação da pool é preservada na sessão do navegador para continuar
+a consulta após recarregar, sem reabrir a carteira. Consultas falhas preservam
+o último status; uma reorganização limpa confirmações e hashes anteriores. As informações dos dois ativos mostram
 nome, símbolo, identificador, precisão, oferta total dos tokens e descrição
 do perfil local assinado, quando vinculada à criação confirmada.
 

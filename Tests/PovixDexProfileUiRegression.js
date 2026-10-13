@@ -61,8 +61,11 @@ async function run() {
     failure = false; await get('sign-profile').fire('click'); assert.equal(submits, 2); assert.equal(get('profile-review').hidden, true);
     get('Renounce').checked = true; await get('profile-form').fire('submit');
     assert.match(get('review-permission').textContent, /permanentemente/);
+    assert.match(get('review-permission').textContent, /encerrar as pools/);
+    assert.match(get('review-permission').textContent, /reservas.*não podem ser retiradas/);
     get('confirm-profile').checked = true; await get('confirm-profile').fire('change'); await get('sign-profile').fire('click');
     assert.equal(renounced, true); assert.equal(get('profile-fields').disabled, true); assert.equal(get('prepare-profile').disabled, true);
+    assert.match(get('profile-status').textContent, /encerramento.*bloqueados/);
     const before = requests.length; await get('profile-form').fire('submit'); assert.equal(requests.length, before);
     await get('wallet-lock').fire('click'); assert.equal(unlocked, false); assert.equal(get('Name').value, '');
     console.log('PASS profile UI: explicit wallet choice, selection, review, confirmation, outdated wallet rejection, retry, renunciation and locking');
