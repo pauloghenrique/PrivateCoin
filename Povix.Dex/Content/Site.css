@@ -57,3 +57,15 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .market-ledger th { color:#526666; }
 .market-tx { max-width:190px; overflow:hidden; text-overflow:ellipsis; }
 @media(max-width:640px) { .market-summary { grid-template-columns:1fr; } .market-chart,.market-ledger { padding:16px; } }
+.pool-workspace { display:grid; grid-template-columns:minmax(0,2fr) minmax(320px,1fr); gap:24px; align-items:start; }
+.pool-analysis,.pool-trading { min-width:0; }
+.pool-trading-stack { display:block; }
+.pool-trading .card { margin:20px 0; }
+.pool-trading .review-column { position:static; }
+.pool-trading .review-card { position:static; }
+.market-tokens { padding:24px; margin:20px 0; }
+.market-token-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.market-token-grid dd { margin:4px 0 16px; overflow-wrap:anywhere; }
+.market-token-grid dt { color:#526666; font-size:14px; }
+@media(max-width:1000px) { .pool-workspace { grid-template-columns:1fr; } }
+@media(max-width:640px) { .market-token-grid { grid-template-columns:1fr; } }

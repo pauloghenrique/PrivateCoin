@@ -380,3 +380,9 @@ rejeitadas ficam identificadas e não participam dos candles. A cadeia atual
 as pools registradas nesta instalação do DEX.
 
 Validação da interface: `node Tests/PovixDexPoolMarketUiRegression.js`.
+
+A tela de mercado também integra a carteira, a cotação, o mínimo a receber,
+a taxa e a revisão/assinatura da troca da pool aberta. O envio permanece na
+tela e oferece acesso ao comprovante. As informações dos dois ativos mostram
+nome, símbolo, identificador, precisão, oferta total dos tokens e descrição
+do perfil local assinado, quando vinculada à criação confirmada.

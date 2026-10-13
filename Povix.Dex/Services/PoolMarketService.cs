@@ -63,7 +63,7 @@ namespace Povix.Dex.Services
                             volume = group.Sum(item => Math.Abs(item.DeltaA / scaleA)) };
                     }).ToArray();
                 var latest = history.LastOrDefault(item => item.Status == "confirmed");
-                return new { pool = PoolResponse(pool), interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+                return new { pool = PoolResponse(pool), tokens = new[] { MarketToken(pool.AssetA), MarketToken(pool.AssetB) }, interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
                     price = latest == null || closed || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
                     candles = candles.Skip(Math.Max(0, candles.Length - 200)).ToArray(),
                     ledger = history.OrderByDescending(item => item.Time).ThenByDescending(item => item.Height).Take(100).Select(item => new {
@@ -72,6 +72,18 @@ namespace Povix.Dex.Services
                         reserveAAtomic = Atomic(item.ReserveA), reserveBAtomic = Atomic(item.ReserveB) }).ToArray(),
                     ledgerTotal = history.Count, peerCount = node.ConnectedPeerCount };
             }
+        }
+        private object MarketToken(TokenDefinition asset)
+        {
+            var token = asset.Id == "povix" ? asset : blockchain.GetTokens().FirstOrDefault(item => item.Id == asset.Id) ?? asset;
+            var creation = blockchain.Blocks.SelectMany(block => block.Transactions)
+                .FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token?.Id == token.Id);
+            TokenProfile profile;
+            profiles.TryGetValue(token.Id, out profile);
+            bool matching = creation != null && profile != null && profile.CreationId == creation.Id;
+            return new { id = token.Id, name = matching ? profile.Name : token.Name, symbol = matching ? profile.Symbol : token.Symbol, decimals = token.Decimals,
+                supplyAtomic = token.Id == "povix" ? null : Atomic(token.Supply), native = token.Id == "povix",
+                description = matching ? profile.Description : null };
         }
         private static long UnixTime(long ticks) => (ticks - 621355968000000000L) / TimeSpan.TicksPerSecond;
         private static decimal Scale(int decimals) { decimal result = 1; for (int i = 0; i < decimals; i++) result *= 10; return result; }

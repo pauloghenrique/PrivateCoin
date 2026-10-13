@@ -9,6 +9,7 @@
     const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
+    const integrated = app.dataset.integrated === 'true';
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
     const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
         pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada',
@@ -41,6 +42,7 @@
     function options(id, entries, label, empty) {
         const element = byId(id), previous = element.value || (id === 'swap-pool' ? preferredPool : null);
         element.replaceChildren(new Option(empty, ''));
+        if (integrated && id === 'swap-pool') entries = entries.filter(item => item.poolId === preferredPool);
         entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false; element.add(option); });
         if (entries.some(item => (item.id || item.poolId) === previous)) element.value = previous;
     }
@@ -48,6 +50,7 @@
         const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate, editing = !busy && !draft;
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
+        if (integrated) byId('swap-pool').disabled = true;
         byId('prepare-pool').disabled = !editing || !ready;
         byId('prepare-swap').disabled = !editing || !ready || Boolean(requestId) || !selectedPool()?.available;
         byId('exchange-priority').disabled = !editing;
@@ -218,10 +221,16 @@
                 const result = await post(draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
                     provider ? app.dataset.acceptUrl : ownPool ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                     { draftId: draft.draftId, signatures });
-                wallet.lock(); location.assign(receipt(result.transactionId));
+                if (integrated) {
+                    wallet.lock(); reset();
+                    const link = document.createElement('a'); link.href = receipt(result.transactionId);
+                    link.textContent = 'Operação enviada. Consultar comprovante →';
+                    byId('app-message').replaceChildren(link); byId('app-message').hidden = false;
+                    document.dispatchEvent(new Event('povix-pool-updated'));
+                } else { wallet.lock(); location.assign(receipt(result.transactionId)); }
             }
         } catch (error) { if (error.rejected) reset(); message(error.message + (error.rejected ? '' : ' Repita o mesmo envio para recuperar o resultado.')); }
-        finally { busy = false; update(); }
+        finally { busy = false; update(); if (integrated) refresh(); }
     });
     byId('download-backup').addEventListener('click', () => { try { wallet.backup(); backup = true; update(); } catch (error) { message(error.message); } });
     byId('backup-confirmed').addEventListener('change', update); byId('edit-exchange').addEventListener('click', reset);
@@ -263,7 +272,7 @@
                 if (currentEpoch !== epoch || busy) return;
                 byId('provider-requests').replaceChildren(); byId('requests-empty').hidden = requests.length > 0;
                 byId('requests-empty').textContent = 'Nenhuma solicitação disponível para esta carteira.';
-                requests.forEach(item => { const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
+                requests.filter(item => !integrated || item.poolId === preferredPool).forEach(item => { const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
                     button.textContent = 'Revisar troca ' + item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.draftId.slice(0, 12);
                     button.disabled = Boolean(draft); button.addEventListener('click', () => approveRequest(item)); byId('provider-requests').appendChild(button); });
             }
