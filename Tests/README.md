@@ -1,5 +1,23 @@
 # Regressão do cadastro e da movimentação de tokens
 
+## Configurações do Core no genesis
+
+Após compilar `PrivateCoin.Core` em Release, execute:
+
+```sh
+mkdir -p work
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -out:work/PrivateCoinGenesisConfigurationRegression.exe \
+  Tests/PrivateCoinGenesisConfigurationRegression.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinGenesisConfigurationRegression.exe
+```
+
+Verifica manifesto no genesis, prova de trabalho, independência de cultura,
+serialização, rejeição de manifesto ausente/adulterado (também após remineração),
+rejeição do genesis antigo e dois peers TCP locais: hash de configuração
+ausente ou diferente desconecta sem executar eventos; configurações iguais
+sincronizam normalmente. Requer acesso a sockets de loopback, sem rede externa.
+
 ## Pools e trocas atômicas
 
 Após compilar `Povix.Dex` e `PrivateCoin.Core` em Release e restaurar NuGet:
@@ -420,7 +438,7 @@ mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/PrivateCoinGenesisRulesRegression.exe
 ```
 
-São 42 verificações: gênesis determinístico, total e fases de emissão, alteração
+São 43 verificações: gênesis determinístico, total e fases de emissão, alteração
 de cada campo mesmo após mineração, ausência de regras, redefinição em outro
 bloco, isolamento do cache canônico, persistência real no `Blockchain.json`,
 adulteração da projeção legível e peers TCP reais. Verifica desconexão por

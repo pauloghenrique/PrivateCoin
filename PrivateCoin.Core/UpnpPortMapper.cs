@@ -16,6 +16,11 @@ namespace PrivateCoin.Core
     internal sealed class UpnpPortMapper : IDisposable
     {
         private const int LeaseSeconds = 3600;
+        private const int RenewalMinutes = 30;
+        private const int DiscoveryTimeoutSeconds = 3;
+        private const int HttpTimeoutSeconds = 5;
+        private const int ShutdownWaitSeconds = 1;
+        private const int UnmapTimeoutSeconds = 2;
         private readonly int port;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private Uri controlUri;
@@ -87,7 +92,7 @@ namespace PrivateCoin.Core
         {
             while (!token.IsCancellationRequested)
             {
-                try { await Task.Delay(TimeSpan.FromMinutes(30), token).ConfigureAwait(false); }
+                try { await Task.Delay(TimeSpan.FromMinutes(RenewalMinutes), token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
 
                 try
@@ -120,7 +125,7 @@ namespace PrivateCoin.Core
             {
                 await udp.SendAsync(request, request.Length, new IPEndPoint(natPmpGateway, 5351)).ConfigureAwait(false);
                 Task<UdpReceiveResult> receive = udp.ReceiveAsync();
-                Task completed = await Task.WhenAny(receive, Task.Delay(TimeSpan.FromSeconds(3), token)).ConfigureAwait(false);
+                Task completed = await Task.WhenAny(receive, Task.Delay(TimeSpan.FromSeconds(DiscoveryTimeoutSeconds), token)).ConfigureAwait(false);
                 if (completed != receive) return false;
                 byte[] response = receive.Result.Buffer;
                 return response.Length >= 16 && response[0] == 0 && response[1] == 130 &&
@@ -216,7 +221,7 @@ namespace PrivateCoin.Core
             {
                 await udp.SendAsync(payload, payload.Length, new IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900)).ConfigureAwait(false);
                 Task<UdpReceiveResult> receive = udp.ReceiveAsync();
-                Task completed = await Task.WhenAny(receive, Task.Delay(TimeSpan.FromSeconds(3), token)).ConfigureAwait(false);
+                Task completed = await Task.WhenAny(receive, Task.Delay(TimeSpan.FromSeconds(DiscoveryTimeoutSeconds), token)).ConfigureAwait(false);
                 if (completed == receive)
                     return ParseLocation(Encoding.ASCII.GetString(receive.Result.Buffer));
             }
@@ -252,7 +257,7 @@ namespace PrivateCoin.Core
 
         private static HttpClient CreateHttpClient()
         {
-            return new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            return new HttpClient { Timeout = TimeSpan.FromSeconds(HttpTimeoutSeconds) };
         }
 
         private static string SecurityElementEscape(string value)
@@ -265,7 +270,7 @@ namespace PrivateCoin.Core
             cancellation.Cancel();
             if (renewalTask != null)
             {
-                try { renewalTask.Wait(TimeSpan.FromSeconds(1)); }
+                try { renewalTask.Wait(TimeSpan.FromSeconds(ShutdownWaitSeconds)); }
                 catch (AggregateException) { }
             }
             if (Protocol == "UPnP" && controlUri != null)
@@ -273,7 +278,7 @@ namespace PrivateCoin.Core
                 try
                 {
                     using (var client = CreateHttpClient())
-                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(UnmapTimeoutSeconds)))
                         DeleteMappingAsync(client, timeout.Token).GetAwaiter().GetResult();
                 }
                 catch (Exception error) when (error is HttpRequestException || error is IOException || error is SocketException || error is OperationCanceledException) { }
@@ -282,7 +287,7 @@ namespace PrivateCoin.Core
             {
                 try
                 {
-                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                    using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(UnmapTimeoutSeconds)))
                         SetNatPmpMappingAsync(0, timeout.Token).GetAwaiter().GetResult();
                 }
                 catch (Exception error) when (error is IOException || error is SocketException || error is ObjectDisposedException || error is OperationCanceledException) { }

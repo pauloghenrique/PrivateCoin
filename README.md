@@ -15,6 +15,41 @@
 - sincronização ao conectar, usando a cadeia válida mais longa e um desempate determinístico pela hash do bloco mais recente.
 - identidade de rede vinculada a uma versão de consenso e a um bloco gênese canônico; pares incompatíveis são desconectados antes de seus dados serem propagados.
 
+## Configurações registradas no genesis
+
+O bloco zero contém `Rules.CoreConfigurationManifest`: um manifesto determinístico
+com todas as constantes públicas e privadas dos tipos de `PrivateCoin.Core`,
+inclusive versões históricas, valores dos tipos de transação, emissão, taxas,
+dificuldade, confirmações sugeridas, limites de tokens, conexões, mensagens,
+cache de peers, tempos de reconexão e UPnP e parâmetros de geração de chaves e
+assinatura, além das quatro fases de recompensa completas.
+A codificação ordena as chaves ordinalmente, usa números invariantes e prefixos
+de comprimento; o texto inteiro participa do SHA-256 do bloco zero.
+`GenesisHash` e `NetworkId` são resultados derivados do genesis, fora do manifesto
+para evitar dependência circular. A prova de trabalho do genesis é determinística.
+Novos parâmetros fixos devem ser constantes para entrar automaticamente nele.
+
+`RulesHash` inclui esse manifesto e é exigido em **cada** mensagem P2P, junto da identidade
+da rede e da versão do consenso. Valor divergente ou ausente desconecta o peer
+antes de aprender seus endereços, executar eventos ou retransmitir a mensagem.
+Uma alteração local dos parâmetros muda as regras canônicas e a identidade da rede.
+A restauração rejeita manifesto ausente ou diferente, mesmo com prova de
+trabalho refeita; blocos posteriores não podem redefinir esse manifesto.
+
+Adicionar o manifesto muda o genesis e inicia uma **rede incompatível com a
+anterior**. `Blockchain.GenesisHash`, `Blockchain.RulesHash` e `Blockchain.NetworkId`
+são calculados a partir das regras e fontes incorporadas na compilação.
+Os caches da rede anterior não são migrados ou apagados automaticamente; uma
+implantação exige dados de cadeia separados e atualização coordenada dos nós.
+Carteiras e chaves devem ser preservadas, mas saldos da cadeia anterior não
+são transportados para o novo genesis.
+
+Portas, sementes de conexão, caminhos, opções de NAT e chaves privadas são
+configurações locais e não pertencem ao manifesto público. A checagem P2P
+compara a configuração declarada; ela não atesta o código executado remotamente.
+Um cliente malicioso pode declarar o hash esperado, por isso a aplicação deve
+continuar validando transações e cadeias pelas regras de consenso do Core.
+
 ## Uso básico
 
 ```csharp

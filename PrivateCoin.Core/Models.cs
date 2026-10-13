@@ -37,6 +37,10 @@ namespace PrivateCoin.Core
         [DataMember(Order = 4)] public int Decimals { get; set; }
         [DataMember(Order = 5)] public long Supply { get; set; }
 
+        public const int MaximumNameLength = 64;
+        public const int MaximumSymbolLength = 10;
+        public const int MaximumDecimals = 8;
+
         internal static string IdFor(TransactionInput input)
         {
             return Crypto.Sha256("povix-token-v1|" + input.TransactionId + "|" +
@@ -45,9 +49,9 @@ namespace PrivateCoin.Core
 
         internal void Validate()
         {
-            if (string.IsNullOrWhiteSpace(Name) || Name.Length > 64 || Name.Any(char.IsControl) ||
-                string.IsNullOrEmpty(Symbol) || Symbol.Length > 10 ||
-                Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > 8 || Supply <= 0)
+            if (string.IsNullOrWhiteSpace(Name) || Name.Length > MaximumNameLength || Name.Any(char.IsControl) ||
+                string.IsNullOrEmpty(Symbol) || Symbol.Length > MaximumSymbolLength ||
+                Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > MaximumDecimals || Supply <= 0)
                 throw new InvalidOperationException("Invalid token: name up to 64 characters, symbol A-Z up to 10, decimals 0-8, positive atomic supply required.");
         }
     }

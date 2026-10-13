@@ -986,7 +986,7 @@ namespace PrivateCoin.Core
                     {
                         rsa.PersistKeyInCsp = false;
                         rsa.FromXmlString(input.PublicKey);
-                        if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
+                        if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
                     }
                 }
                 if (source.Output.AssetId == null) inputTotal = checked(inputTotal + source.Output.Amount);

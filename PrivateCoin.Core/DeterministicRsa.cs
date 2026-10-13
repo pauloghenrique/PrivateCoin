@@ -8,12 +8,15 @@ namespace PrivateCoin.Core
     /// <summary>Creates reproducible RSA keys from a secret seed and an address index.</summary>
     internal static class DeterministicRsa
     {
-        private static readonly BigInteger PublicExponent = new BigInteger(65537);
+        private const int PublicExponentValue = 65537;
+        private const int PrimalityRounds = 40;
+        private const int PrimeBytes = Crypto.RsaKeyBits / 16;
+        private static readonly BigInteger PublicExponent = new BigInteger(PublicExponentValue);
         private static readonly int[] SmallPrimes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37 };
 
         public static RSACryptoServiceProvider Create(byte[] seed, int index)
         {
-            if (seed == null || seed.Length < 16) throw new ArgumentException("A deterministic seed must contain at least 128 bits.", nameof(seed));
+            if (seed == null || seed.Length < Crypto.MinimumSeedBytes) throw new ArgumentException("A deterministic seed must contain at least 128 bits.", nameof(seed));
             if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
 
             BigInteger p = FindPrime(seed, index, 0);
@@ -24,16 +27,16 @@ namespace PrivateCoin.Core
             BigInteger d = ModInverse(PublicExponent, (p - 1) * (q - 1));
             var parameters = new RSAParameters
             {
-                Modulus = ToBigEndian(modulus, 256),
+                Modulus = ToBigEndian(modulus, Crypto.RsaKeyBits / 8),
                 Exponent = ToBigEndian(PublicExponent, 3),
-                D = ToBigEndian(d, 256),
-                P = ToBigEndian(p, 128),
-                Q = ToBigEndian(q, 128),
-                DP = ToBigEndian(d % (p - 1), 128),
-                DQ = ToBigEndian(d % (q - 1), 128),
-                InverseQ = ToBigEndian(ModInverse(q, p), 128)
+                D = ToBigEndian(d, Crypto.RsaKeyBits / 8),
+                P = ToBigEndian(p, PrimeBytes),
+                Q = ToBigEndian(q, PrimeBytes),
+                DP = ToBigEndian(d % (p - 1), PrimeBytes),
+                DQ = ToBigEndian(d % (q - 1), PrimeBytes),
+                InverseQ = ToBigEndian(ModInverse(q, p), PrimeBytes)
             };
-            var rsa = new RSACryptoServiceProvider(2048) { PersistKeyInCsp = false };
+            var rsa = new RSACryptoServiceProvider(Crypto.RsaKeyBits) { PersistKeyInCsp = false };
             rsa.ImportParameters(parameters);
             return rsa;
         }
@@ -42,7 +45,7 @@ namespace PrivateCoin.Core
         {
             for (int attempt = 0; ; attempt++)
             {
-                byte[] candidate = Expand(seed, index, branch, attempt, 128);
+                byte[] candidate = Expand(seed, index, branch, attempt, PrimeBytes);
                 candidate[0] |= 0xC0;
                 candidate[candidate.Length - 1] |= 1;
                 BigInteger value = FromBigEndian(candidate);
@@ -78,8 +81,8 @@ namespace PrivateCoin.Core
             BigInteger d = value - 1;
             int power = 0;
             while (d.IsEven) { d >>= 1; power++; }
-            byte[] encoded = ToBigEndian(value, 128);
-            for (int round = 0; round < 40; round++)
+            byte[] encoded = ToBigEndian(value, PrimeBytes);
+            for (int round = 0; round < PrimalityRounds; round++)
             {
                 byte[] roundBytes = BitConverter.GetBytes(round);
                 byte[] digest;

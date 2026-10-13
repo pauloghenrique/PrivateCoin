@@ -32,6 +32,12 @@ namespace PrivateCoin.Core
     public sealed class PeerNode : IDisposable
     {
         private const int MaximumConnections = 8;
+        private const int MaximumKnownPeers = 2048;
+        private const int OfflineRetrySeconds = 5;
+        private const int ConnectedRetrySeconds = 30;
+        private const int ConnectTimeoutSeconds = 8;
+        private const int MaximumMessageBytes = 1024 * 1024;
+        private const int MaximumAdvertisedPeers = 256;
         private readonly int listeningPort;
         private readonly TcpListener listener;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
@@ -206,7 +212,7 @@ namespace PrivateCoin.Core
 
                 // Retry bootstrap promptly while isolated, then reduce background
                 // traffic after at least one working connection has been found.
-                TimeSpan delay = peers.IsEmpty ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(30);
+                TimeSpan delay = peers.IsEmpty ? TimeSpan.FromSeconds(OfflineRetrySeconds) : TimeSpan.FromSeconds(ConnectedRetrySeconds);
                 try { await Task.Delay(delay, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
             }
@@ -259,7 +265,7 @@ namespace PrivateCoin.Core
         {
             PeerMessage message = CreateMessage(type);
             message.ListeningPort = listeningPort;
-            message.Peers = knownEndpoints.Keys.Take(256).ToArray();
+            message.Peers = knownEndpoints.Keys.Take(MaximumAdvertisedPeers).ToArray();
             return message;
         }
 
@@ -286,7 +292,7 @@ namespace PrivateCoin.Core
                 {
                     byte[] lengthBytes = await ReadExactly(stream, 4, token).ConfigureAwait(false);
                     int length = IPAddress.NetworkToHostOrder(BitConverter.ToInt32(lengthBytes, 0));
-                    if (length <= 0 || length > 1024 * 1024) throw new InvalidDataException("Invalid peer message size.");
+                    if (length <= 0 || length > MaximumMessageBytes) throw new InvalidDataException("Invalid peer message size.");
                     byte[] body = await ReadExactly(stream, length, token).ConfigureAwait(false);
                     PeerMessage message;
                     using (var memory = new MemoryStream(body))
@@ -339,7 +345,7 @@ namespace PrivateCoin.Core
                 }
             }
             if (message.Peers != null)
-                foreach (string endpoint in message.Peers.Take(256)) AddKnownEndpoint(endpoint, true);
+                foreach (string endpoint in message.Peers.Take(MaximumAdvertisedPeers)) AddKnownEndpoint(endpoint, true);
         }
 
         private void AddKnownEndpoint(string endpoint)
@@ -351,7 +357,7 @@ namespace PrivateCoin.Core
         {
             string normalized;
             if (!TryNormalizeEndpoint(endpoint, out normalized)) return;
-            if (knownEndpoints.Count >= 2048 && !knownEndpoints.ContainsKey(normalized)) return;
+            if (knownEndpoints.Count >= MaximumKnownPeers && !knownEndpoints.ContainsKey(normalized)) return;
             knownEndpoints.TryAdd(normalized, 0);
             if (prioritizeConnection && !connectedEndpoints.ContainsKey(normalized) && prioritizedEndpoints.TryAdd(normalized, 0))
                 recentlyLearnedEndpoints.Enqueue(normalized);
@@ -465,7 +471,7 @@ namespace PrivateCoin.Core
                     // SocketAsyncEventArgs uses the event-based socket API instead
                     // and therefore avoids that framework-specific failure path.
                     Task connect = ConnectSocketAsync(client.Client, address, port);
-                    if (await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(8))).ConfigureAwait(false) != connect)
+                    if (await Task.WhenAny(connect, Task.Delay(TimeSpan.FromSeconds(ConnectTimeoutSeconds))).ConfigureAwait(false) != connect)
                     {
                         ObserveFault(connect);
                         throw new TimeoutException("The peer did not answer within 8 seconds.");
