@@ -130,6 +130,7 @@
     <Compile Include="Controllers\LiquidityController.cs" />
     <Compile Include="Models\LiquidityViewModel.cs" />
     <Compile Include="Services\LiquidityService.cs" />
+    <Compile Include="Services\PoolMarketService.cs" />
     <Compile Include="Models\TokenTransferViewModel.cs" />
     <Compile Include="Services\TokenTransferService.cs" />
     <Compile Include="Models\CreateTokenViewModel.cs" />
@@ -170,6 +171,8 @@
     <Content Include="Views\Shared\_Wallet.cshtml" />
     <Content Include="Views\TokenTransfers\Index.cshtml" />
     <Content Include="Views\Liquidity\Index.cshtml" />
+    <Content Include="Views\Liquidity\Market.cshtml" />
+    <Content Include="Scripts\povix-pool-market.js" />
     <Content Include="Views\Liquidity\Details.cshtml" />
     <Content Include="Scripts\povix-liquidity.js" />
     <Content Include="Views\TokenTransfers\Details.cshtml" />

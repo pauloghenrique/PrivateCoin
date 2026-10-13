@@ -110,6 +110,27 @@ namespace Povix.Dex.Controllers
                 validations = receipt.ValidationCount, blockHeight = receipt.BlockHeight, blockHash = receipt.BlockHash, peerCount = receipt.PeerCount }, JsonRequestBehavior.AllowGet);
         }
 
+        [HttpGet]
+        public ActionResult Market(string poolId)
+        {
+            NoCache();
+            if (!ValidId(poolId) || MvcApplication.TokenNetwork?.GetPoolMarket(poolId, 300) == null)
+                return HttpNotFound();
+            ViewBag.PoolId = poolId;
+            return View();
+        }
+
+        [HttpGet]
+        public ActionResult MarketData(string poolId, int interval = 300)
+        {
+            NoCache();
+            if (!ValidId(poolId) || !new[] { 60, 300, 900, 3600, 86400 }.Contains(interval))
+                return new HttpStatusCodeResult(400);
+            if (MvcApplication.TokenNetwork == null) return new HttpStatusCodeResult(503);
+            var data = MvcApplication.TokenNetwork.GetPoolMarket(poolId, interval);
+            return data == null ? (ActionResult)HttpNotFound() : Json(data, JsonRequestBehavior.AllowGet);
+        }
+
         private ActionResult Read(Func<object> action)
         {
             NoCache();

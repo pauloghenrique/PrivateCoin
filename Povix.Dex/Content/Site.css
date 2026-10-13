@@ -41,3 +41,19 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #liquidity-app > .review-note { margin-bottom: 24px; }
 #liquidity-app #review-description { color: var(--muted); font-size: 12px; }
 @media (max-width: 740px) { .site-header { height: auto; min-height: 90px; flex-wrap: wrap; gap: 8px; padding-top: 12px; padding-bottom: 12px; } .site-header nav { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 12px; } }
+
+/* Pool market */
+.market-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:24px; padding:24px; margin-bottom:18px; }
+.market-summary span { display:block; color:var(--muted,#526666); font-size:14px; margin-bottom:8px; }
+.market-summary strong { font-size:22px; overflow-wrap:anywhere; }
+.market-chart,.market-ledger { padding:24px; margin:20px 0; }
+.market-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:18px; }
+.market-toolbar h2 { margin-right:auto; }
+.market-toolbar select { padding:8px; margin-left:8px; }
+#market-candles { width:100%; height:auto; min-height:200px; }
+.market-table-scroll { overflow-x:auto; }
+.market-ledger table { width:100%; border-collapse:collapse; font-size:14px; }
+.market-ledger th,.market-ledger td { padding:14px 10px; border-bottom:1px solid #d5dfdf; text-align:left; white-space:nowrap; }
+.market-ledger th { color:#526666; }
+.market-tx { max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+@media(max-width:640px) { .market-summary { grid-template-columns:1fr; } .market-chart,.market-ledger { padding:16px; } }
