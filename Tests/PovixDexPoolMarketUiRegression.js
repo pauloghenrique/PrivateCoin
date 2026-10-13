@@ -20,6 +20,14 @@ class Element {
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-pool-market.js', 'utf8'), { document, window: { addEventListener: () => {} }, location: { href: 'https://example.test/' }, URL, AbortController, setTimeout: callback => { timers.set(++sequence, callback); return sequence; }, clearTimeout: key => timers.delete(key), fetch: async url => { calls++; assert.equal(new URL(url).searchParams.get('interval'), element('market-interval').value); return { ok: !failing, status: 503, json: async () => data }; } });
     const settle = () => new Promise(resolve => setImmediate(resolve)); await settle();
     assert.equal(element('market-pair').textContent, 'POVIX / TKN');
+    assert.equal(element('market-token-info').children.length, 2);
+    const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
+    const market = fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8');
+    assert.match(market, /Html.Partial\("_PoolTrading", Model\)/);
+    assert.match(trading, /data-integrated="true"/);
+    assert.match(trading, /id="swap-form"/);
+    const markupIds = [...(trading + market).matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
+    assert.equal(new Set(markupIds).size, markupIds.length, 'market and trading IDs must be unique');
     const row = element('market-ledger').children[0];
     assert.equal(row.children[3].textContent, '+1234567890,12345678');
     assert.equal(row.children[4].textContent, '−1,00');

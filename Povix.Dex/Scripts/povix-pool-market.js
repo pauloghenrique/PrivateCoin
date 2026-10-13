@@ -68,6 +68,18 @@
             // Receipts exist only for operations submitted by this installation.
             cell.textContent = item.transactionId; cell.className = 'market-tx'; row.appendChild(cell); body.appendChild(row);
         });
+        const info = byId('market-token-info'); info.replaceChildren();
+        (data.tokens || [p.assetA, p.assetB]).forEach(token => {
+            const card = document.createElement('section'), title = document.createElement('h3');
+            title.textContent = token.name + ' (' + token.symbol + ')'; card.appendChild(title);
+            const fields = [['Identificador', token.id], ['Precisão', token.decimals + ' casas decimais'],
+                ['Oferta total', token.supplyAtomic == null ? 'Ativo nativo POVIX' : atomic(token.supplyAtomic, token.decimals).replace(/^\+/, '') + ' ' + token.symbol]];
+            const list = document.createElement('dl');
+            fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
+            card.appendChild(list);
+            if (token.description) { const description = document.createElement('p'); description.textContent = token.description; card.appendChild(description); }
+            info.appendChild(card);
+        });
         chart(data.candles, data.interval);
         byId('market-connection').textContent = 'Atualizado às ' + new Date(data.updatedUtc).toLocaleTimeString('pt-BR') + ' · ' + data.peerCount + ' pares · Consulta a cada 5 segundos';
     }
@@ -94,6 +106,7 @@
     byId('market-interval').addEventListener('change', refresh);
     byId('market-refresh').addEventListener('click', refresh);
     document.addEventListener('visibilitychange', refresh);
+    document.addEventListener('povix-pool-updated', refresh);
     window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); if (controller) controller.abort(); });
     window.addEventListener('pageshow', () => { if (stopped) { stopped = false; refresh(); } });
     refresh();

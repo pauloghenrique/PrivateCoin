@@ -172,6 +172,7 @@
     <Content Include="Views\TokenTransfers\Index.cshtml" />
     <Content Include="Views\Liquidity\Index.cshtml" />
     <Content Include="Views\Liquidity\Market.cshtml" />
+    <Content Include="Views\Liquidity\_PoolTrading.cshtml" />
     <Content Include="Scripts\povix-pool-market.js" />
     <Content Include="Views\Liquidity\Details.cshtml" />
     <Content Include="Scripts\povix-liquidity.js" />

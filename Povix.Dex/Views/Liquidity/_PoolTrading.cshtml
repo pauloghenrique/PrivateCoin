@@ -1,0 +1,47 @@
+@model Povix.Dex.Models.TokenNetworkViewModel
+@{ ViewBag.Title = "Mercado e troca da pool"; }
+<section id="liquidity-app" data-integrated="true" data-network-id="@Model.NetworkId" data-pool-id="@ViewBag.SelectedPoolId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
+      data-market-url="@Url.Action("Market", new { poolId = "__id__" })" data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
+      data-prepare-reserves-url="@Url.Action("PrepareReserveOperation")" data-submit-reserves-url="@Url.Action("SubmitReserveOperation")"
+      data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")" data-propose-url="@Url.Action("ProposeSwap")" data-requests-url="@Url.Action("Requests")"
+      data-accept-url="@Url.Action("AcceptSwap")" data-request-status-url="@Url.Action("RequestStatus")" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
+    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
+    <div id="app-message" class="notice" role="alert" hidden></div>
+    <div id="request-wait" class="notice" role="status" hidden></div>
+    <div class="pool-trading-stack">
+        <div>
+            @Html.Partial("_Wallet")
+            <section class="card token-form"><h2>Taxa da rede</h2><p>A taxa de rede é paga em POVIX pela carteira que cria a pool ou solicita a troca. A taxa da pool é 0,30% e permanece nas reservas.</p>
+                <label for="exchange-priority">Prioridade</label><select id="exchange-priority"><option value="1">Econômica</option><option value="2" selected>Normal</option><option value="4">Prioritária</option></select><small id="exchange-fee">Consultando a taxa…</small>
+            </section>
+            <form id="pool-form" class="card token-form" hidden>
+                @Html.AntiForgeryToken()
+                <div class="section-heading"><span class="step-number">01</span><div><h2>Criar pool de liquidez</h2><p>Escolha dois ativos distintos. As duas reservas ficam bloqueadas na blockchain e separadas do saldo livre da carteira.</p></div></div>
+                <fieldset id="pool-fields" disabled>
+                    <label for="pool-asset-a">Primeiro ativo</label><select id="pool-asset-a" required></select><small id="pool-balance-a"></small>
+                    <label for="pool-amount-a">Quantidade do primeiro ativo</label><input id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
+                    <label for="pool-amount-b">Quantidade do segundo ativo</label><input id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                </fieldset>
+                <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
+            </form>
+            <form id="swap-form" class="card token-form">
+                <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>A pool só aceita trocas após a confirmação de suas reservas.</p></div></div>
+                <fieldset id="swap-fields" disabled>
+                    <label for="swap-pool">Pool selecionada</label><select id="swap-pool" required aria-readonly="true"></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
+                    <label for="swap-side">Ativo que você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
+                    <label for="swap-amount">Quantidade a trocar</label><input id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>
+                    <label for="swap-minimum">Mínimo a receber</label><input id="swap-minimum" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required /><small>Você define esse limite. Uma cotação menor exige outra revisão.</small>
+                </fieldset>
+                <div class="form-bottom"><button id="prepare-swap" class="button button-primary" type="submit" disabled>Revisar troca →</button></div>
+            </form>
+            <section class="card token-form"><h2>Suas solicitações como provedor</h2><p>Abra a carteira que mantém as reservas para revisar e assinar as solicitações. Somente a assinatura de ambos permite enviar a transação.</p><div id="provider-requests" class="transfer-history-list"></div><p id="requests-empty" class="muted-text">Abra sua carteira para consultar.</p></section>
+            <section class="card token-form" hidden><h2>Pools registradas neste DEX</h2><div id="pool-list" class="transfer-history-list"></div><p id="pools-empty" class="muted-text">Nenhuma pool registrada.</p></section>
+        </div>
+        <aside class="review-column"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise sua operação</h2><p id="review-description">Quantidades, reservas, taxa e endereços serão apresentados antes da assinatura.</p>
+            <dl id="exchange-review" class="review-list"></dl>
+            <div id="sign-actions" hidden><button id="download-backup" type="button" class="button button-secondary">Baixar backup cifrado</button><label class="checkbox-label"><input id="backup-confirmed" type="checkbox" /> Guardei o backup e conferi as quantidades, a taxa e os endereços.</label><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Assinar</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
+        </section></aside>
+    </div>
+</section>
