@@ -200,7 +200,13 @@ namespace PrivateCoin.Core
         public Transaction Complete(IEnumerable<string> signatures)
         {
             var values = signatures.ToArray();
-            if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every input.");
+            if (transaction.Kind == TransactionKind.LiquiditySwap && values.Length == UserInputCount)
+            {
+                if (values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every funding input.");
+                values = values.Concat(new[] { string.Empty, string.Empty }).ToArray();
+            }
+            else if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("One signature is required for every input.");
             var tx = new Transaction { Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
                 LiquiditySwap = transaction.LiquiditySwap == null ? null : new LiquiditySwapTerms {
                     InputSide = transaction.LiquiditySwap.InputSide, Amount = transaction.LiquiditySwap.Amount },

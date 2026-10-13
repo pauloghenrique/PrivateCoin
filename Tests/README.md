@@ -21,13 +21,16 @@ MONO_PATH=Povix.Dex/bin mono work/PovixDexLiquidityRegression.exe \
 Use um diretório de execução vazio. Os testes geram somente carteiras, tokens
 e nós descartáveis locais. Verificam pools POVIX/token e token/token, exclusão
 das reservas do saldo livre, cotações sem overflow, os dois sentidos da troca,
-sessão, assinaturas falsas, concorrência, autorização de ambas as carteiras,
+sessão, assinaturas falsas, concorrência, troca com assinatura somente do comprador,
 propagação P2P, aprovação separada da confirmação, conservação independente
 dos ativos, taxa nativa, idempotência, reinício e reorganização da cadeia.
 Também verifica trocas POVIX/token e token/token com a carteira já selecionada
-controlando o saldo livre e a pool: uma única revisão assina todas as entradas,
+controlando o saldo livre e a pool: uma única revisão assina as entradas livres,
 sem solicitar outra carteira. O envio direto rejeita assinaturas incompletas,
-assinaturas falsas das reservas e sessões diferentes.
+assinaturas falsas do comprador e sessões diferentes. A tela Liquidity/Market
+acompanha pendente → validada → confirmada sem navegar, restaura o comprovante
+após recarregar, preserva o status em falhas e limpa confirmações após uma
+reorganização. Repetir um HTTP 503 reutiliza as mesmas assinaturas.
 Inclui a regressão de disponibilidade: criações e movimentações normais no DEX
 não podem pagar taxas ou quantidades com reservas de pools ativas. Verifica
 o saldo livre em todas as telas, a criação pendente/validada/confirmada, a
@@ -36,7 +39,9 @@ blockchain contra gastos com assinaturas válidas do dono, desvios de reservas,
 alteração do provedor, cotação adulterada e combinação de pools diferentes.
 Confere o encerramento assinado, taxa paga pelo saldo livre, devolução intacta
 dos dois ativos após confirmação, restauração dos bloqueios sem cadastro DEX,
-migração assinada de reservas antigas e restauração de caches v16 em v17.
+migração assinada de reservas antigas e restauração de caches v16/v17 em v18.
+Confere pools e trocas históricas v17 com assinaturas do provedor, rejeição de
+reservas sem assinatura em blocos v17 e ativação de trocas automáticas em v18.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos

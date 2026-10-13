@@ -80,9 +80,9 @@ internal static class PrivateCoinBlockProductionRegression
         v16History.RemoveAt(v16History.Count - 1);
         v16History[1].ConsensusVersion = 16; LegacyConsensusFixture.Mine(v16History[1]);
         var migrated = new Blockchain(v16History);
-        migrated.AddBlock(Registrations(migrated, 2, "v17-migration-"));
-        Check(migrated.IsValid() && migrated.Blocks[1].ConsensusVersion == 16 && migrated.Blocks.Last().ConsensusVersion == 17,
-            "historical full v16 batches extend into v17 without changing original transaction hashes");
+        migrated.AddBlock(Registrations(migrated, 2, "v18-migration-"));
+        Check(migrated.IsValid() && migrated.Blocks[1].ConsensusVersion == 16 && migrated.Blocks.Last().ConsensusVersion == Blockchain.ConsensusVersion,
+            "historical full v16 batches extend into current consensus without changing original transaction hashes");
         var received = Copy(bootstrap.Blocks.ToList());
         received.RemoveAt(received.Count - 1); received.Last().Transactions.Add(registrations[20]);
         LegacyConsensusFixture.Mine(received.Last());

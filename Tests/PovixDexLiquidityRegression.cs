@@ -117,32 +117,31 @@ internal static partial class PovixDexRegression
                             "server rejects a quote below the user minimum before any signature");
                         var swapDraft = ExchangeData(service.PrepareSwap(swapModel, PublicKeys(buyer), buyerAddress, "buyer"));
                         var buyerSignatures = BrowserExchange(directory, nodeExecutable, service, swapDraft, buyer, false);
-                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], buyerSignatures, "buyer").GetAwaiter().GetResult(), "signatures_invalid");
-                        var unsignedReserveSignatures = buyerSignatures.Concat(new[] { Convert.ToBase64String(new byte[256]), Convert.ToBase64String(new byte[256]) }).ToArray();
-                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], unsignedReserveSignatures, "buyer").GetAwaiter().GetResult(), "signature_invalid");
+                        Check(buyerSignatures.Length == (int)swapDraft["userInputCount"], "buyer signs only its free funding inputs");
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], buyerSignatures.Skip(1).ToArray(), "buyer").GetAwaiter().GetResult(), "signatures_invalid");
+                        var extraSignatures = buyerSignatures.Concat(new[] { Convert.ToBase64String(new byte[256]), Convert.ToBase64String(new byte[256]) }).ToArray();
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], extraSignatures, "buyer").GetAwaiter().GetResult(), "signatures_invalid");
                         var concurrent = ExchangeData(service.PrepareSwap(swapModel, PublicKeys(buyer), buyerAddress, "concurrent"));
                         var concurrentSignatures = BrowserExchange(directory, nodeExecutable, service, concurrent, buyer, false);
-                        RejectExchange(() => service.ProposeSwap((string)swapDraft["draftId"], buyerSignatures, "another-session"), "draft_session_changed");
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], buyerSignatures, "another-session").GetAwaiter().GetResult(), "draft_session_changed");
                         var wrong = buyerSignatures.ToArray(); wrong[0] = Convert.ToBase64String(new byte[256]);
-                        RejectExchange(() => service.ProposeSwap((string)swapDraft["draftId"], wrong, "buyer"), "signature_invalid");
-                        service.ProposeSwap((string)swapDraft["draftId"], buyerSignatures, "buyer");
-                        service.ProposeSwap((string)concurrent["draftId"], concurrentSignatures, "concurrent");
-                        Check(((object[])Json.DeserializeObject(Json.Serialize(service.GetSwapRequests(PublicKeys(buyer))))).Length == 0, "another wallet cannot find provider approval requests");
-                        Check(((object[])Json.DeserializeObject(Json.Serialize(service.GetSwapRequests(PublicKeys(provider))))).Length == 2 && chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == 10000,
-                            "signed buyer proposal waits for the provider and makes no partial payment");
-                        var providerSignatures = BrowserExchange(directory, nodeExecutable, service, swapDraft, provider, true);
-                        RejectExchange(() => service.AcceptSwapAsync((string)swapDraft["draftId"], new[] { Convert.ToBase64String(new byte[256]), Convert.ToBase64String(new byte[256]) }).GetAwaiter().GetResult(), "signature_invalid");
+                        RejectExchange(() => service.SubmitSwapAsync((string)swapDraft["draftId"], wrong, "buyer").GetAwaiter().GetResult(), "signature_invalid");
                         long beforeBuyerNative = chain.GetBalance(new[] { buyerAddress });
                         long beforeBuyerToken = chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id);
-                        string swapId = service.AcceptSwapAsync((string)swapDraft["draftId"], providerSignatures).GetAwaiter().GetResult();
-                        Check(service.AcceptSwapAsync((string)swapDraft["draftId"], providerSignatures).GetAwaiter().GetResult() == swapId, "provider retry is idempotent");
-                        RejectExchange(() => service.AcceptSwapAsync((string)concurrent["draftId"], providerSignatures).GetAwaiter().GetResult(), "pool_changed");
+                        var buyerController = LiquidityControllerFor(service, "buyer", new SessionStateItemCollection());
+                        var swapResult = ExchangeData(((JsonResult)buyerController.SubmitSwap((string)swapDraft["draftId"], buyerSignatures).GetAwaiter().GetResult()).Data);
+                        string swapId = (string)swapResult["transactionId"];
+                        Check(buyerController.Response.StatusCode == 200, "a different buyer wallet submits without opening the provider wallet");
+                        Check(service.SubmitSwapAsync((string)swapDraft["draftId"], buyerSignatures, "buyer").GetAwaiter().GetResult() == swapId, "buyer retry is idempotent");
+                        RejectExchange(() => service.SubmitSwapAsync((string)concurrent["draftId"], concurrentSignatures, "concurrent").GetAwaiter().GetResult(), "pool_changed");
                         Check(service.GetExchangeReceipt(swapId).Status == "pending" && !(bool)ExchangePool(service, poolId)["available"] &&
                             chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == beforeBuyerToken, "submitted swap occupies reserves and remains pending until confirmation");
-                        Wait(() => { lock (received) return received.ContainsKey(swapId); }, "fully signed atomic swap propagates to the peer");
+                        Wait(() => { lock (received) return received.ContainsKey(swapId); }, "buyer-signed atomic swap propagates to the peer");
                         Transaction swap; lock (received) swap = received[swapId];
                         Check(swap.Inputs.Count == ((object[])swapDraft["inputs"]).Length && swap.Outputs[0].Amount == 110000000 &&
                             swap.Outputs[1].Amount == 10000 - long.Parse((string)swapDraft["receiveAtomic"]), "both provider reserves participate in the same exact swap transaction");
+                        Check(swap.Inputs.Skip(swap.Inputs.Count - 2).All(input => string.IsNullOrEmpty(input.Signature)), "reserves have no provider signature");
+                        ExerciseLegacySwapConsensus(provider, buyer, validator1, validator2, validators);
                         swap.TransactionApproval = chain.CreateTransactionApproval(swap, new[] { swap }, validators.Take(1));
                         peer.BroadcastAsync(swap).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(swapId).Status == "validated", "swap approval is shown separately from block confirmation");
@@ -150,6 +149,9 @@ internal static partial class PovixDexRegression
                             "validator approval cannot release the swap outputs early");
                         var confirmed = batches.Confirm(chain, new[] { swap }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(swapId).BlockHash == confirmed.Hash, "swap receipt reports the actual confirming block");
+                        var status = ExchangeData(((JsonResult)buyerController.Status(swapId)).Data);
+                        Check((string)status["status"] == "confirmed" && (string)status["poolId"] == poolId && (string)status["blockHash"] == confirmed.Hash &&
+                            (string)((Dictionary<string, object>)status["receive"])["amountAtomic"] == (string)swapDraft["receiveAtomic"], "Market status returns the confirming block and exact receipt amount");
                         Check(chain.IsValid() && chain.GetBalance(new[] { buyerAddress }) == beforeBuyerNative - 10000000 - 2 &&
                             chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == beforeBuyerToken + long.Parse((string)swapDraft["receiveAtomic"]),
                             "confirmed atomic swap preserves every asset and charges the buyer only input amount plus POVIX fee");
@@ -162,11 +164,9 @@ internal static partial class PovixDexRegression
                         var tokensDraft = ExchangeData(service.PrepareSwap(new SwapViewModel { PoolId = secondPool, InputSide = 0, Amount = "1", MinimumReceive = "1,9", FeeAtomic = 2 },
                             PublicKeys(buyer), buyerAddress, "token-token"));
                         var tokensUserSignatures = BrowserExchange(directory, nodeExecutable, service, tokensDraft, buyer, false);
-                        service.ProposeSwap((string)tokensDraft["draftId"], tokensUserSignatures, "token-token");
-                        var tokensProviderSignatures = BrowserExchange(directory, nodeExecutable, service, tokensDraft, provider, true);
                         long oldA = chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id), oldB = chain.GetTokenBalance(new[] { buyerAddress }, tokenB.Token.Id), oldNative = chain.GetBalance(new[] { buyerAddress });
-                        string tokensSwapId = service.AcceptSwapAsync((string)tokensDraft["draftId"], tokensProviderSignatures).GetAwaiter().GetResult();
-                        Wait(() => { lock (received) return received.ContainsKey(tokensSwapId); }, "token/token swap propagates with signatures from both wallets");
+                        string tokensSwapId = service.SubmitSwapAsync((string)tokensDraft["draftId"], tokensUserSignatures, "token-token").GetAwaiter().GetResult();
+                        Wait(() => { lock (received) return received.ContainsKey(tokensSwapId); }, "token/token swap propagates with only buyer signatures");
                         Transaction tokensSwap; lock (received) tokensSwap = received[tokensSwapId];
                         batches.Confirm(chain, new[] { tokensSwap }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(tokensSwapId).Status == "confirmed", "token/token swap confirms atomically");
@@ -201,6 +201,9 @@ internal static partial class PovixDexRegression
                         Check(service.SubmitReserveOperationAsync((string)closeDraft["draftId"], closeSignatures, "close-pool").GetAwaiter().GetResult() == closeId,
                             "closure retries are idempotent");
                         Check(!File.ReadAllText(Path.Combine(directory, "dex-network.json")).Contains("<D>"), "persisted liquidity state contains no private RSA keys");
+                        var savedCache = ExchangeData(Json.DeserializeObject(File.ReadAllText(Path.Combine(directory, "dex-network.json"))));
+                        savedCache["ConsensusVersion"] = 17;
+                        File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(savedCache));
                         service.Dispose(); service = OpenOfflineService(directory, dexPort);
                         Check(service.GetExchangeReceipt(swapId).Status == "confirmed" && (string)ExchangePool(service, poolId)["reserveTransactionId"] == ownNativeSwap.Id &&
                             service.SubmitPoolAsync((string)draft["draftId"], poolSignatures, "provider").GetAwaiter().GetResult() == poolId,
@@ -307,6 +310,80 @@ internal static partial class PovixDexRegression
         RejectPoolSpend(chain, invalid, wallet, "even a single token reserve cannot be moved by its owner through an ordinary transfer");
         Check(new Blockchain(chain.Blocks).GetUnspentOutputs(new[] { address }).Count(output => output.IsPoolReserve) == reserves.Length,
             "restoring the full blockchain preserves pool locks without DEX metadata");
+    }
+    private static void ExerciseLegacySwapConsensus(Wallet provider, Wallet buyer, Wallet validator1, Wallet validator2, ValidatorStake[] validators)
+    {
+        string address = provider.OwnedOneTimeAddresses.First(), buyerAddress = buyer.OwnedOneTimeAddresses.First();
+        var empty = new Transaction[0];
+        var legacy = new Blockchain();
+        foreach (string destination in new[] { address, buyerAddress, validators[0].RewardAddress, validators[1].RewardAddress })
+            LegacyConsensusFixture.Fund(legacy, destination);
+        foreach (var wallet in new[] { validator1, validator2 })
+        {
+            var block = LegacyConsensusFixture.SelfBlock(legacy, wallet.CreateStakeLockTransaction(legacy, empty, wallet.OwnedOneTimeAddresses.First(), Blockchain.OneCoin, 0));
+            block.ConsensusVersion = 17; LegacyConsensusFixture.Mine(block);
+        }
+        var batches = new ValidationBatchFixture(legacy);
+        var creation = TokenCreation.Prepare(legacy, empty, PublicKeys(provider), "Historical pool", "HIS", 2, 100000, address, address, 2);
+        var token = creation.Complete(creation.InputAddresses.Select(item => SignBytes(provider, item, creation.SigningPayload)));
+        var tokenBlock = batches.Confirm(legacy, new[] { token }, validators);
+        tokenBlock.ConsensusVersion = 17; LegacyConsensusFixture.Resign(tokenBlock, validators); LegacyConsensusFixture.Mine(tokenBlock);
+        var liquidity = TokenExchange.PrepareLiquidity(legacy, empty, PublicKeys(provider), null, token.Token.Id, Blockchain.OneCoin, 10000, address, 2);
+        var pool = liquidity.Complete(liquidity.Sources.Select(source => SignBytes(provider, source.Output.OneTimeAddress, liquidity.SigningPayload)));
+        var poolBlock = batches.Confirm(legacy, new[] { pool }, validators);
+        poolBlock.ConsensusVersion = 17; LegacyConsensusFixture.Resign(poolBlock, validators); LegacyConsensusFixture.Mine(poolBlock);
+        var history = Json.Deserialize<Block[]>(Json.Serialize(legacy.Blocks));
+        legacy = new Blockchain(history);
+        Check(legacy.IsValid(), "historical v17 pools restore under v18 consensus");
+        var reserves = legacy.GetUnspentOutputs(new[] { address }).Where(source => source.TransactionId == pool.Id).OrderBy(source => source.OutputIndex).Take(2).ToArray();
+        var prepared = TokenExchange.PrepareSwap(legacy, empty, PublicKeys(buyer), reserves[0], reserves[1], PublicKeys(provider)[0], 0, 1000000, 1, buyerAddress, 2);
+        var buyerSignatures = prepared.Sources.Take(prepared.UserInputCount).Select(source => SignBytes(buyer, source.Output.OneTimeAddress, prepared.SigningPayload)).ToArray();
+        var unsigned = prepared.Complete(buyerSignatures);
+        var malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned));
+        malicious.Outputs[0].Amount--; malicious.Outputs.Last(output => output.AssetId == null).Amount++;
+        RejectAutomaticSwap(legacy, malicious, buyer, prepared.UserInputCount, "buyer-only swaps cannot divert reserves into free change");
+        malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned)); malicious.LiquiditySwap.Amount++;
+        RejectAutomaticSwap(legacy, malicious, buyer, prepared.UserInputCount, "buyer-only swaps cannot alter the quote");
+        malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned));
+        malicious.Outputs[0].OneTimeAddress = buyerAddress; malicious.Outputs[1].OneTimeAddress = buyerAddress;
+        RejectAutomaticSwap(legacy, malicious, buyer, prepared.UserInputCount, "buyer-only swaps cannot change the pool owner");
+        malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned)); malicious.Inputs.Last().PublicKey = PublicKeys(buyer)[0];
+        RejectAutomaticSwap(legacy, malicious, buyer, prepared.UserInputCount, "unsigned reserve inputs must retain the provider public key");
+        malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned));
+        malicious.Kind = TransactionKind.LiquidityClose; malicious.LiquiditySwap = null;
+        malicious.Outputs = new List<TransactionOutput> {
+            new TransactionOutput { Amount = reserves[0].Output.Amount, OneTimeAddress = address },
+            new TransactionOutput { Amount = reserves[1].Output.Amount, AssetId = token.Token.Id, OneTimeAddress = address },
+            new TransactionOutput { Amount = prepared.Sources.Take(prepared.UserInputCount).Sum(source => source.Output.Amount) - 2, OneTimeAddress = buyerAddress } };
+        RejectAutomaticSwap(legacy, malicious, buyer, prepared.UserInputCount, "buyer signatures cannot close a pool without provider ownership signatures");
+        malicious = Json.Deserialize<Transaction>(Json.Serialize(unsigned)); malicious.Inputs[0].Signature = "";
+        malicious.Id = LegacyConsensusFixture.Id(malicious);
+        bool missingFunding = false;
+        try { legacy.ValidatePendingTransactions(new[] { malicious }); } catch (InvalidOperationException) { missingFunding = true; }
+        Check(missingFunding, "automatic swaps still reject unsigned buyer funding");
+        var automatic = batches.Confirm(legacy, new[] { unsigned }, validators);
+        Check(automatic.ConsensusVersion == 18 && legacy.IsValid(), "a v17 pool accepts buyer-only swaps after v18 activation");
+        var invalidBlock = Json.Deserialize<Block>(Json.Serialize(automatic));
+        invalidBlock.ConsensusVersion = 17;
+        LegacyConsensusFixture.Resign(invalidBlock, validators); LegacyConsensusFixture.Mine(invalidBlock);
+        bool rejected = false;
+        try { new Blockchain(history.Concat(new[] { invalidBlock })); } catch (Exception error) when (error is InvalidOperationException || error is System.Security.Cryptography.CryptographicException || error is FormatException) { rejected = true; }
+        Check(rejected, "v17 blocks still reject unsigned reserve inputs even with valid validator votes");
+        var signed = prepared.Complete(buyerSignatures.Concat(prepared.Sources.Skip(prepared.UserInputCount).Select(source => SignBytes(provider, source.Output.OneTimeAddress, prepared.SigningPayload))));
+        legacy = new Blockchain(history);
+        var historical = batches.Confirm(legacy, new[] { signed }, validators);
+        historical.ConsensusVersion = 17;
+        LegacyConsensusFixture.Resign(historical, validators); LegacyConsensusFixture.Mine(historical);
+        Check(new Blockchain(history.Concat(new[] { historical })).IsValid(), "historical v17 swaps with provider signatures keep their original validation rule");
+    }
+    private static void RejectAutomaticSwap(Blockchain chain, Transaction tx, Wallet buyer, int userCount, string label)
+    {
+        var payload = System.Text.Encoding.UTF8.GetBytes((string)typeof(Transaction).GetMethod("SigningPayload",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(tx, null));
+        foreach (var input in tx.Inputs.Take(userCount)) input.Signature = SignBytes(buyer, buyer.OwnedOneTimeAddresses.ToArray()[Array.IndexOf(PublicKeys(buyer), input.PublicKey)], payload);
+        tx.Id = LegacyConsensusFixture.Id(tx);
+        try { chain.ValidatePendingTransactions(new[] { tx }); } catch (InvalidOperationException) { Check(true, label); return; }
+        throw new Exception("Consensus accepted forbidden automatic swap: " + label);
     }
     private static Dictionary<string, object> ExchangeData(object data) => (Dictionary<string, object>)Json.DeserializeObject(Json.Serialize(data));
     private static long TokenFree(TokenNetworkService service, Wallet wallet, string tokenId) =>

@@ -38,13 +38,6 @@ namespace Povix.Dex.Controllers
         }
 
         [HttpPost, ValidateAntiForgeryToken]
-        public ActionResult ProposeSwap(string draftId, string[] signatures)
-        {
-            if (!ValidDraft(draftId) || !ValidSignatures(signatures)) return Error("Assinaturas inválidas.", 400, "signatures_invalid");
-            return Read(() => MvcApplication.TokenNetwork.ProposeSwap(draftId, signatures, Session.SessionID));
-        }
-
-        [HttpPost, ValidateAntiForgeryToken]
         public ActionResult PrepareReserveOperation(string poolId, string operation, string[] publicKeys, int feePriority = 2, long? feeAtomic = null)
         {
             if (!ValidId(poolId) || (operation != "lock" && operation != "close"))
@@ -54,36 +47,22 @@ namespace Povix.Dex.Controllers
         }
 
         [HttpPost, ValidateAntiForgeryToken]
-        public Task<ActionResult> SubmitReserveOperation(string draftId, string[] signatures) => Submit(draftId, signatures, false, false, true);
-
-        [HttpPost, ValidateAntiForgeryToken]
-        public ActionResult Requests(string[] publicKeys) => Read(() => MvcApplication.TokenNetwork.GetSwapRequests(TokensController.DecodePublicKeys(publicKeys)));
-
-        [HttpPost, ValidateAntiForgeryToken]
-        public ActionResult RequestStatus(string draftId)
-        {
-            if (!ValidDraft(draftId)) return Error("Solicitação inválida.", 400, "fields_invalid");
-            return Read(() => MvcApplication.TokenNetwork.GetSwapRequestStatus(draftId, Session.SessionID));
-        }
+        public Task<ActionResult> SubmitReserveOperation(string draftId, string[] signatures) => Submit(draftId, signatures, false, true);
 
         [HttpPost, ValidateAntiForgeryToken]
         public Task<ActionResult> SubmitPool(string draftId, string[] signatures) => Submit(draftId, signatures, false);
 
         [HttpPost, ValidateAntiForgeryToken]
-        public Task<ActionResult> SubmitSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true, true);
+        public Task<ActionResult> SubmitSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true);
 
-        [HttpPost, ValidateAntiForgeryToken]
-        public Task<ActionResult> AcceptSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true);
-
-        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool completeSwap = false, bool reserveOperation = false)
+        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool reserveOperation = false)
         {
             NoCache();
             if (!ValidDraft(draftId) || !ValidSignatures(signatures)) return Error("Assinaturas inválidas.", 400, "signatures_invalid");
             if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503, "network_unavailable");
             try {
                 string id = reserveOperation ? await MvcApplication.TokenNetwork.SubmitReserveOperationAsync(draftId, signatures, Session.SessionID) :
-                    completeSwap ? await MvcApplication.TokenNetwork.SubmitSwapAsync(draftId, signatures, Session.SessionID) :
-                    swap ? await MvcApplication.TokenNetwork.AcceptSwapAsync(draftId, signatures) :
+                    swap ? await MvcApplication.TokenNetwork.SubmitSwapAsync(draftId, signatures, Session.SessionID) :
                     await MvcApplication.TokenNetwork.SubmitPoolAsync(draftId, signatures, Session.SessionID);
                 return Json(new { transactionId = id, receiptUrl = Url.Action("Details", new { id }) });
             }
@@ -105,7 +84,10 @@ namespace Povix.Dex.Controllers
         {
             NoCache();
             var receipt = ValidId(id) ? MvcApplication.TokenNetwork?.GetExchangeReceipt(id) : null;
+            var receive = receipt?.Operation == "swap" ? receipt.Outputs.ElementAtOrDefault(2) : null;
             return receipt == null ? (ActionResult)HttpNotFound() : Json(new { status = receipt.Status, confirmations = receipt.Confirmations,
+                poolId = receipt.PoolId, feeAtomic = receipt.Fee.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                receive = receive == null ? null : new { amountAtomic = receive.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), symbol = receive.Symbol, decimals = receive.Decimals },
                 poolAvailable = receipt.PoolAvailable, poolStatusMessage = receipt.PoolStatusMessage,
                 validations = receipt.ValidationCount, blockHeight = receipt.BlockHeight, blockHash = receipt.BlockHash, peerCount = receipt.PeerCount }, JsonRequestBehavior.AllowGet);
         }
