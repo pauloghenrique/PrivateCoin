@@ -9,7 +9,6 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.TextBox peerHostTextBox;
         private System.Windows.Forms.TextBox peerPortTextBox;
         private System.Windows.Forms.Button connectButton;
-        private System.Windows.Forms.Button showPeersButton;
         private System.Windows.Forms.TextBox receiveAddressTextBox;
         private System.Windows.Forms.ComboBox walletComboBox;
         private System.Windows.Forms.TextBox walletNameTextBox;
@@ -51,7 +50,6 @@ namespace PrivateCoin.Desktop
             this.peerHostTextBox = CreateTextBox("127.0.0.1");
             this.peerPortTextBox = CreateTextBox("4778");
             this.connectButton = CreateButton("Conectar", true);
-            this.showPeersButton = CreateButton("Ver pares", false);
             this.receiveAddressTextBox = CreateTextBox("");
             this.walletComboBox = CreateComboBox();
             this.walletNameTextBox = CreateTextBox("");
@@ -136,8 +134,7 @@ namespace PrivateCoin.Desktop
             nodeStatusLabel.SetBounds(20, 106, 292, 64);
             nodeStatusLabel.Font = new System.Drawing.Font("Segoe UI", 8.5F);
             nodeStatusLabel.Text = "Nó parado. Nenhum par conectado.";
-            showPeersButton.SetBounds(192, 176, 120, 28);
-            networkCard.Controls.AddRange(new System.Windows.Forms.Control[] { networkConnectionLabel, nodeStatusLabel, showPeersButton });
+            networkCard.Controls.AddRange(new System.Windows.Forms.Control[] { networkConnectionLabel, nodeStatusLabel });
 
             var activityCard = CreateCard(24, 490, 992, 246, "Atividade da rede", "Acompanhe sincronização, mineração e validações");
             miningStatusLabel.SetBounds(24, 67, 570, 24);
@@ -158,7 +155,6 @@ namespace PrivateCoin.Desktop
 
             startNodeButton.Click += new System.EventHandler(this.StartNodeButtonClick);
             connectButton.Click += new System.EventHandler(this.ConnectButtonClick);
-            showPeersButton.Click += new System.EventHandler(this.ShowPeersButtonClick);
             walletComboBox.SelectedIndexChanged += new System.EventHandler(this.WalletComboBoxSelectedIndexChanged);
             createWalletButton.Click += new System.EventHandler(this.CreateWalletButtonClick);
             recoverWalletButton.Click += new System.EventHandler(this.RecoverWalletButtonClick);
@@ -170,7 +166,6 @@ namespace PrivateCoin.Desktop
             tokensButton.Click += new System.EventHandler(this.TokensButtonClick);
             walletFolderButton.Click += new System.EventHandler(this.WalletFolderButtonClick);
             connectButton.Enabled = false;
-            showPeersButton.Enabled = false;
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
             toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
             toolTip.SetToolTip(tokensButton, "Ver os tokens com saldo da carteira selecionada e enviar para outro endereço");
