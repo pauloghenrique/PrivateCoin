@@ -4,12 +4,12 @@
     <a class="back-link" href="@Url.Action("Index", new { poolId = ViewBag.PoolId })">← Pools e trocas</a>
     <div class="page-intro"><span class="eyebrow">MERCADO DA POOL</span><h1 id="market-pair">Carregando pool…</h1><p class="address-input">@ViewBag.PoolId</p></div>
     <p id="market-connection" class="notice" role="status" aria-live="polite">Consultando a blockchain…</p>
-    <section class="card market-summary"><div><span>Preço das reservas · B por A</span><strong id="market-price">—</strong></div><div><span>Reserva A</span><strong id="market-reserve-a">—</strong></div><div><span>Reserva B</span><strong id="market-reserve-b">—</strong></div></section>
+    <section class="card market-summary"><div><span>Preço · Reserva A ÷ Reserva B</span><strong id="market-price">—</strong></div><div><span>Reserva A</span><strong id="market-reserve-a">—</strong></div><div><span>Reserva B</span><strong id="market-reserve-b">—</strong></div></section>
     <p id="market-state" class="muted-text"></p>
     <div class="pool-workspace"><div class="pool-analysis">
     <section class="card market-chart"><div class="market-toolbar"><h2>Candles da pool</h2><label>Intervalo <select id="market-interval"><option value="60">1 minuto</option><option value="300" selected>5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option><option value="86400">1 dia</option></select></label><button id="market-refresh" type="button" class="button button-secondary">Atualizar</button></div>
-        <p class="muted-text">Preço B/A após cada troca confirmada. Períodos sem trocas ficam sem candles. Até 200 candles.</p>
-        <svg id="market-candles" viewBox="0 0 960 360" role="img" aria-label="Gráfico de candles do preço das reservas"></svg><p id="market-chart-empty" role="status">Ainda não há trocas confirmadas nesta pool.</p>
+        <p class="muted-text">Preço A/B após cada troca confirmada. Períodos sem trocas ficam sem candles. Até 200 candles.</p>
+        <svg id="market-candles" viewBox="0 0 960 360" role="img" aria-label="Gráfico de candles do preço Reserva A por Reserva B"></svg><p id="market-chart-empty" role="status">Ainda não há trocas confirmadas nesta pool.</p>
     </section>
     <section class="card market-ledger"><h2>Livro caixa da pool</h2><p>Entradas (+) e saídas (−) das reservas. Pendentes e rejeitadas não alteram o saldo confirmado. Valores de encerramento são devolvidos à carteira.</p><p id="market-ledger-count" class="muted-text"></p><div class="market-table-scroll"><table><thead><tr><th>Data / hora</th><th>Operação</th><th>Status</th><th id="market-heading-a">Movimento A</th><th id="market-heading-b">Movimento B</th><th>Bloco</th><th>Transação</th></tr></thead><tbody id="market-ledger"></tbody></table></div></section>
     <section class="card market-tokens"><h2>Informações dos tokens</h2><div id="market-token-info" class="market-token-grid"></div></section>
