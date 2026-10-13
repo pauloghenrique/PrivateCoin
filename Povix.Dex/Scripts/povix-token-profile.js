@@ -22,7 +22,7 @@
         const token = selected();
         ['Name', 'Symbol', 'Description', 'Website'].forEach(id => { el(id).value = token ? token[id.toLowerCase()] : ''; });
         el('Renounce').checked = false;
-        el('profile-status').textContent = token ? token.renounced ? 'Edição renunciada permanentemente neste DEX.' : 'Edição permitida mediante assinatura do criador.' : 'Selecione um token confirmado.';
+        el('profile-status').textContent = token ? token.renounced ? 'Renúncia permanente neste DEX: edição e encerramento das pools do criador bloqueados.' : 'Edição permitida mediante assinatura do criador.' : 'Selecione um token confirmado.';
         el('chain-details').textContent = token ? token.chainName + ' · ' + token.chainSymbol + ' · Quantidade: ' + wallet.formatAtomic(token.supplyAtomic, token.decimals) + ' · Precisão: ' + token.decimals + ' · ID: ' + token.tokenId : 'Selecione um token.';
         update();
     }
@@ -92,7 +92,7 @@
             draft = Object.freeze(result);
             el('review-details').textContent = expected.name + ' · ' + expected.symbol;
             el('review-description').textContent = expected.description; el('review-website').textContent = expected.website;
-            el('review-permission').textContent = expected.renounced ? 'Ao salvar, você perde permanentemente a permissão de editar este perfil neste DEX.' : 'A permissão de edição será mantida.';
+            el('review-permission').textContent = expected.renounced ? 'Ao salvar, você perde permanentemente a permissão de editar este perfil e encerrar as pools deste token que administra neste DEX. As reservas permanecem destinadas às trocas e não podem ser retiradas como saldo livre.' : 'A permissão de edição será mantida.';
             el('profile-review').hidden = false;
         } catch (error) { resetDraft(); message(error.message); }
         finally { busy = false; update(); }

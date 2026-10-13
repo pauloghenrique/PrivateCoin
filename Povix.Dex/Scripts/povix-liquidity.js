@@ -269,6 +269,10 @@
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 entry.append(detail, state); byId('pool-list').appendChild(entry);
+                if (pool.managementMessage) {
+                    const management = document.createElement('small'); management.textContent = pool.managementMessage;
+                    byId('pool-list').appendChild(management);
+                }
                 const marketLink = document.createElement('a');
                 marketLink.href = app.dataset.marketUrl.replace('__id__', encodeURIComponent(pool.poolId));
                 marketLink.textContent = 'Ver candles e livro caixa →'; byId('pool-list').appendChild(marketLink);

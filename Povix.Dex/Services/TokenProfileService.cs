@@ -17,6 +17,16 @@ namespace Povix.Dex.Services
         private readonly Dictionary<string, ProfileDraft> profileDrafts = new Dictionary<string, ProfileDraft>();
         private string ProfilePath => Path.Combine(Path.GetDirectoryName(statePath), "dex-token-profiles.json");
 
+        private bool CreatorRenounced(string tokenId, string providerKey)
+        {
+            TokenProfile profile;
+            if (tokenId == "povix" || !profiles.TryGetValue(tokenId, out profile) || !profile.Renounced)
+                return false;
+            var creation = FindCreation(tokenId);
+            return creation != null && profile.CreationId == creation.Id &&
+                profile.CreatorKey == creation.Inputs[0].PublicKey && profile.CreatorKey == providerKey;
+        }
+
         private void LoadProfiles()
         {
             if (!File.Exists(ProfilePath)) return;

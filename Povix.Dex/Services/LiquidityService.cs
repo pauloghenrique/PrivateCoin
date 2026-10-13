@@ -78,6 +78,7 @@ namespace Povix.Dex.Services
             {
                 RequireReady(); ReserveDraftSlot(owner);
                 var pool = Snapshot(poolId);
+                if (operation == "close") RequirePoolClosureAllowed(pool);
                 if ((operation != "lock" && operation != "close") || pool == null || !pool.CanManage ||
                     pool.Locked != (operation == "close"))
                     throw new TokenOperationException("pool_unavailable", "A pool não está disponível para esta operação.");
@@ -107,6 +108,7 @@ namespace Povix.Dex.Services
                     throw new TokenOperationException("draft_missing", "Prepare novamente a operação de reservas.");
                 draft = ExchangeDraft(draftId, owner, draft.Operation);
                 var pool = Snapshot(draft.PoolId);
+                if (draft.Operation == "close") RequirePoolClosureAllowed(pool);
                 if (pool == null || !pool.CanManage || pool.Transaction.Id != draft.ReserveId)
                     throw new TokenOperationException("pool_changed", "As reservas mudaram. Prepare novamente.");
                 VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.Inputs.Count);
@@ -236,6 +238,12 @@ namespace Povix.Dex.Services
         private void RequireCurrentReserves(PreparedExchange draft)
         { if (!CurrentReserves(draft)) throw new TokenOperationException("pool_changed", "As reservas da pool mudaram ou estão ocupadas. Prepare outra troca."); }
 
+        private static void RequirePoolClosureAllowed(PoolSnapshot pool)
+        {
+            if (pool?.ClosureRenounced == true)
+                throw new TokenOperationException("pool_renounced", "O criador renunciou ao token. As reservas continuam destinadas às trocas e esta pool não pode ser encerrada neste DEX.");
+        }
+
         private PoolSnapshot Snapshot(string id)
         {
             var root = submitted.FirstOrDefault(item => item.Transaction.Id == id && item.Exchange?.Operation == "pool");
@@ -263,8 +271,11 @@ namespace Povix.Dex.Services
             var blocking = pending.FirstOrDefault(tx => tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex < 2));
             bool closed = current.Kind == TransactionKind.LiquidityClose;
             bool locked = !closed && outputs.Length == 2 && outputs.All(output => output.IsPoolReserve);
-            bool canManage = rootConfirmed && outputs.Length == 2 && blocking == null && !closed;
-            bool available = canManage && locked;
+            bool reservesReady = rootConfirmed && outputs.Length == 2 && blocking == null && !closed;
+            bool closureRenounced = CreatorRenounced(root.Exchange.AssetA.Id, root.Exchange.ProviderKey) ||
+                CreatorRenounced(root.Exchange.AssetB.Id, root.Exchange.ProviderKey);
+            bool canManage = reservesReady && (!locked || !closureRenounced);
+            bool available = reservesReady && locked;
             string status, reason, message;
             if (!rootConfirmed) {
                 var creation = pending.FirstOrDefault(tx => tx.Id == id);
@@ -298,6 +309,7 @@ namespace Povix.Dex.Services
             }
             return new PoolSnapshot { Id = id, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
                 AssetA = root.Exchange.AssetA, AssetB = root.Exchange.AssetB, Available = available, Locked = locked, CanManage = canManage,
+                ClosureRenounced = closureRenounced,
                 Status = status, StatusReason = reason, StatusMessage = message, BlockingTransactionId = blocking?.Id,
                 ReserveA = outputs.FirstOrDefault(item => item.OutputIndex == 0), ReserveB = outputs.FirstOrDefault(item => item.OutputIndex == 1) };
         }
@@ -315,6 +327,8 @@ namespace Povix.Dex.Services
             poolId = pool.Id, providerAddress = AddressFor(pool.ProviderKey), assetA = AssetResponse(pool.AssetA), assetB = AssetResponse(pool.AssetB),
             reserveTransactionId = pool.Transaction.Id, reserveAAtomic = Atomic(pool.Transaction.Outputs[0].Amount), reserveBAtomic = Atomic(pool.Transaction.Outputs[1].Amount),
             status = pool.Status, available = pool.Available, locked = pool.Locked, canManage = pool.CanManage, statusReason = pool.StatusReason, statusMessage = pool.StatusMessage,
+            closureRenounced = pool.ClosureRenounced,
+            managementMessage = pool.ClosureRenounced ? "Renúncia do criador: encerramento bloqueado neste DEX. As reservas permanecem destinadas às trocas." : "",
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
             draftId = id, operation = draft.Operation, transactionKind = (int)draft.Transaction.Kind, poolId = draft.PoolId, reserveTransactionId = draft.ReserveId,
@@ -355,7 +369,7 @@ namespace Povix.Dex.Services
             public Transaction Transaction;
             public TokenDefinition AssetA, AssetB;
             public UnspentOutput ReserveA, ReserveB;
-            public bool Available, Locked, CanManage;
+            public bool Available, Locked, CanManage, ClosureRenounced;
         }
         [DataContract]
         private sealed class ExchangeOperation

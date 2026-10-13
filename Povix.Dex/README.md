@@ -244,10 +244,14 @@ A revisão exige confirmação explícita; o navegador reconstrói a autorizaç�
 e assina com a chave do criador. O servidor verifica a assinatura, a sessão,
 a validade de 15 minutos, a criação atual e a revisão do perfil.
 
-**Renunciar à edição** bloqueia permanentemente novas alterações deste perfil
-nesta instalação, inclusive preparações anteriores ainda não enviadas. Não
-renuncia a um contrato, não altera consenso, saldos ou transferências e não
-modifica nome, símbolo, quantidade ou precisão registrados na blockchain.
+**Renunciar** bloqueia permanentemente novas alterações deste perfil e o
+encerramento das pools deste token administradas pelo criador nesta instalação,
+inclusive preparações anteriores ainda não enviadas. A regra consulta os dois
+ativos da pool e vincula a renúncia à criação confirmada e à chave do criador.
+As reservas continuam excluídas do saldo livre, e as trocas permanecem disponíveis.
+Pools antigas ainda podem ter suas reservas bloqueadas; depois, seu encerramento
+também é impedido. Saldos livres e pools de outros provedores mantêm suas operações.
+A renúncia não altera o consenso nem os dados originais do token na blockchain.
 Não há taxa de rede para esta operação local.
 
 `App_Data/dex-token-profiles.json` persiste os perfis e renúncias com suas
@@ -306,6 +310,9 @@ assine. `LiquidityClose` (tipo 9) exige as assinaturas das duas reservas e
 retorna ambos os valores intactos ao provedor, sem novo bloqueio. A taxa é
 paga separadamente em POVIX livre. Até a confirmação, a pool fica ocupada;
 após confirmar, aparece como **Encerrada** e os valores voltam ao saldo livre.
+O encerramento fica bloqueado neste DEX quando o provedor é o criador de um
+dos tokens da pool e salvou sua renúncia. Uma revisão preparada antes da
+renúncia também é rejeitada no envio. As trocas continuam disponíveis.
 Não há liberação por timeout, reinício ou simples perda do cadastro local.
 
 Pools criadas antes do consenso 17 mantêm seus UTXOs e assinaturas originais;

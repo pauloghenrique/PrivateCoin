@@ -42,6 +42,10 @@ dos dois ativos após confirmação, restauração dos bloqueios sem cadastro DE
 migração assinada de reservas antigas e restauração de caches v16/v17 em v18.
 Confere pools e trocas históricas v17 com assinaturas do provedor, rejeição de
 reservas sem assinatura em blocos v17 e ativação de trocas automáticas em v18.
+Verifica também a renúncia assinada pelo criador: bloqueio de encerramento no
+servidor, rejeição de preparação assinada antes da renúncia, reservas fora do
+saldo livre, preservação das trocas e persistência após reinício. Exercita o
+token em ambos os lados da pool e preserva as permissões de outros provedores.
 O teste Node carrega o HTML das telas e os scripts reais em jsdom, abre a
 carteira pelo formulário, rejeita preparações alteradas e assina com Web
 Crypto; essas assinaturas são depois validadas pelo Core e incluídas em blocos
