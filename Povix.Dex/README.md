@@ -361,3 +361,22 @@ Após a confirmação, a pool segue as duas primeiras saídas da troca como nova
 reservas. Mudanças de cadeia removem confirmações antigas e impedem o uso de
 reservas órfãs. Os endpoints de criação/movimentação de tokens e a exigência
 do criador na tela de movimentação continuam com suas regras existentes.
+
+## Candles e livro caixa da pool
+
+Na lista de pools, **Ver candles e livro caixa** abre
+`/Liquidity/Market?poolId=<id>`. A tela consulta `MarketData` a cada cinco
+segundos, sem abrir carteira, e pausa as consultas quando a aba está oculta.
+Os intervalos disponíveis são 1, 5 e 15 minutos, 1 hora e 1 dia.
+
+Os candles representam o preço B/A das reservas após trocas confirmadas,
+agrupadas pelo horário do bloco. Não são candles de uma bolsa externa nem
+um livro de ofertas. Períodos sem trocas não produzem candles artificiais.
+A resposta inclui até 200 candles e as 100 movimentações mais recentes.
+O livro caixa mostra criação, troca, bloqueio e encerramento, com entradas e
+saídas dos dois ativos em precisão atômica. Operações pendentes, validadas e
+rejeitadas ficam identificadas e não participam dos candles. A cadeia atual
+é relida em cada consulta para refletir reorganizações; o catálogo abrange
+as pools registradas nesta instalação do DEX.
+
+Validação da interface: `node Tests/PovixDexPoolMarketUiRegression.js`.

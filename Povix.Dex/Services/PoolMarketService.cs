@@ -1,0 +1,85 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using PrivateCoin.Core;
+
+namespace Povix.Dex.Services
+{
+    public sealed partial class TokenNetworkService
+    {
+        // A fresh chain snapshot replaces the history on every read, including after a reorg.
+        public object GetPoolMarket(string poolId, int interval)
+        {
+            lock (sync)
+            {
+                if (!new[] { 60, 300, 900, 3600, 86400 }.Contains(interval))
+                    throw new ArgumentOutOfRangeException(nameof(interval));
+                var pool = Snapshot(poolId);
+                if (pool == null) return null;
+                var history = new List<MarketMovement>();
+                string reserveId = poolId;
+                bool started = false, closed = false;
+                long previousA = 0, previousB = 0;
+                foreach (var block in blockchain.Blocks)
+                foreach (var tx in block.Transactions)
+                {
+                    var record = submitted.FirstOrDefault(item => item.Transaction.Id == tx.Id && item.Exchange?.PoolId == poolId);
+                    bool next = started && !closed && tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 0) &&
+                        tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 1) &&
+                        (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose || record != null);
+                    if (tx.Id != poolId && !next) continue;
+                    if (tx.Outputs.Count < 2) continue;
+                    string operation = tx.Id == poolId ? "pool" : tx.Kind == TransactionKind.LiquidityClose ? "close" :
+                        tx.Kind == TransactionKind.LiquiditySwap ? "swap" : record.Exchange.Operation;
+                    long a = tx.Outputs[0].Amount, b = tx.Outputs[1].Amount;
+                    history.Add(new MarketMovement { Id = tx.Id, Operation = operation, Status = "confirmed", Height = block.Height,
+                        Time = UnixTime(block.TimestampUtcTicks), ReserveA = a, ReserveB = b,
+                        DeltaA = operation == "close" ? -previousA : a - previousA,
+                        DeltaB = operation == "close" ? -previousB : b - previousB });
+                    reserveId = tx.Id; previousA = a; previousB = b; started = true; closed = operation == "close";
+                }
+                // Pending and rejected records are visible in the cash book, never in candles.
+                foreach (var record in submitted.Where(item => item.Exchange?.PoolId == poolId))
+                {
+                    if (history.Any(item => item.Id == record.Transaction.Id)) continue;
+                    var tx = record.Transaction;
+                    if (tx.Outputs.Count < 2) continue;
+                    var queued = pending.FirstOrDefault(item => item.Id == tx.Id);
+                    var prior = submitted.FirstOrDefault(item => item.Transaction.Id == record.Exchange.PreviousReserveId)?.Transaction;
+                    long a = prior?.Outputs[0].Amount ?? 0, b = prior?.Outputs[1].Amount ?? 0;
+                    history.Add(new MarketMovement { Id = tx.Id, Operation = record.Exchange.Operation,
+                        Status = queued == null ? "rejected" : blockchain.HasValidTransactionApproval(queued, pending) ? "validated" : "pending",
+                        Time = UnixTime(tx.TimestampUtcTicks), ReserveA = tx.Outputs[0].Amount, ReserveB = tx.Outputs[1].Amount,
+                        DeltaA = record.Exchange.Operation == "close" ? -a : tx.Outputs[0].Amount - a,
+                        DeltaB = record.Exchange.Operation == "close" ? -b : tx.Outputs[1].Amount - b });
+                }
+                decimal scaleA = Scale(pool.AssetA.Decimals), scaleB = Scale(pool.AssetB.Decimals);
+                var candles = history.Where(item => item.Status == "confirmed" && item.Operation == "swap" && item.ReserveA > 0 && item.ReserveB > 0)
+                    .GroupBy(item => item.Time / interval * interval).OrderBy(group => group.Key)
+                    .Select(group => {
+                        var prices = group.Select(item => (item.ReserveB / scaleB) / (item.ReserveA / scaleA)).ToArray();
+                        return new { time = group.Key, open = prices.First(), high = prices.Max(), low = prices.Min(), close = prices.Last(),
+                            volume = group.Sum(item => Math.Abs(item.DeltaA / scaleA)) };
+                    }).ToArray();
+                var latest = history.LastOrDefault(item => item.Status == "confirmed");
+                return new { pool = PoolResponse(pool), interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+                    price = latest == null || closed || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
+                    candles = candles.Skip(Math.Max(0, candles.Length - 200)).ToArray(),
+                    ledger = history.OrderByDescending(item => item.Time).ThenByDescending(item => item.Height).Take(100).Select(item => new {
+                        transactionId = item.Id, operation = item.Operation, status = item.Status, time = item.Time, blockHeight = item.Height,
+                        deltaAAtomic = Atomic(item.DeltaA), deltaBAtomic = Atomic(item.DeltaB),
+                        reserveAAtomic = Atomic(item.ReserveA), reserveBAtomic = Atomic(item.ReserveB) }).ToArray(),
+                    ledgerTotal = history.Count, peerCount = node.ConnectedPeerCount };
+            }
+        }
+        private static long UnixTime(long ticks) => (ticks - 621355968000000000L) / TimeSpan.TicksPerSecond;
+        private static decimal Scale(int decimals) { decimal result = 1; for (int i = 0; i < decimals; i++) result *= 10; return result; }
+        private sealed class MarketMovement
+        {
+            public string Id, Operation, Status;
+            public int? Height;
+            public long Time, ReserveA, ReserveB, DeltaA, DeltaB;
+        }
+    }
+}

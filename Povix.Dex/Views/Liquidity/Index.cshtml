@@ -1,7 +1,7 @@
 @model Povix.Dex.Models.TokenNetworkViewModel
 @{ ViewBag.Title = "Pools e troca de tokens"; }
 <main id="liquidity-app" data-network-id="@Model.NetworkId" data-pool-id="@ViewBag.SelectedPoolId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
-      data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
+      data-market-url="@Url.Action("Market", new { poolId = "__id__" })" data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
       data-prepare-reserves-url="@Url.Action("PrepareReserveOperation")" data-submit-reserves-url="@Url.Action("SubmitReserveOperation")"
       data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")" data-propose-url="@Url.Action("ProposeSwap")" data-requests-url="@Url.Action("Requests")"
       data-accept-url="@Url.Action("AcceptSwap")" data-request-status-url="@Url.Action("RequestStatus")" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">

@@ -248,6 +248,9 @@
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 entry.append(detail, state); byId('pool-list').appendChild(entry);
+                const marketLink = document.createElement('a');
+                marketLink.href = app.dataset.marketUrl.replace('__id__', encodeURIComponent(pool.poolId));
+                marketLink.textContent = 'Ver candles e livro caixa →'; byId('pool-list').appendChild(marketLink);
                 if (pool.canManage && wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) {
                     const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
                     button.textContent = pool.locked ? 'Revisar encerramento da pool' : 'Bloquear reservas desta pool';
