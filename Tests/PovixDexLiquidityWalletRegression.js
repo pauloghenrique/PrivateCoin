@@ -117,6 +117,12 @@ const d = fixture.draft;
         assert.equal(selected().disabled, false); assert.equal(byId('prepare-swap').disabled, false);
         assert.equal(byId('wallet-form').hidden, true, 'confirmation does not require choosing the wallet again');
     }
+    for (const pool of fixture.catalogue.pools.filter(pool => pool.closureRenounced && pool.available)) {
+        const market = [...byId('pool-list').querySelectorAll('a')].find(link => link.href.includes('/Liquidity/Market') && link.href.includes(pool.poolId));
+        assert(market, 'renounced pool retains its market link');
+        assert.notEqual(market.nextElementSibling?.tagName, 'BUTTON', 'renunciation removes the closure action');
+        assert(byId('pool-list').textContent.includes(pool.managementMessage), 'the pool explains the renunciation');
+    }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
     if (d.operation === 'pool') {
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;

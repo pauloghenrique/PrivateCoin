@@ -230,6 +230,15 @@ internal static partial class PovixDexRegression
                         Wait(() => service.GetNetwork().CanCreate, "legacy pool migration waits for a synchronized network");
                         RejectExchange(() => service.PrepareSwap(new SwapViewModel { PoolId = legacyPool.Id, InputSide = 0, Amount = "0,01", MinimumReceive = "0,01", FeeAtomic = 2 },
                             PublicKeys(provider), address, "unlocked-swap"), "pool_unavailable");
+                        var staleClose = ExchangeData(service.PrepareReserveOperation(poolId, "close", PublicKeys(provider), 2, 2, "before-renunciation"));
+                        var staleCloseSignatures = SignExchangeDraft(staleClose, provider);
+                        var renunciation = ProfileData(service.PrepareProfile(new EditTokenViewModel { TokenId = tokenA.Token.Id,
+                            Name = tokenA.Token.Name, Symbol = tokenA.Token.Symbol, Renounce = true }, PublicKeys(provider), "renounce-pools"));
+                        service.SubmitProfile((string)renunciation["draftId"], SignBytes(provider, (string)renunciation["creatorAddress"],
+                            Convert.FromBase64String((string)renunciation["authorizationPayload"])), "renounce-pools");
+                        var renouncedLegacy = ExchangePool(service, legacyPool.Id);
+                        Check((bool)renouncedLegacy["closureRenounced"] && (bool)renouncedLegacy["canManage"] && !(bool)renouncedLegacy["available"],
+                            "renunciation still permits locking legacy reserves before trading");
                         var lockDraft = ExchangeData(service.PrepareReserveOperation(legacyPool.Id, "lock", PublicKeys(provider), 2, 2, "legacy-lock"));
                         var lockSignatures = BrowserExchange(directory, nodeExecutable, service, lockDraft, provider, false);
                         string lockId = service.SubmitReserveOperationAsync((string)lockDraft["draftId"], lockSignatures, "legacy-lock").GetAwaiter().GetResult();
@@ -240,6 +249,35 @@ internal static partial class PovixDexRegression
                         Check(lockTransaction.Outputs[0].Amount == legacyPool.Outputs[0].Amount && lockTransaction.Outputs[1].Amount == legacyPool.Outputs[1].Amount &&
                             chain.GetUnspentOutputs(new[] { address }).Count(output => output.TransactionId == lockId && output.IsPoolReserve) == 2,
                             "legacy migration preserves the two amounts and locks both assets");
+                        long freeAfterRenunciation = TokenFree(service, provider, tokenA.Token.Id);
+                        foreach (string renouncedPool in new[] { poolId, legacyPool.Id }) {
+                            var snapshot = ExchangePool(service, renouncedPool);
+                            Check((bool)snapshot["available"] && (bool)snapshot["locked"] && !(bool)snapshot["canManage"] && (bool)snapshot["closureRenounced"],
+                                "renunciation prevents closure without disabling a confirmed pool");
+                            RejectExchange(() => service.PrepareReserveOperation(renouncedPool, "close", PublicKeys(provider), 2, 2, "after-renunciation"), "pool_renounced");
+                        }
+                        RejectExchange(() => service.SubmitReserveOperationAsync((string)staleClose["draftId"], staleCloseSignatures,
+                            "before-renunciation").GetAwaiter().GetResult(), "pool_renounced");
+                        Check(TokenFree(service, provider, tokenA.Token.Id) == freeAfterRenunciation &&
+                            chain.GetSpendableTokenOutputs(new[] { address }, new Transaction[0], tokenA.Token.Id).All(output => !output.IsPoolReserve),
+                            "rejected closure leaves both reserves locked and outside the creator's free balance");
+                        SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
+                            batches, validators, new SwapViewModel { PoolId = legacyPool.Id, InputSide = 0, Amount = "0,01", MinimumReceive = "0,1", FeeAtomic = 2 }, "renounced-swap");
+                        string reversedPool = ConfirmRenunciationPool(service, chain, peer, received, provider, batches, validators,
+                            new CreatePoolViewModel { AssetA = tokenA.Token.Id, AssetB = "povix", AmountA = "1", AmountB = "0,01", FeeAtomic = 2 }, "renounced-first-asset");
+                        Check((bool)ExchangePool(service, reversedPool)["closureRenounced"] && !(bool)ExchangePool(service, reversedPool)["canManage"],
+                            "new pools also reject closure when the renounced token is the first asset");
+                        string otherProviderPool = ConfirmRenunciationPool(service, chain, peer, received, buyer, batches, validators,
+                            new CreatePoolViewModel { AssetA = "povix", AssetB = tokenA.Token.Id, AmountA = "0,01", AmountB = "0,1", FeeAtomic = 2 }, "other-provider-pool");
+                        Check(!(bool)ExchangePool(service, otherProviderPool)["closureRenounced"] && (bool)ExchangePool(service, otherProviderPool)["canManage"],
+                            "the creator's renunciation does not revoke another provider's pool ownership");
+                        service.PrepareReserveOperation(otherProviderPool, "close", PublicKeys(buyer), 2, 2, "other-provider-close");
+                        service.Dispose(); service = OpenOfflineService(directory, dexPort);
+                        Check((bool)ExchangePool(service, reversedPool)["closureRenounced"] && (bool)ExchangePool(service, reversedPool)["available"] &&
+                            !(bool)ExchangePool(service, reversedPool)["canManage"], "renounced pool protection and trading availability survive restart");
+                        peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult(); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                        Wait(() => service.GetNetwork().CanCreate, "renounced pool service resynchronizes after restart");
+                        RejectExchange(() => service.PrepareReserveOperation(reversedPool, "close", PublicKeys(provider), 2, 2, "restart-close"), "pool_renounced");
                         var fork = new Blockchain(forkBeforePools);
                         while (fork.ChainWork <= chain.ChainWork) LegacyConsensusFixture.Fund(fork, "liquidity-fork-" + fork.Blocks.Count);
                         peer.BroadcastChainAsync(fork.Blocks).GetAwaiter().GetResult();
@@ -252,6 +290,21 @@ internal static partial class PovixDexRegression
             }
         }
         Console.WriteLine(checks + " liquidity checks passed");
+    }
+    private static string[] SignExchangeDraft(Dictionary<string, object> draft, Wallet wallet) =>
+        ((object[])draft["inputs"]).Cast<Dictionary<string, object>>().Select(input =>
+            SignBytes(wallet, (string)input["address"], Convert.FromBase64String((string)draft["signingPayload"]))).ToArray();
+    private static string ConfirmRenunciationPool(TokenNetworkService service, Blockchain chain, PeerNode peer,
+        Dictionary<string, Transaction> received, Wallet provider, ValidationBatchFixture batches, ValidatorStake[] validators,
+        CreatePoolViewModel model, string owner)
+    {
+        var draft = ExchangeData(service.PreparePool(model, PublicKeys(provider), provider.OwnedOneTimeAddresses.First(), owner));
+        string id = service.SubmitPoolAsync((string)draft["draftId"], SignExchangeDraft(draft, provider), owner).GetAwaiter().GetResult();
+        Wait(() => { lock (received) return received.ContainsKey(id); }, "renunciation fixture pool reaches the peer");
+        Transaction tx; lock (received) tx = received[id];
+        batches.Confirm(chain, new[] { tx }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+        Wait(() => (bool)ExchangePool(service, id)["available"], "renunciation fixture pool confirms its locked reserves");
+        return id;
     }
     private static void SignCoreExchange(Transaction tx, Wallet wallet)
     {
