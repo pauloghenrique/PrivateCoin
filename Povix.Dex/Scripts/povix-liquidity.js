@@ -5,7 +5,7 @@
     const wallet = window.PovixTokenWallet, byId = id => document.getElementById(id);
     const csrf = byId('pool-form').querySelector('[name="__RequestVerificationToken"]').value;
     let assets = [], pools = [], network = null, draft = null, expected = null, signatures = null;
-    let choices = null, busy = false, refreshing = false, provider = false, backup = false, epoch = 0, requestId = null;
+    let choices = null, busy = false, refreshing = false, backup = false, epoch = 0;
     const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
@@ -35,7 +35,7 @@
         return result;
     }
     function reset() {
-        draft = null; expected = null; signatures = null; provider = false; backup = false;
+        draft = null; expected = null; signatures = null; backup = false;
         byId('backup-confirmed').checked = false; byId('sign-actions').hidden = true;
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
     }
@@ -52,7 +52,7 @@
         byId('swap-fields').disabled = !editing || !unlocked;
         if (integrated) byId('swap-pool').disabled = true;
         byId('prepare-pool').disabled = !editing || !ready;
-        byId('prepare-swap').disabled = !editing || !ready || Boolean(requestId) || !selectedPool()?.available;
+        byId('prepare-swap').disabled = !editing || !ready || !selectedPool()?.available;
         byId('exchange-priority').disabled = !editing;
         byId('sign-exchange').disabled = busy || !draft || !ready || !backup || !byId('backup-confirmed').checked;
         byId('edit-exchange').disabled = busy; byId('download-backup').disabled = busy;
@@ -85,16 +85,13 @@
         const row = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd');
         term.textContent = label; detail.textContent = value; row.className = 'review-destination'; row.append(term, detail); byId('exchange-review').appendChild(row);
     }
-    async function review(result, wanted, asProvider) {
-        await wallet.verifyExchangeDraft(result, wanted, app.dataset.networkId, asProvider);
-        draft = result; expected = wanted; provider = asProvider; signatures = null; backup = false;
-        const ownPool = result.operation === 'swap' && !asProvider && wallet.addresses().includes(result.providerAddress);
+    async function review(result, wanted) {
+        await wallet.verifyExchangeDraft(result, wanted, app.dataset.networkId);
+        draft = result; expected = wanted; signatures = null; backup = false;
         byId('backup-confirmed').checked = false; byId('exchange-review').replaceChildren();
-        byId('review-title').textContent = result.operation === 'pool' ? 'Criação da pool' : asProvider ? 'Aprovar troca da sua pool' : ownPool ? 'Executar troca' : 'Solicitar troca';
+        byId('review-title').textContent = result.operation === 'pool' ? 'Criação da pool' : 'Executar troca';
         byId('review-description').textContent = result.operation === 'pool' ? 'A pool ficará disponível após a confirmação das reservas em bloco.' :
-            asProvider ? 'Sua assinatura autoriza somente esta troca atômica das reservas.' : ownPool ?
-                'A carteira selecionada assina a troca e as reservas da pool. A operação será enviada à rede após sua confirmação.' :
-                'A assinatura solicita a troca ao provedor. Aguarde a aprovação e a confirmação em bloco.';
+            'A carteira selecionada assina a troca e a envia à rede, sem aprovação do criador da pool. Aguarde a confirmação em bloco.';
         if (result.operation === 'lock' || result.operation === 'close') {
             byId('review-title').textContent = result.operation === 'lock' ? 'Bloquear reservas da pool' : 'Encerrar pool e liberar reservas';
             byId('review-description').textContent = result.operation === 'lock' ?
@@ -115,7 +112,7 @@
             addReview('Endereço', output.address);
         });
         byId('sign-exchange').textContent = result.operation === 'lock' ? 'Assinar bloqueio das reservas' : result.operation === 'close' ? 'Assinar encerramento da pool' :
-            result.operation === 'pool' ? 'Assinar e criar pool' : asProvider || ownPool ? 'Assinar e executar troca' : 'Assinar solicitação ao provedor';
+            result.operation === 'pool' ? 'Assinar e criar pool' : 'Assinar e executar troca';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function ensureFunds(requirements) {
@@ -136,7 +133,7 @@
             const wanted = { ...wantedFromPool(pool), operation, feeAtomic, changeAddress: pool.providerAddress };
             const result = await post(app.dataset.prepareReservesUrl, { poolId: pool.poolId, operation,
                 feePriority: byId('exchange-priority').value, feeAtomic, publicKeys: wallet.publicKeys() });
-            await review(result, wanted, false);
+            await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
     }
@@ -153,7 +150,7 @@
             const wanted = { operation: 'pool', assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.preparePoolUrl, { AssetA: a.id, AssetB: b.id, AmountA: byId('pool-amount-a').value,
                 AmountB: byId('pool-amount-b').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
-            await review(result, wanted, false);
+            await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
     });
@@ -172,63 +169,78 @@
             const wanted = { ...wantedFromPool(pool), operation: 'swap', inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, Amount: byId('swap-amount').value,
                 MinimumReceive: byId('swap-minimum').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
-            await review(result, wanted, false);
+            await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
     });
-    async function approveRequest(result) {
-        if (busy || draft) return; busy = true; message(''); update();
-        try {
-            const pool = pools.find(item => item.poolId === result.poolId && item.available);
-            if (!pool || !wallet.addresses().includes(pool.providerAddress)) throw new Error('Esta carteira não mantém reservas disponíveis da pool.');
-            await review(result, { ...wantedFromPool(pool), operation: 'swap', amountAtomic: result.amountAtomic, minimumReceiveAtomic: result.minimumReceiveAtomic,
-                inputSide: result.inputSide, feeAtomic: result.feeAtomic, changeAddress: result.changeAddress }, true);
-        } catch (error) { reset(); message(error.message); } finally { busy = false; update(); }
-    }
     function receipt(id) {
         if (!/^[0-9a-f]{64}$/.test(id)) throw new Error('Comprovante inválido.');
         const url = new URL(app.dataset.receiptUrl.replace('__id__', id), location.origin);
         if (url.origin !== location.origin) throw new Error('Comprovante inválido.');
         return url.href;
     }
-    async function requestStatus() {
-        if (!requestId) return;
-        const result = await post(app.dataset.requestStatusUrl, { draftId: requestId });
-        if (result.status === 'submitted') {
-            const link = document.createElement('a'); link.href = receipt(result.transactionId); link.textContent = 'Consultar comprovante da troca';
-            byId('request-wait').replaceChildren('Troca enviada à rede. Aguarde a confirmação em bloco. ', link); requestId = null;
-            try { sessionStorage.removeItem('povix-dex-swap-request'); } catch (_) { }
-        } else if (result.status === 'expired' || result.status === 'stale') {
-            byId('request-wait').textContent = 'A solicitação expirou ou as reservas mudaram. Nenhuma troca foi enviada por esta solicitação. Atualize e prepare outra troca.';
-            requestId = null; try { sessionStorage.removeItem('povix-dex-swap-request'); } catch (_) { }
-        } else byId('request-wait').textContent = result.status === 'prepared' ? 'A solicitação ainda não foi recebida pelo provedor. Repita o envio da revisão assinada.' :
-            'Solicitação ' + requestId + ' · Aguardando assinatura do provedor. O saldo ainda não foi debitado; mantenha as entradas disponíveis. A solicitação expira em até 15 minutos.';
-        byId('request-wait').hidden = false;
+    let transactionId = null, receiptLoading = false, receiptVersion = null;
+    const receiptStorageKey = 'povix-dex-market-receipt:' + preferredPool;
+    function renderReceipt(data) {
+        const confirmed = data.status === 'confirmed' && data.blockHeight != null;
+        const validated = data.status === 'validated' || data.status === 'confirmed' && !confirmed;
+        const pending = data.status === 'pending';
+        byId('exchange-status-title').textContent = confirmed ? 'Troca confirmada.' : validated ? 'Troca validada. Aguardando bloco.' : pending ? 'Troca enviada à rede.' : 'Troca não confirmada.';
+        byId('exchange-status-description').textContent = confirmed ? 'A troca consta em um bloco validado da rede POVIX. Os saldos e as reservas foram atualizados juntos.' :
+            validated ? 'A rede validou a troca. Os saldos e as reservas serão atualizados após a confirmação em bloco.' :
+            pending ? 'Aguardando validação da rede e confirmação em bloco.' : 'A transação deixou a fila após a atualização da cadeia. Confira seu saldo antes de preparar outra troca.';
+        byId('exchange-status-state').textContent = confirmed ? 'Confirmada' : validated ? 'Validada' : pending ? 'Pendente' : 'Não confirmada';
+        byId('exchange-status-confirmations').textContent = String(confirmed ? data.confirmations || 0 : 0);
+        byId('exchange-status-block').textContent = confirmed ? String(data.blockHeight) : 'Aguardando confirmação';
+        byId('exchange-status-hash').textContent = confirmed ? data.blockHash || '—' : '—';
+        byId('exchange-status-receive').textContent = data.receive ? atomicText(data.receive.amountAtomic, data.receive.decimals) + ' ' + data.receive.symbol : '—';
+        byId('exchange-status-fee').textContent = data.feeAtomic ? atomicText(data.feeAtomic, 8) : '—';
+    }
+    function showReceipt(id) {
+        const url = receipt(id);
+        transactionId = id; receiptVersion = null;
+        byId('exchange-status').hidden = false;
+        byId('exchange-status-transaction').textContent = id;
+        byId('exchange-status-receipt').href = url;
+        renderReceipt({ status: 'pending' });
+        byId('exchange-status-connectivity').textContent = 'Consultando a rede…';
+        try { sessionStorage.setItem(receiptStorageKey, id); } catch (_) { }
+    }
+    async function refreshReceipt() {
+        if (!integrated || !transactionId || receiptLoading || document.hidden) return;
+        receiptLoading = true; const currentId = transactionId;
+        try {
+            const url = new URL(app.dataset.statusUrl.replace('__id__', currentId), location.origin);
+            if (url.origin !== location.origin) throw new Error('Status inválido.');
+            const response = await fetch(url.href, { cache: 'no-store', credentials: 'same-origin' });
+            if (!response.ok) throw new Error('Status indisponível.');
+            const data = await response.json();
+            if (currentId !== transactionId) return;
+            if (data.poolId !== preferredPool) throw new Error('Pool inválida.');
+            renderReceipt(data);
+            byId('exchange-status-connectivity').textContent = (data.peerCount || 0) + ' pares conectados · Atualização a cada 5 segundos';
+            const version = data.status + ':' + data.blockHash;
+            if (receiptVersion !== version) { receiptVersion = version; document.dispatchEvent(new Event('povix-pool-updated')); }
+        } catch (_) {
+            if (currentId === transactionId) byId('exchange-status-connectivity').textContent = 'Consulta indisponível. O último status será atualizado ao reconectar.';
+        } finally { receiptLoading = false; }
     }
     byId('sign-exchange').addEventListener('click', async () => {
         if (busy || !draft || !backup || !byId('backup-confirmed').checked) return;
         busy = true; message(''); update();
         try {
-            await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId, provider);
-            const ownPool = draft.operation === 'swap' && !provider && wallet.addresses().includes(draft.providerAddress);
+            await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(provider ? draft.userInputCount : 0,
-                    provider || ownPool || draft.operation === 'lock' || draft.operation === 'close' ? undefined : draft.userInputCount).map(item => item.address) });
-            if (draft.operation === 'swap' && !provider && !ownPool) {
-                requestId = draft.draftId; try { sessionStorage.setItem('povix-dex-swap-request', requestId); } catch (_) { }
-                await post(app.dataset.proposeUrl, { draftId: draft.draftId, signatures }); reset(); await requestStatus();
-            } else {
-                const result = await post(draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
-                    provider ? app.dataset.acceptUrl : ownPool ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
-                    { draftId: draft.draftId, signatures });
-                if (integrated) {
-                    wallet.lock(); reset();
-                    const link = document.createElement('a'); link.href = receipt(result.transactionId);
-                    link.textContent = 'Operação enviada. Consultar comprovante →';
-                    byId('app-message').replaceChildren(link); byId('app-message').hidden = false;
-                    document.dispatchEvent(new Event('povix-pool-updated'));
-                } else { wallet.lock(); location.assign(receipt(result.transactionId)); }
-            }
+                inputAddresses: draft.inputs.slice(0, draft.operation === 'swap' ? draft.userInputCount : undefined).map(item => item.address) });
+            const result = await post(draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
+                draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
+                { draftId: draft.draftId, signatures });
+            const receiptUrl = receipt(result.transactionId);
+            if (integrated) {
+                showReceipt(result.transactionId);
+                reset(); document.dispatchEvent(new Event('povix-pool-updated'));
+                refreshReceipt();
+            } else { wallet.lock(); location.assign(receiptUrl); }
         } catch (error) { if (error.rejected) reset(); message(error.message + (error.rejected ? '' : ' Repita o mesmo envio para recuperar o resultado.')); }
         finally { busy = false; update(); if (integrated) refresh(); }
     });
@@ -268,15 +280,7 @@
             });
             if (wallet.isUnlocked()) {
                 const native = asset('povix'); byId('wallet-balance').textContent = native ? atomicText(native.balanceAtomic, 8) + ' POVIX livres' : 'Indisponível';
-                const requests = await post(app.dataset.requestsUrl, { publicKeys: wallet.publicKeys() });
-                if (currentEpoch !== epoch || busy) return;
-                byId('provider-requests').replaceChildren(); byId('requests-empty').hidden = requests.length > 0;
-                byId('requests-empty').textContent = 'Nenhuma solicitação disponível para esta carteira.';
-                requests.filter(item => !integrated || item.poolId === preferredPool).forEach(item => { const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
-                    button.textContent = 'Revisar troca ' + item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.draftId.slice(0, 12);
-                    button.disabled = Boolean(draft); button.addEventListener('click', () => approveRequest(item)); byId('provider-requests').appendChild(button); });
             }
-            await requestStatus();
         } catch (error) { network = null; byId('network-state').textContent = 'Consulta indisponível'; message(error.message); }
         finally { refreshing = false; update(); }
     }
@@ -285,8 +289,7 @@
         byId('wallet-form').hidden = false; byId('wallet-connected').hidden = true; byId('wallet-state').textContent = 'Bloqueada';
         byId('wallet-selection').hidden = true; byId('wallet-password-field').hidden = false; byId('wallet-password').required = true;
         byId('wallet-choice').required = false; byId('wallet-connect').textContent = 'Ler carteiras do arquivo';
-        byId('provider-requests').replaceChildren(); byId('requests-empty').textContent = 'Abra sua carteira para consultar.';
-        byId('requests-empty').hidden = false; assets = []; update();
+        assets = []; update();
     }
     byId('wallet-form').addEventListener('submit', async event => {
         event.preventDefault(); if (busy) return; busy = true; message(''); update();
@@ -308,7 +311,11 @@
     byId('wallet-lock').addEventListener('click', lock); byId('wallet-file').addEventListener('change', lock); byId('wallet-choice').addEventListener('change', update);
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
-    try { const saved = sessionStorage.getItem('povix-dex-swap-request'); if (/^[0-9a-f]{32}$/.test(saved)) requestId = saved; } catch (_) { }
     if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um backup cifrado neste navegador. Informe a senha ou escolha outro arquivo.';
+    if (integrated) {
+        try { const saved = sessionStorage.getItem(receiptStorageKey); if (/^[0-9a-f]{64}$/.test(saved || '')) showReceipt(saved); } catch (_) { }
+        refreshReceipt(); setInterval(refreshReceipt, 5000);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReceipt(); });
+    }
     update(); refresh(); setInterval(refresh, 10000);
 })();

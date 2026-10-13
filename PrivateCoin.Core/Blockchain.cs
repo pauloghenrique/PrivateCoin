@@ -19,7 +19,8 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 17;
+        public const int ConsensusVersion = 18;
+        private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
         private const int LegacyImmediateTransferVersion = 14;
@@ -553,7 +554,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -564,7 +565,7 @@ namespace PrivateCoin.Core
                         throw new InvalidOperationException("Immediate wallet distributions require consensus version 9.");
                     if (block.ConsensusVersion < ApprovalVersion && tx.TransactionApproval != null)
                         throw new InvalidOperationException("Token creation approvals require consensus version 11.");
-                    if (block.ConsensusVersion < 17 && (TokenExchange.IsPoolOperation(tx.Kind) || tx.LiquiditySwap != null))
+                    if (block.ConsensusVersion < PoolReserveVersion && (TokenExchange.IsPoolOperation(tx.Kind) || tx.LiquiditySwap != null))
                         throw new InvalidOperationException("Pool reserve locks require consensus version 17.");
                     if (!transactionIds.Add(tx.Id)) throw new InvalidOperationException("Duplicate transaction identifier.");
                 }
@@ -635,7 +636,7 @@ namespace PrivateCoin.Core
                     if (block.ConsensusVersion < SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
                         throw new InvalidOperationException("Historical collateral operations require their original minimum fee.");
                     ValidateWalletIssuance(operation, ref issued);
-                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation));
+                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation), block.ConsensusVersion);
                 }
             }
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
@@ -853,7 +854,7 @@ namespace PrivateCoin.Core
                         if (proof == null || proof.ProofPayload() != operation.TransactionApproval.Proof.ProofPayload())
                             throw new InvalidOperationException("The fee must belong to the approving locked validator.");
                     }
-                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation));
+                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation), block.ConsensusVersion);
                 }
                 return;
             }
@@ -925,7 +926,7 @@ namespace PrivateCoin.Core
             return result;
         }
 
-        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false)
+        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false, int consensusVersion = ConsensusVersion)
         {
             if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
             if (transaction.TransactionApproval != null && !RequiresLockedTokenApproval(transaction))
@@ -974,11 +975,18 @@ namespace PrivateCoin.Core
                 if (source.TransactionKind != TransactionKind.StakeLock && transaction.Kind == TransactionKind.StakeUnlock)
                     throw new InvalidOperationException("An unlock transaction may only spend validator collateral.");
                 if (Crypto.Sha256(input.PublicKey) != source.Output.OneTimeAddress) throw new InvalidOperationException("Input does not own the output.");
-                using (var rsa = new RSACryptoServiceProvider())
+                // Only a validated AMM swap may spend paired, locked reserves without
+                // the provider signing. Free funding and pool closure still require ownership signatures.
+                bool automaticReserve = consensusVersion >= 18 && transaction.Kind == TransactionKind.LiquiditySwap && source.IsPoolReserve;
+                if (!automaticReserve || !string.IsNullOrEmpty(input.Signature))
                 {
-                    rsa.PersistKeyInCsp = false;
-                    rsa.FromXmlString(input.PublicKey);
-                    if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
+                    if (string.IsNullOrEmpty(input.Signature)) throw new InvalidOperationException("Missing ownership signature.");
+                    using (var rsa = new RSACryptoServiceProvider())
+                    {
+                        rsa.PersistKeyInCsp = false;
+                        rsa.FromXmlString(input.PublicKey);
+                        if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(input.Signature))) throw new InvalidOperationException("Invalid signature.");
+                    }
                 }
                 if (source.Output.AssetId == null) inputTotal = checked(inputTotal + source.Output.Amount);
                 else

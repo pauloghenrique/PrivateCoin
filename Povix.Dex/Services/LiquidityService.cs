@@ -72,21 +72,6 @@ namespace Povix.Dex.Services
             }
         }
 
-        public object ProposeSwap(string draftId, string[] signatures, string owner)
-        {
-            lock (sync)
-            {
-                RequireReady();
-                var draft = ExchangeDraft(draftId, owner, "swap");
-                RequireCurrentReserves(draft);
-                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.UserInputCount);
-                if (draft.UserSignatures != null && !draft.UserSignatures.SequenceEqual(signatures))
-                    throw new TokenOperationException("signatures_invalid", "A solicitação já contém outra assinatura.");
-                draft.UserSignatures = signatures.ToArray();
-                return new { requestId = draftId, expiresUtc = draft.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture), status = "awaiting_provider" };
-            }
-        }
-
         public object PrepareReserveOperation(string poolId, string operation, string[] publicKeys, int feePriority, long? feeAtomic, string owner)
         {
             lock (sync)
@@ -115,7 +100,7 @@ namespace Povix.Dex.Services
             {
                 var prior = submitted.FirstOrDefault(item => item.DraftId == draftId &&
                     (item.Exchange?.Operation == "lock" || item.Exchange?.Operation == "close"));
-                if (prior != null) return PriorExchange(draftId, prior.Exchange.Operation, signatures, false).Transaction.Id;
+                if (prior != null) return PriorExchange(draftId, prior.Exchange.Operation, signatures).Transaction.Id;
                 RequireReady();
                 PreparedExchange draft;
                 if (!exchangeDrafts.TryGetValue(draftId ?? "", out draft) || (draft.Operation != "lock" && draft.Operation != "close"))
@@ -130,36 +115,12 @@ namespace Povix.Dex.Services
             await Relay(tx).ConfigureAwait(false); return tx.Id;
         }
 
-        public object GetSwapRequests(string[] publicKeys)
-        {
-            lock (sync)
-            {
-                ExpireExchangeDrafts();
-                return exchangeDrafts.Where(item => item.Value.Operation == "swap" && item.Value.UserSignatures != null &&
-                    publicKeys.Contains(item.Value.ProviderKey, StringComparer.Ordinal) && CurrentReserves(item.Value))
-                    .Select(item => DraftResponse(item.Key, item.Value)).ToArray();
-            }
-        }
-
-        public object GetSwapRequestStatus(string id, string owner)
-        {
-            lock (sync)
-            {
-                var prior = submitted.FirstOrDefault(item => item.DraftId == id && item.Exchange?.Operation == "swap");
-                if (prior != null) return new { status = "submitted", transactionId = prior.Transaction.Id };
-                PreparedExchange draft;
-                if (!exchangeDrafts.TryGetValue(id ?? "", out draft) || draft.Owner != owner || draft.ExpiresUtc <= DateTime.UtcNow)
-                    return new { status = "expired", transactionId = (string)null };
-                return new { status = CurrentReserves(draft) ? draft.UserSignatures == null ? "prepared" : "awaiting_provider" : "stale", transactionId = (string)null };
-            }
-        }
-
         public async Task<string> SubmitPoolAsync(string draftId, string[] signatures, string owner)
         {
             Transaction tx;
             lock (sync)
             {
-                var prior = PriorExchange(draftId, "pool", signatures, false);
+                var prior = PriorExchange(draftId, "pool", signatures);
                 if (prior != null) return prior.Transaction.Id;
                 RequireReady();
                 var draft = ExchangeDraft(draftId, owner, "pool");
@@ -174,30 +135,13 @@ namespace Povix.Dex.Services
             Transaction tx;
             lock (sync)
             {
-                var prior = PriorExchange(draftId, "swap", signatures, false);
+                var prior = PriorExchange(draftId, "swap", signatures);
                 if (prior != null) return prior.Transaction.Id;
                 RequireReady();
                 var draft = ExchangeDraft(draftId, owner, "swap");
                 RequireCurrentReserves(draft);
-                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.Inputs.Count);
+                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.UserInputCount);
                 tx = AcceptExchange(draftId, draft, signatures);
-            }
-            await Relay(tx).ConfigureAwait(false); return tx.Id;
-        }
-
-        public async Task<string> AcceptSwapAsync(string draftId, string[] signatures)
-        {
-            Transaction tx;
-            lock (sync)
-            {
-                var prior = PriorExchange(draftId, "swap", signatures, true);
-                if (prior != null) return prior.Transaction.Id;
-                RequireReady();
-                var draft = ExchangeDraft(draftId, null, "swap");
-                if (draft.UserSignatures == null) throw new TokenOperationException("request_unsigned", "O comprador ainda não assinou a solicitação.");
-                RequireCurrentReserves(draft);
-                VerifyExchangeSignatures(draft.Transaction, signatures, draft.Transaction.UserInputCount, 2);
-                tx = AcceptExchange(draftId, draft, draft.UserSignatures.Concat(signatures).ToArray());
             }
             await Relay(tx).ConfigureAwait(false); return tx.Id;
         }
@@ -242,10 +186,10 @@ namespace Povix.Dex.Services
             Save(blockchain, nextPending, nextSubmitted);
             pending = nextPending; submitted = nextSubmitted; exchangeDrafts.Remove(id); return tx;
         }
-        private SubmittedToken PriorExchange(string id, string operation, string[] signatures, bool providerOnly)
+        private SubmittedToken PriorExchange(string id, string operation, string[] signatures)
         {
             var prior = submitted.FirstOrDefault(item => item.DraftId == id && item.Exchange?.Operation == operation);
-            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Skip(providerOnly ? prior.Transaction.Inputs.Count - 2 : 0)
+            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take(operation == "swap" ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
                     .Select(input => input.Signature).SequenceEqual(signatures)))
                 throw new TokenOperationException("signatures_invalid", "As assinaturas não correspondem ao envio já aceito.");
             return prior;
@@ -404,7 +348,6 @@ namespace Povix.Dex.Services
             public long ReserveA, ReserveB, Amount, MinimumReceive;
             public int InputSide;
             public DateTime ExpiresUtc;
-            public string[] UserSignatures;
         }
         private sealed class PoolSnapshot
         {

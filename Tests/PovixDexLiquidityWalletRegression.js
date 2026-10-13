@@ -9,17 +9,18 @@ const fixture = JSON.parse(fs.readFileSync(path.join(directory, 'exchange-fixtur
 const d = fixture.draft;
 
 (async () => {
-    let html = fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
+    const integrated = d.operation === 'swap';
+    let html = integrated ? fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8').replace('@Html.Partial("_PoolTrading", Model)', fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8')) : fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
     html = html.replace('@Html.Partial("_Wallet")', fs.readFileSync('Povix.Dex/Views/Shared/_Wallet.cshtml', 'utf8'))
         .replace('@Html.AntiForgeryToken()', '<input name="__RequestVerificationToken" value="test-csrf" type="hidden">')
         .replace(/data-([a-z-]+)="@Url.Action\([\s\S]*?\)"/g, (_, name) => 'data-' + name + '="/' + name + '"')
-        .replace('@Model.NetworkId', fixture.networkId);
-    const dom = new JSDOM(html, { url: 'https://localhost/liquidez', runScripts: 'outside-only', virtualConsole: new VirtualConsole() });
+        .replace('@Model.NetworkId', fixture.networkId).replace(/@ViewBag.SelectedPoolId/g, d.poolId || '');
+    const dom = new JSDOM(html, { url: integrated ? 'https://localhost/Liquidity/Market?poolId=' + d.poolId : 'https://localhost/liquidez', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole: new VirtualConsole() });
     const w = dom.window, byId = id => w.document.getElementById(id), intervals = [];
     Object.defineProperty(w, 'crypto', { value: webcrypto }); w.TextEncoder = TextEncoder; w.TextDecoder = TextDecoder;
     w.HTMLElement.prototype.scrollIntoView = () => {};
     w.URL.createObjectURL = () => 'blob:https://localhost/test-backup'; w.URL.revokeObjectURL = () => {};
-    w.setInterval = callback => { intervals.push(callback); return intervals.length; };
+    w.setInterval = (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; };
     w.eval(fs.readFileSync('Povix.Dex/Scripts/povix-token-wallet.js', 'utf8'));
     const wallet = w.PovixTokenWallet;
     const recordText = JSON.stringify(fixture.wallet);
@@ -28,8 +29,7 @@ const d = fixture.draft;
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
-    await wallet.verifyExchangeDraft(d, expected, fixture.networkId, fixture.provider);
-    const ownPool = d.operation === 'swap' && !fixture.provider && wallet.addresses().includes(d.providerAddress);
+    await wallet.verifyExchangeDraft(d, expected, fixture.networkId);
     const bad = change => { const draft = JSON.parse(JSON.stringify(d)); change(draft); return draft; };
     for (const alteration of [draft => { draft.outputs[0].address = '0'.repeat(64); },
         draft => { draft.outputs[0].amountAtomic = String(BigInt(draft.outputs[0].amountAtomic) + 1n); },
@@ -38,21 +38,23 @@ const d = fixture.draft;
         draft => { draft.expiresUtc = '2000-01-01T00:00:00Z'; },
         draft => { draft.assetA.id = draft.assetB.id; },
         draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
-        await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId, fixture.provider));
+        await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId));
     if (d.operation === 'swap') {
         assert.equal(wallet.quoteExchange(d.inputSide === 0 ? d.reserveAAtomic : d.reserveBAtomic, d.inputSide === 0 ? d.reserveBAtomic : d.reserveAAtomic, d.amountAtomic), d.receiveAtomic);
-        await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.inputs[draft.userInputCount].outputIndex = 2; }), expected, fixture.networkId, fixture.provider));
-        await assert.rejects(wallet.verifyExchangeDraft(d, { ...expected, minimumReceiveAtomic: String(BigInt(d.receiveAtomic) + 1n) }, fixture.networkId, fixture.provider));
+        await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.inputs[draft.userInputCount].outputIndex = 2; }), expected, fixture.networkId));
+        await assert.rejects(wallet.verifyExchangeDraft(d, { ...expected, minimumReceiveAtomic: String(BigInt(d.receiveAtomic) + 1n) }, fixture.networkId));
     }
     assert(BigInt(wallet.quoteExchange('4611686018427387903', '9223372036854775807', '4611686018427387903')) > 0n);
     wallet.lock();
     const app = byId('liquidity-app');
-    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl', 'proposeUrl', 'requestsUrl', 'acceptUrl', 'requestStatusUrl']) app.dataset[key] = '/' + key;
-    app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__';
-    const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available);
+    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl']) app.dataset[key] = '/' + key;
+    app.dataset.marketUrl = '/Liquidity/Market?poolId=__id__';
+    app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__'; app.dataset.statusUrl = '/status/__id__';
+    const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available && (!integrated || pool.poolId === d.poolId));
     let poolPhase = lifecyclePool ? 'pending' : 'available';
     if (lifecyclePool) app.dataset.poolId = lifecyclePool.poolId;
-    let captured = null, preparations = 0, submittedUrl = null;
+    let captured = null, preparations = 0, submittedUrl = null, attempts = 0, firstSignatures = null, statusCalls = 0, statusPhase = 'pending', statusFailing = false;
+    const originalLocation = w.location.href;
     w.fetch = async (url, options = {}) => {
         const body = options.body || new URLSearchParams();
         if (options.method === 'POST') assert.equal(body.get('__RequestVerificationToken'), 'test-csrf');
@@ -66,17 +68,29 @@ const d = fixture.draft;
                 pool.statusMessage = poolPhase === 'pending' ? 'A criação aguarda validação da rede e confirmação em bloco.' : 'A criação foi validada e aguarda confirmação em bloco.';
             }
         }
-        else if (url === '/requestsUrl') result = fixture.provider ? [d] : [];
         else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
         else if (url === '/prepareReservesUrl') {
             preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
             assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
         }
-        else if (url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl' || url === '/acceptUrl' || url === '/proposeUrl') {
-            assert.equal(body.get('draftId'), d.draftId); captured = body.getAll('signatures');
-            submittedUrl = url;
-            result = url === '/proposeUrl' ? { requestId: d.draftId, status: 'awaiting_provider' } : { transactionId: 'a'.repeat(64), receiptUrl: '/liquidez/operacao/' + 'a'.repeat(64) };
-        } else if (url === '/requestStatusUrl') result = { status: 'awaiting_provider' };
+        else if (url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl') {
+            assert.equal(body.get('draftId'), d.draftId); attempts++;
+            const currentSignatures = body.getAll('signatures');
+            if (integrated && attempts === 1) {
+                firstSignatures = currentSignatures;
+                return { ok: false, status: 503, json: async () => ({ error: 'Envio indisponível' }) };
+            }
+            if (integrated) assert.deepEqual(currentSignatures, firstSignatures, 'retry reuses the exact signed transaction');
+            captured = currentSignatures; submittedUrl = url;
+            result = { transactionId: 'a'.repeat(64), receiptUrl: '/liquidez/operacao/' + 'a'.repeat(64) };
+        } else if (new URL(url, w.location.origin).pathname === '/status/' + 'a'.repeat(64)) {
+            statusCalls++;
+            if (statusFailing) return { ok: false, status: 503 };
+            const output = d.inputSide === 0 ? d.assetB : d.assetA;
+            result = { status: statusPhase, poolId: d.poolId, blockHeight: statusPhase === 'confirmed' ? 42 : null,
+                blockHash: statusPhase === 'confirmed' ? 'b'.repeat(64) : null, confirmations: statusPhase === 'confirmed' ? 2 : 0,
+                feeAtomic: d.feeAtomic, receive: { amountAtomic: d.receiveAtomic, symbol: output.symbol, decimals: output.decimals }, peerCount: 2 };
+        }
         else throw new Error('Unexpected endpoint: ' + url);
         return { ok: true, status: 200, json: async () => result };
     };
@@ -89,25 +103,22 @@ const d = fixture.draft;
     byId('wallet-choice').value = '0'; byId('wallet-choice').dispatchEvent(new w.Event('change'));
     byId('wallet-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
     await wait(() => !byId('wallet-connected').hidden && !byId('wallet-lock').disabled);
-    await intervals[0](); await wait(() => !byId('prepare-pool').disabled);
+    await intervals.find(timer => timer.delay === 10000).callback(); await wait(() => !byId('prepare-pool').disabled);
     if (lifecyclePool) {
         const selected = () => byId('swap-pool').options[byId('swap-pool').selectedIndex];
         assert.equal(byId('swap-pool').value, lifecyclePool.poolId);
         assert(selected().disabled); assert(byId('prepare-swap').disabled);
         assert(byId('swap-pool-state').textContent.includes('aguarda validação'));
-        poolPhase = 'validated'; await intervals[0]();
+        poolPhase = 'validated'; await intervals.find(timer => timer.delay === 10000).callback();
         assert(selected().disabled); assert(byId('prepare-swap').disabled);
         assert(byId('swap-pool-state').textContent.includes('validada'));
-        poolPhase = 'available'; await intervals[0]();
+        poolPhase = 'available'; await intervals.find(timer => timer.delay === 10000).callback();
         assert.equal(byId('swap-pool').value, lifecyclePool.poolId, 'confirmation keeps the newly created pool selected');
         assert.equal(selected().disabled, false); assert.equal(byId('prepare-swap').disabled, false);
         assert.equal(byId('wallet-form').hidden, true, 'confirmation does not require choosing the wallet again');
     }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
-    if (fixture.provider) {
-        await wait(() => byId('provider-requests').children.length > 0);
-        byId('provider-requests').firstElementChild.click();
-    } else if (d.operation === 'pool') {
+    if (d.operation === 'pool') {
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);
         byId('pool-amount-b').value = wallet.formatAtomic(d.reserveBAtomic, d.assetB.decimals);
@@ -128,7 +139,7 @@ const d = fixture.draft;
         byId('swap-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
     }
     await wait(() => !byId('sign-actions').hidden && !byId('download-backup').disabled);
-    if (ownPool) {
+    if (d.operation === 'swap') {
         assert.equal(byId('review-title').textContent, 'Executar troca');
         assert(byId('review-description').textContent.includes('carteira selecionada'));
         assert.equal(byId('sign-exchange').textContent, 'Assinar e executar troca');
@@ -137,14 +148,59 @@ const d = fixture.draft;
     assert(byId('exchange-review').textContent.includes(d.outputs[0].address));
     assert.equal(byId('sign-exchange').disabled, true, 'backup and review confirmation are required');
     byId('download-backup').click(); byId('backup-confirmed').checked = true; byId('backup-confirmed').dispatchEvent(new w.Event('change'));
-    assert.equal(byId('sign-exchange').disabled, false); byId('sign-exchange').click(); await wait(() => captured !== null);
-    assert.equal(captured.length, fixture.provider ? 2 : ownPool || d.operation === 'lock' || d.operation === 'close' ? d.inputs.length : d.userInputCount);
+    assert.equal(byId('sign-exchange').disabled, false); byId('sign-exchange').click();
+    if (integrated) {
+        await wait(() => byId('app-message').textContent.includes('Repita o mesmo envio') && !byId('sign-exchange').disabled);
+        assert.equal(preparations, 1); assert.equal(byId('sign-actions').hidden, false);
+        byId('sign-exchange').click();
+    }
+    await wait(() => captured !== null);
+    assert.equal(captured.length, d.operation === 'swap' ? d.userInputCount : d.inputs.length);
     if (d.operation === 'lock' || d.operation === 'close') assert.equal(submittedUrl, '/submitReservesUrl');
-    if (ownPool) {
-        assert.equal(submittedUrl, '/submitSwapUrl', 'the same wallet sends all signatures directly');
-        assert.equal(byId('request-wait').hidden, true, 'no separate provider approval is requested');
-        assert.equal(w.sessionStorage.getItem('povix-dex-swap-request'), null);
-    } else if (d.operation === 'swap' && !fixture.provider) { await wait(() => !byId('request-wait').hidden); assert(byId('request-wait').textContent.includes('Aguardando assinatura do provedor')); }
+    if (integrated) {
+        assert.equal(submittedUrl, '/submitSwapUrl', 'all swaps submit directly using the buyer wallet');
+        await wait(() => byId('exchange-status-state').textContent === 'Pendente' && statusCalls > 0);
+        assert.equal(w.location.href, originalLocation, 'the swap stays on Liquidity/Market');
+        assert.equal(byId('exchange-status').hidden, false);
+        assert.equal(byId('wallet-form').hidden, true, 'the selected wallet remains available');
+        assert.equal(byId('provider-requests'), null);
+        assert.equal(w.sessionStorage.getItem('povix-dex-market-receipt:' + d.poolId), 'a'.repeat(64));
+        const refreshStatus = intervals.find(timer => timer.delay === 5000).callback;
+        statusPhase = 'validated'; await refreshStatus();
+        assert.equal(byId('exchange-status-state').textContent, 'Validada');
+        assert.equal(byId('exchange-status-confirmations').textContent, '0');
+        statusPhase = 'confirmed'; await refreshStatus();
+        assert.equal(byId('exchange-status-title').textContent, 'Troca confirmada.');
+        assert.equal(byId('exchange-status-confirmations').textContent, '2');
+        assert.equal(byId('exchange-status-block').textContent, '42');
+        assert.equal(byId('exchange-status-hash').textContent, 'b'.repeat(64));
+        statusFailing = true; await refreshStatus();
+        assert.equal(byId('exchange-status-state').textContent, 'Confirmada');
+        assert.match(byId('exchange-status-connectivity').textContent, /indisponível/);
+        statusFailing = false; statusPhase = 'pending'; await refreshStatus();
+        assert.equal(byId('exchange-status-confirmations').textContent, '0', 'reorganization clears old confirmations');
+        assert.equal(byId('exchange-status-hash').textContent, '—');
+        assert.equal(byId('exchange-status-block').textContent, 'Aguardando confirmação');
+        statusPhase = 'rejected'; await refreshStatus(); assert.equal(byId('exchange-status-state').textContent, 'Não confirmada');
+        Object.defineProperty(w.document, 'hidden', { value: true, configurable: true });
+        const priorCalls = statusCalls; await refreshStatus(); assert.equal(statusCalls, priorCalls, 'hidden pages pause receipt polling');
+        Object.defineProperty(w.document, 'hidden', { value: false, configurable: true });
+        statusPhase = 'confirmed'; w.document.dispatchEvent(new w.Event('visibilitychange'));
+        await wait(() => byId('exchange-status-state').textContent === 'Confirmada');
+        const restored = new JSDOM(html, { url: originalLocation, runScripts: 'outside-only', pretendToBeVisual: true });
+        restored.window.TextEncoder = TextEncoder; restored.window.TextDecoder = TextDecoder;
+        Object.defineProperty(restored.window, 'crypto', { value: webcrypto });
+        restored.window.setInterval = () => 1; restored.window.fetch = w.fetch;
+        restored.window.sessionStorage.setItem('povix-dex-market-receipt:' + d.poolId, 'a'.repeat(64));
+        restored.window.eval(fs.readFileSync('Povix.Dex/Scripts/povix-token-wallet.js', 'utf8'));
+        restored.window.document.getElementById('liquidity-app').dataset.statusUrl = '/status/__id__';
+        restored.window.document.getElementById('liquidity-app').dataset.receiptUrl = '/liquidez/operacao/__id__';
+        for (const key of ['networkUrl', 'catalogueUrl']) restored.window.document.getElementById('liquidity-app').dataset[key] = '/' + key;
+        restored.window.eval(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'));
+        await wait(() => restored.window.document.getElementById('exchange-status-state').textContent === 'Confirmada');
+        assert.equal(restored.window.PovixTokenWallet.isUnlocked(), false, 'receipt restores without opening a wallet');
+        restored.window.close();
+    }
     fs.writeFileSync(path.join(directory, 'exchange-browser-result.json'), JSON.stringify(captured));
     dom.window.close();
     console.log('PASS Web Crypto liquidity payload, tampering rejection, real form and wallet selection');

@@ -146,7 +146,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 18 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
@@ -184,11 +184,11 @@
         if (result <= 0n || result >= rOut) throw new Error('Liquidez insuficiente para esta quantidade.');
         return result.toString();
     }
-    async function verifyExchangeDraft(draft, expected, networkId, provider) {
+    async function verifyExchangeDraft(draft, expected, networkId) {
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
         const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
-        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.operation !== expected.operation ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 18 || draft.operation !== expected.operation ||
             !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
             draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
             draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
@@ -210,8 +210,7 @@
             if (!id(input.transactionId) || !id(input.address) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 ||
                 !allowed.has(input.assetId) || !atomic(input.amountAtomic) || BigInt(input.amountAtomic) <= 0n || seen.has(key)) fail();
             seen.add(key); payload += '|' + key;
-            const owned = draft.operation !== 'swap' || (provider ? index >= draft.userInputCount :
-                index < draft.userInputCount || wallet.keys.has(draft.providerAddress));
+            const owned = draft.operation !== 'swap' || index < draft.userInputCount;
             if (owned && !wallet.keys.has(input.address)) fail();
             if (index < draft.userInputCount) totals.set(input.assetId, (totals.get(input.assetId) || 0n) + BigInt(input.amountAtomic));
         });
@@ -220,7 +219,7 @@
         const addSpend = (assetId, amount) => spends.set(assetId, (spends.get(assetId) || 0n) + BigInt(amount));
         const a = BigInt(draft.reserveAAtomic), b = BigInt(draft.reserveBAtomic);
         if (draft.operation === 'pool') {
-            if (provider || draft.userInputCount !== draft.inputs.length || draft.providerAddress !== draft.changeAddress || !wallet.keys.has(draft.changeAddress)) fail();
+            if (draft.userInputCount !== draft.inputs.length || draft.providerAddress !== draft.changeAddress || !wallet.keys.has(draft.changeAddress)) fail();
             wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
             addSpend(draft.assetA.id, a); addSpend(draft.assetB.id, b);
         } else if (draft.operation === 'swap' || draft.operation === 'lock' || draft.operation === 'close') {
@@ -236,7 +235,7 @@
                     input.assetId !== asset.id || input.amountAtomic !== (side === 0 ? draft.reserveAAtomic : draft.reserveBAtomic)) fail();
             }
             if (draft.operation !== 'swap') {
-                if (provider || draft.changeAddress !== draft.providerAddress || !wallet.keys.has(draft.providerAddress) ||
+                if (draft.changeAddress !== draft.providerAddress || !wallet.keys.has(draft.providerAddress) ||
                     draft.amountAtomic !== '0' || draft.minimumReceiveAtomic !== '0' || draft.receiveAtomic !== '0' || draft.inputSide !== 0) fail();
                 wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
             } else {
@@ -273,7 +272,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 18 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||

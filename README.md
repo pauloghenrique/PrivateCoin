@@ -41,7 +41,7 @@ Para a rede, crie um `PeerNode`, assine os eventos de transação e cadeia, cham
 
 ## Tokens nativos de quantidade fixa
 
-O Core oferece `TokenCreate` e `TokenTransfer`; a versão **17** do consenso
+O Core oferece `TokenCreate` e `TokenTransfer`; a versão **18** do consenso
 aceita de 1 a 20 operações por bloco. Transferências e operações de tokens
 exigem provas assinadas; registros de carteira contam sem essas provas.
 São regras nativas em C#, sem máquina virtual ou suporte a Solidity. A API
@@ -133,10 +133,10 @@ O Desktop permite consultar e movimentar os saldos de tokens confirmados.
 A criação de tokens é feita no DEX. Nenhum token é criado
 apenas ao compilar o projeto ou executar os testes.
 
-**Ativação:** clientes de consenso 17 aceitam novas operações com confirmação
-em bloco e preservam a validação do histórico até v16. O handshake desconecta
+**Ativação:** clientes de consenso 18 aceitam novas operações com confirmação
+em bloco e preservam a validação do histórico até v17. O handshake desconecta
 clientes com outra versão de consenso. A publicação exige uma
-atualização coordenada dos nós e da DEX antes da primeira produção de bloco v17; esta
+atualização coordenada dos nós e da DEX antes da primeira produção de bloco v18; esta
 alteração não agenda nem executa atualização de uma rede em funcionamento.
 Veja `Tests/README.md` para executar a regressão de tokens.
 
@@ -285,11 +285,18 @@ Sua transação de recompensa contém somente a emissão prevista, sem taxas.
 As fases, os valores e a divisão de 30%/70% da recompensa permanecem iguais.
 Após o fim da emissão, as taxas continuam pertencendo aos validadores das operações.
 
-Novos blocos usam `ConsensusVersion = 17`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16 com suas regras originais e permite
-sua extensão em v17. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
+O consenso 18 permite `LiquiditySwap` sem assinatura do provedor nas duas
+reservas bloqueadas da pool. A rede verifica o par, os ativos, o provedor e a
+cotação; as entradas livres do comprador continuam assinadas. Criação e
+encerramento exigem as assinaturas do dono. Blocos históricos v17 mantêm a
+exigência original de assinatura das reservas. A ativação requer atualizar o
+DEX e os nós da rede em conjunto.
+
+Novos blocos usam `ConsensusVersion = 18`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17 com suas regras originais e permite
+sua extensão em v18. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
 v4 a v14 mantêm os lotes originais de 20 quando exigidos por suas regras.
-Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16 são revalidados
+Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17 são revalidados
 antes da migração. Nós e clientes DEX precisam atualizar juntos, pois o handshake
 rejeita versões diferentes. As pendências antigas passam a aguardar inclusão
 em bloco, sem apagar transações ou alterar saldos já confirmados.
@@ -315,7 +322,7 @@ e propagadas em ordem determinística. Cada operação é incluída uma única v
 
 Históricos v9 preservam suas `WalletDistribution` e seus comprovantes de valor
 zero por `WalletDistributionId`. `GetUncountedWalletCreations` recupera apenas
-esses comprovantes históricos. Eles podem ser confirmados em blocos v17 sem nova emissão.
+esses comprovantes históricos. Eles podem ser confirmados em blocos v18 sem nova emissão.
 Pendências v8 mantêm o próprio registro e não precisam de um bloco de migração.
 Endereços repetidos, gastos duplos e referências órfãs são rejeitados ao validar
 pendências e cadeias recebidas.
@@ -366,7 +373,7 @@ A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitár
 
 Quando há uma transferência aprovada e pelo menos dois validadores locais elegíveis ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
 
-O bloqueio da garantia é publicado como uma transação `StakeLock`: ela consome UTXOs assinados, cria uma saída de garantia que não pode ser usada por uma transferência comum e vincula globalmente o valor, a chave pública do validador e o endereço de recompensa. Todo nó reconstrói o conjunto ativo a partir das saídas não gastas confirmadas na cadeia. Ao validar um bloco v15, v16 ou v17, considera somente a cadeia anterior; uma garantia pendente não autoriza seus votos. Cada criador e confirmador também assina individualmente o mesmo payload determinístico do voto; as chaves, papéis e assinaturas integram a hash do bloco e são verificados novamente ao carregar ou sincronizar a cadeia.
+O bloqueio da garantia é publicado como uma transação `StakeLock`: ela consome UTXOs assinados, cria uma saída de garantia que não pode ser usada por uma transferência comum e vincula globalmente o valor, a chave pública do validador e o endereço de recompensa. Todo nó reconstrói o conjunto ativo a partir das saídas não gastas confirmadas na cadeia. Ao validar um bloco v15, v16, v17 ou v18, considera somente a cadeia anterior; uma garantia pendente não autoriza seus votos. Cada criador e confirmador também assina individualmente o mesmo payload determinístico do voto; as chaves, papéis e assinaturas integram a hash do bloco e são verificados novamente ao carregar ou sincronizar a cadeia.
 
 ### Reconexão do Desktop
 
