@@ -369,7 +369,7 @@ Na lista de pools, **Ver candles e livro caixa** abre
 segundos, sem abrir carteira, e pausa as consultas quando a aba está oculta.
 Os intervalos disponíveis são 1, 5 e 15 minutos, 1 hora e 1 dia.
 
-Os candles representam o preço B/A das reservas após trocas confirmadas,
+Os candles representam o preço A/B das reservas após trocas confirmadas,
 agrupadas pelo horário do bloco. Não são candles de uma bolsa externa nem
 um livro de ofertas. Períodos sem trocas não produzem candles artificiais.
 A resposta inclui até 200 candles e as 100 movimentações mais recentes.
@@ -386,3 +386,6 @@ a taxa e a revisão/assinatura da troca da pool aberta. O envio permanece na
 tela e oferece acesso ao comprovante. As informações dos dois ativos mostram
 nome, símbolo, identificador, precisão, oferta total dos tokens e descrição
 do perfil local assinado, quando vinculada à criação confirmada.
+
+O preço e os candles usam sempre Reserva A ÷ Reserva B, ajustando as casas
+decimais de cada ativo, independentemente do sentido selecionado na troca.
