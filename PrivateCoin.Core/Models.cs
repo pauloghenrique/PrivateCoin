@@ -15,7 +15,17 @@ namespace PrivateCoin.Core
         TokenCreate = 3,
         TokenTransfer = 4,
         WalletCreate = 5,
-        WalletDistribution = 6
+        WalletDistribution = 6,
+        LiquidityPool = 7,
+        LiquiditySwap = 8,
+        LiquidityClose = 9
+    }
+
+    [DataContract]
+    public sealed class LiquiditySwapTerms
+    {
+        [DataMember(Order = 1)] public int InputSide { get; set; }
+        [DataMember(Order = 2)] public long Amount { get; set; }
     }
 
     [DataContract]
@@ -121,6 +131,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 11, EmitDefaultValue = false)] public string WalletDistributionId { get; set; }
 
         [DataMember(Order = 12, EmitDefaultValue = false)] public TransactionApproval TransactionApproval { get; set; }
+        [DataMember(Order = 13, EmitDefaultValue = false)] public LiquiditySwapTerms LiquiditySwap { get; set; }
 
         internal string SigningPayload()
         {
@@ -148,6 +159,9 @@ namespace PrivateCoin.Core
                         .Append('|').Append(Token.Supply.ToString(CultureInfo.InvariantCulture));
                 }
             }
+            if (LiquiditySwap != null)
+                value.Append("|pool-swap-v1|").Append(LiquiditySwap.InputSide.ToString(CultureInfo.InvariantCulture))
+                    .Append('|').Append(LiquiditySwap.Amount.ToString(CultureInfo.InvariantCulture));
             return value.ToString();
         }
 
@@ -210,6 +224,7 @@ namespace PrivateCoin.Core
         public int OutputIndex { get; internal set; }
         public TransactionOutput Output { get; internal set; }
         public TransactionKind TransactionKind { get; internal set; }
+        public bool IsPoolReserve => TransactionKind == TransactionKind.LiquidityPool || TransactionKind == TransactionKind.LiquiditySwap;
         public string ValidatorPublicKey { get; internal set; }
         public string ValidatorRewardAddress { get; internal set; }
         public IReadOnlyCollection<string> ValidatorOwnedAddresses { get; internal set; }

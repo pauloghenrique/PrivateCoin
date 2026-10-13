@@ -37,7 +37,7 @@ namespace PrivateCoin.Desktop
             // Show the sender's remaining change while its inputs are reserved. Incoming
             // payments, locked collateral and change already available are not added.
             long pendingChange = chain.GetUnspentOutputs(addresses, queue)
-                .Where(item => item.Output.AssetId == null && item.TransactionKind != TransactionKind.StakeLock &&
+                .Where(item => item.Output.AssetId == null && item.TransactionKind != TransactionKind.StakeLock && !item.IsPoolReserve &&
                     outgoingIds.Contains(item.TransactionId) && !availableKeys.Contains(Key(item.TransactionId, item.OutputIndex)))
                 .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
             return new WalletBalanceSummary(available, pendingChange);

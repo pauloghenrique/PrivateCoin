@@ -6,7 +6,7 @@ using System.Text;
 
 namespace PrivateCoin.Core
 {
-    /// <summary>Atomic, externally signed liquidity transactions under the existing token-transfer consensus.</summary>
+    /// <summary>Atomic, externally signed transactions with consensus-enforced pool reserves.</summary>
     public static class TokenExchange
     {
         public const int PoolFeeBasisPoints = 30;
@@ -31,7 +31,7 @@ namespace PrivateCoin.Core
             var outputs = new List<TransactionOutput> { Output(assetA, amountA, address), Output(assetB, amountB, address) };
             Fund(chain, queue, keys, new Dictionary<string, long> {
                 { assetA ?? "povix", amountA }, { assetB ?? "povix", amountB } }, address, fee, selected, outputs, new HashSet<string>(excludedInputs ?? new string[0]));
-            return Build(selected, keys, outputs, selected.Count, fee);
+            return Build(selected, keys, outputs, selected.Count, fee, TransactionKind.LiquidityPool);
         }
 
         public static UnsignedTokenExchange PrepareSwap(Blockchain chain, IEnumerable<Transaction> pending,
@@ -52,7 +52,7 @@ namespace PrivateCoin.Core
             {
                 UnspentOutput current;
                 if (reserved.Contains(Key(reserve)) || !confirmed.TryGetValue(Key(reserve), out current) ||
-                    current.TransactionKind == TransactionKind.StakeLock || current.Output.AssetId != reserve.Output.AssetId ||
+                    !current.IsPoolReserve || current.Output.AssetId != reserve.Output.AssetId ||
                     current.Output.Amount != reserve.Output.Amount) throw new InvalidOperationException("Pool reserves are unavailable.");
             }
             var input = inputSide == 0 ? reserveA : reserveB;
@@ -68,7 +68,75 @@ namespace PrivateCoin.Core
                 address, fee, selected, outputs, new HashSet<string>((excludedInputs ?? new string[0]).Concat(new[] { Key(reserveA), Key(reserveB) })));
             int userCount = selected.Count;
             selected.Add(reserveA); selected.Add(reserveB); keys[provider] = providerKey;
-            return Build(selected, keys, outputs, userCount, fee);
+            return Build(selected, keys, outputs, userCount, fee, TransactionKind.LiquiditySwap,
+                new LiquiditySwapTerms { InputSide = inputSide, Amount = amount });
+        }
+
+        public static UnsignedTokenExchange PrepareReserveOperation(Blockchain chain, IEnumerable<Transaction> pending,
+            IEnumerable<string> publicKeys, UnspentOutput reserveA, UnspentOutput reserveB, string address, long fee,
+            bool close, IEnumerable<string> excludedInputs = null)
+        {
+            var queue = pending.ToArray();
+            var keys = Keys(publicKeys, address, fee);
+            if (reserveA == null || reserveB == null || reserveA.TransactionId != reserveB.TransactionId ||
+                reserveA.OutputIndex != 0 || reserveB.OutputIndex != 1 || reserveA.Output.OneTimeAddress != address ||
+                reserveB.Output.OneTimeAddress != address || reserveA.IsPoolReserve != close || reserveB.IsPoolReserve != close)
+                throw new InvalidOperationException("Invalid pool reserve operation.");
+            var outputs = new List<TransactionOutput> { Output(reserveA.Output.AssetId, reserveA.Output.Amount, address),
+                Output(reserveB.Output.AssetId, reserveB.Output.Amount, address) };
+            var selected = new List<UnspentOutput>();
+            Fund(chain, queue, keys, new Dictionary<string, long>(), address, fee, selected, outputs,
+                new HashSet<string>((excludedInputs ?? new string[0]).Concat(new[] { Key(reserveA), Key(reserveB) })));
+            int userCount = selected.Count;
+            selected.Add(reserveA); selected.Add(reserveB);
+            return Build(selected, keys, outputs, userCount, fee, close ? TransactionKind.LiquidityClose : TransactionKind.LiquidityPool);
+        }
+
+        internal static bool IsPoolOperation(TransactionKind kind) => kind == TransactionKind.LiquidityPool ||
+            kind == TransactionKind.LiquiditySwap || kind == TransactionKind.LiquidityClose;
+
+        internal static void ValidatePoolOperation(Transaction tx, IDictionary<string, UnspentOutput> utxo)
+        {
+            var sources = tx.Inputs.Select(input => { UnspentOutput source;
+                return utxo.TryGetValue(Key(input), out source) ? source : null; }).ToArray();
+            var locked = sources.Where(source => source != null && source.IsPoolReserve).ToArray();
+            if (!IsPoolOperation(tx.Kind))
+            {
+                if (locked.Length != 0) throw new InvalidOperationException("Pool reserves cannot fund ordinary movements.");
+                return;
+            }
+            if (tx.Outputs.Count < 2 || tx.Outputs[0].AssetId == tx.Outputs[1].AssetId ||
+                tx.Outputs[0].OneTimeAddress != tx.Outputs[1].OneTimeAddress)
+                throw new InvalidOperationException("A pool requires two distinct assets at the provider address.");
+            if (tx.Kind == TransactionKind.LiquidityPool)
+            {
+                if (locked.Length != 0 || !tx.Inputs.Any(input => Crypto.Sha256(input.PublicKey) == tx.Outputs[0].OneTimeAddress))
+                    throw new InvalidOperationException("Creating a pool requires the provider's authorization and free funds.");
+                return;
+            }
+            if (locked.Length != 2 || tx.Inputs.Count < 3 || sources.Any(source => source == null) ||
+                !sources[sources.Length - 2].IsPoolReserve || !sources[sources.Length - 1].IsPoolReserve)
+                throw new InvalidOperationException("A pool operation must consume exactly both reserves and pay its fee from free funds.");
+            var a = sources[sources.Length - 2]; var b = sources[sources.Length - 1];
+            if (a.TransactionId != b.TransactionId || a.OutputIndex != 0 || b.OutputIndex != 1 ||
+                a.Output.OneTimeAddress != b.Output.OneTimeAddress || a.Output.AssetId == b.Output.AssetId ||
+                tx.Outputs[0].OneTimeAddress != a.Output.OneTimeAddress ||
+                tx.Outputs[0].AssetId != a.Output.AssetId || tx.Outputs[1].AssetId != b.Output.AssetId)
+                throw new InvalidOperationException("Pool reserves must remain paired with the same assets and provider.");
+            long nextA = a.Output.Amount, nextB = b.Output.Amount;
+            if (tx.Kind == TransactionKind.LiquiditySwap)
+            {
+                var terms = tx.LiquiditySwap;
+                if (terms == null || terms.InputSide < 0 || terms.InputSide > 1 || terms.Amount <= 0 || tx.Outputs.Count < 3)
+                    throw new InvalidOperationException("Missing swap terms.");
+                long receive = Quote(terms.InputSide == 0 ? nextA : nextB, terms.InputSide == 0 ? nextB : nextA, terms.Amount);
+                nextA = terms.InputSide == 0 ? checked(nextA + terms.Amount) : nextA - receive;
+                nextB = terms.InputSide == 1 ? checked(nextB + terms.Amount) : nextB - receive;
+                if (tx.Outputs[2].AssetId != (terms.InputSide == 0 ? b.Output.AssetId : a.Output.AssetId) || tx.Outputs[2].Amount != receive)
+                    throw new InvalidOperationException("The swap payout must match the pool quote.");
+            }
+            if (tx.Outputs[0].Amount != nextA || tx.Outputs[1].Amount != nextB)
+                throw new InvalidOperationException("Pool reserves must follow the swap quote or return intact to the provider on closure.");
         }
 
         private static void ValidatePair(Blockchain chain, Transaction[] pending, string a, string b)
@@ -102,9 +170,9 @@ namespace PrivateCoin.Core
             }
         }
         private static UnsignedTokenExchange Build(List<UnspentOutput> selected, Dictionary<string, string> keys,
-            List<TransactionOutput> outputs, int userCount, long fee)
+            List<TransactionOutput> outputs, int userCount, long fee, TransactionKind kind, LiquiditySwapTerms terms = null)
         {
-            var tx = new Transaction { Kind = TransactionKind.TokenTransfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Outputs = outputs,
+            var tx = new Transaction { Kind = kind, LiquiditySwap = terms, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Outputs = outputs,
                 Inputs = selected.Select(item => new TransactionInput { TransactionId = item.TransactionId,
                     OutputIndex = item.OutputIndex, PublicKey = keys[item.Output.OneTimeAddress] }).ToList() };
             return new UnsignedTokenExchange(tx, selected.ToArray(), userCount);
@@ -122,6 +190,7 @@ namespace PrivateCoin.Core
         public byte[] SigningPayload => Encoding.UTF8.GetBytes(transaction.SigningPayload());
         public long Fee => transaction.Fee;
         public long TimestampUtcTicks => transaction.TimestampUtcTicks;
+        public TransactionKind Kind => transaction.Kind;
         public IReadOnlyList<TransactionOutput> Outputs => transaction.Outputs.Select(item => new TransactionOutput {
             AssetId = item.AssetId, Amount = item.Amount, OneTimeAddress = item.OneTimeAddress }).ToArray();
         public IReadOnlyList<TransactionInput> Inputs => transaction.Inputs.Select(item => new TransactionInput {
@@ -133,6 +202,8 @@ namespace PrivateCoin.Core
             var values = signatures.ToArray();
             if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every input.");
             var tx = new Transaction { Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
+                LiquiditySwap = transaction.LiquiditySwap == null ? null : new LiquiditySwapTerms {
+                    InputSide = transaction.LiquiditySwap.InputSide, Amount = transaction.LiquiditySwap.Amount },
                 Outputs = Outputs.ToList(), Inputs = transaction.Inputs.Select((input, index) => new TransactionInput {
                     TransactionId = input.TransactionId, OutputIndex = input.OutputIndex, PublicKey = input.PublicKey, Signature = values[index] }).ToList() };
             tx.Id = tx.CalculateId(); return tx;

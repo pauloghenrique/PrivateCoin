@@ -11,7 +11,8 @@
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
     const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
-        pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada' };
+        pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada',
+        unlocked: 'Reservas antigas sem bloqueio', closed: 'Encerrada' };
     const atomicText = (value, decimals) => wallet.formatAtomic(String(value), decimals);
     function fee() {
         const index = { '1': 0, '2': 1, '4': 2 }[byId('exchange-priority').value];
@@ -55,6 +56,7 @@
         byId('wallet-connect').disabled = busy || Boolean(choices && !byId('wallet-choice').value);
         byId('wallet-file').disabled = busy; byId('wallet-password').disabled = busy || Boolean(choices);
         byId('wallet-choice').disabled = busy || !choices; byId('wallet-lock').disabled = busy;
+        byId('pool-list').querySelectorAll('button').forEach(button => { button.disabled = !editing || !ready; });
         try { byId('exchange-fee').textContent = atomicText(fee(), 8) + ' POVIX'; } catch (_) { byId('exchange-fee').textContent = 'Consultando a taxa…'; }
         for (const side of ['a', 'b']) {
             const token = asset(byId('pool-asset-' + side).value);
@@ -90,6 +92,12 @@
             asProvider ? 'Sua assinatura autoriza somente esta troca atômica das reservas.' : ownPool ?
                 'A carteira selecionada assina a troca e as reservas da pool. A operação será enviada à rede após sua confirmação.' :
                 'A assinatura solicita a troca ao provedor. Aguarde a aprovação e a confirmação em bloco.';
+        if (result.operation === 'lock' || result.operation === 'close') {
+            byId('review-title').textContent = result.operation === 'lock' ? 'Bloquear reservas da pool' : 'Encerrar pool e liberar reservas';
+            byId('review-description').textContent = result.operation === 'lock' ?
+                'Após a confirmação, as reservas só poderão ser usadas em trocas ou no encerramento assinado da pool.' :
+                'Após a confirmação, a pool ficará encerrada e os dois valores abaixo voltarão ao saldo livre da carteira provedora.';
+        }
         if (result.operation === 'swap') {
             const input = result.inputSide === 0 ? result.assetA : result.assetB, output = result.inputSide === 0 ? result.assetB : result.assetA;
             addReview('Quantidade entregue pelo comprador', atomicText(result.amountAtomic, input.decimals) + ' ' + input.symbol);
@@ -99,11 +107,12 @@
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
-            addReview(index < 2 ? 'Reserva ' + token.symbol : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
+            addReview(index < 2 ? (result.operation === 'close' ? 'Devolução ' : 'Reserva bloqueada ') + token.symbol : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
                 atomicText(output.amountAtomic, token.decimals) + ' ' + token.symbol);
             addReview('Endereço', output.address);
         });
-        byId('sign-exchange').textContent = result.operation === 'pool' ? 'Assinar e criar pool' : asProvider || ownPool ? 'Assinar e executar troca' : 'Assinar solicitação ao provedor';
+        byId('sign-exchange').textContent = result.operation === 'lock' ? 'Assinar bloqueio das reservas' : result.operation === 'close' ? 'Assinar encerramento da pool' :
+            result.operation === 'pool' ? 'Assinar e criar pool' : asProvider || ownPool ? 'Assinar e executar troca' : 'Assinar solicitação ao provedor';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function ensureFunds(requirements) {
@@ -114,6 +123,20 @@
     }
     const wantedFromPool = pool => ({ poolId: pool.poolId, reserveTransactionId: pool.reserveTransactionId, providerAddress: pool.providerAddress,
         assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
+    async function manageReserves(pool) {
+        if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate || !pool.canManage) return;
+        busy = true; message(''); update();
+        try {
+            const operation = pool.locked ? 'close' : 'lock', feeAtomic = fee();
+            if (!wallet.addresses().includes(pool.providerAddress)) throw new Error('Selecione a carteira provedora desta pool.');
+            ensureFunds(new Map([['povix', BigInt(feeAtomic)]]));
+            const wanted = { ...wantedFromPool(pool), operation, feeAtomic, changeAddress: pool.providerAddress };
+            const result = await post(app.dataset.prepareReservesUrl, { poolId: pool.poolId, operation,
+                feePriority: byId('exchange-priority').value, feeAtomic, publicKeys: wallet.publicKeys() });
+            await review(result, wanted, false);
+        } catch (error) { reset(); message(error.message); }
+        finally { busy = false; update(); }
+    }
     byId('pool-form').addEventListener('submit', async event => {
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
         busy = true; message(''); update();
@@ -186,12 +209,14 @@
             await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId, provider);
             const ownPool = draft.operation === 'swap' && !provider && wallet.addresses().includes(draft.providerAddress);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(provider ? draft.userInputCount : 0, provider || ownPool ? undefined : draft.userInputCount).map(item => item.address) });
+                inputAddresses: draft.inputs.slice(provider ? draft.userInputCount : 0,
+                    provider || ownPool || draft.operation === 'lock' || draft.operation === 'close' ? undefined : draft.userInputCount).map(item => item.address) });
             if (draft.operation === 'swap' && !provider && !ownPool) {
                 requestId = draft.draftId; try { sessionStorage.setItem('povix-dex-swap-request', requestId); } catch (_) { }
                 await post(app.dataset.proposeUrl, { draftId: draft.draftId, signatures }); reset(); await requestStatus();
             } else {
-                const result = await post(provider ? app.dataset.acceptUrl : ownPool ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
+                const result = await post(draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
+                    provider ? app.dataset.acceptUrl : ownPool ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                     { draftId: draft.draftId, signatures });
                 wallet.lock(); location.assign(receipt(result.transactionId));
             }
@@ -223,6 +248,11 @@
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 entry.append(detail, state); byId('pool-list').appendChild(entry);
+                if (pool.canManage && wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) {
+                    const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
+                    button.textContent = pool.locked ? 'Revisar encerramento da pool' : 'Bloquear reservas desta pool';
+                    button.addEventListener('click', () => manageReserves(pool)); byId('pool-list').appendChild(button);
+                }
             });
             if (wallet.isUnlocked()) {
                 const native = asset('povix'); byId('wallet-balance').textContent = native ? atomicText(native.balanceAtomic, 8) + ' POVIX livres' : 'Indisponível';

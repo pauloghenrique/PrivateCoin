@@ -146,7 +146,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 16 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
@@ -188,7 +188,7 @@
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
         const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
-        if (draft.networkId !== networkId || draft.consensusVersion !== 16 || draft.operation !== expected.operation ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.operation !== expected.operation ||
             !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
             draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
             draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
@@ -210,7 +210,7 @@
             if (!id(input.transactionId) || !id(input.address) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 ||
                 !allowed.has(input.assetId) || !atomic(input.amountAtomic) || BigInt(input.amountAtomic) <= 0n || seen.has(key)) fail();
             seen.add(key); payload += '|' + key;
-            const owned = draft.operation === 'pool' || (provider ? index >= draft.userInputCount :
+            const owned = draft.operation !== 'swap' || (provider ? index >= draft.userInputCount :
                 index < draft.userInputCount || wallet.keys.has(draft.providerAddress));
             if (owned && !wallet.keys.has(input.address)) fail();
             if (index < draft.userInputCount) totals.set(input.assetId, (totals.get(input.assetId) || 0n) + BigInt(input.amountAtomic));
@@ -223,23 +223,30 @@
             if (provider || draft.userInputCount !== draft.inputs.length || draft.providerAddress !== draft.changeAddress || !wallet.keys.has(draft.changeAddress)) fail();
             wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
             addSpend(draft.assetA.id, a); addSpend(draft.assetB.id, b);
-        } else if (draft.operation === 'swap') {
+        } else if (draft.operation === 'swap' || draft.operation === 'lock' || draft.operation === 'close') {
             if (draft.inputs.length !== draft.userInputCount + 2 || draft.poolId !== expected.poolId || draft.reserveTransactionId !== expected.reserveTransactionId ||
-                draft.providerAddress !== expected.providerAddress || draft.inputSide !== expected.inputSide ||
+                draft.providerAddress !== expected.providerAddress) fail();
+            if (draft.operation === 'swap' && (draft.inputSide !== expected.inputSide ||
                 draft.amountAtomic !== expected.amountAtomic || draft.minimumReceiveAtomic !== expected.minimumReceiveAtomic ||
                 !atomic(draft.amountAtomic) || !atomic(draft.minimumReceiveAtomic) || BigInt(draft.minimumReceiveAtomic) <= 0n ||
-                (draft.inputSide !== 0 && draft.inputSide !== 1)) fail();
+                (draft.inputSide !== 0 && draft.inputSide !== 1))) fail();
             for (let side = 0; side < 2; side++) {
                 const input = draft.inputs[draft.userInputCount + side], asset = side === 0 ? draft.assetA : draft.assetB;
                 if (input.transactionId !== expected.reserveTransactionId || input.outputIndex !== side || input.address !== draft.providerAddress ||
                     input.assetId !== asset.id || input.amountAtomic !== (side === 0 ? draft.reserveAAtomic : draft.reserveBAtomic)) fail();
             }
-            const amount = BigInt(draft.amountAtomic), receive = BigInt(quoteExchange(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount));
-            if (draft.receiveAtomic !== receive.toString() || receive < BigInt(draft.minimumReceiveAtomic)) fail();
-            wantedOutputs.push(output(draft.assetA.id, draft.inputSide === 0 ? a + amount : a - receive, draft.providerAddress),
-                output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - receive, draft.providerAddress),
-                output(draft.inputSide === 0 ? draft.assetB.id : draft.assetA.id, receive, draft.changeAddress));
-            addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, amount);
+            if (draft.operation !== 'swap') {
+                if (provider || draft.changeAddress !== draft.providerAddress || !wallet.keys.has(draft.providerAddress) ||
+                    draft.amountAtomic !== '0' || draft.minimumReceiveAtomic !== '0' || draft.receiveAtomic !== '0' || draft.inputSide !== 0) fail();
+                wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
+            } else {
+                const amount = BigInt(draft.amountAtomic), receive = BigInt(quoteExchange(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount));
+                if (draft.receiveAtomic !== receive.toString() || receive < BigInt(draft.minimumReceiveAtomic)) fail();
+                wantedOutputs.push(output(draft.assetA.id, draft.inputSide === 0 ? a + amount : a - receive, draft.providerAddress),
+                    output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - receive, draft.providerAddress),
+                    output(draft.inputSide === 0 ? draft.assetB.id : draft.assetA.id, receive, draft.changeAddress));
+                addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, amount);
+            }
         } else fail();
         for (const assetId of Array.from(new Set([...spends.keys(), ...totals.keys()])).sort((x, y) => x === 'povix' ? -1 : y === 'povix' ? 1 : x.localeCompare(y))) {
             const change = (totals.get(assetId) || 0n) - (spends.get(assetId) || 0n);
@@ -252,8 +259,11 @@
             if (!atomic(item.amountAtomic) || BigInt(item.amountAtomic) <= 0n || item.amountAtomic !== wanted.amountAtomic || item.address !== wanted.address || item.assetId !== wanted.assetId) fail();
             payload += '|' + item.amountAtomic + ':' + item.address;
         });
-        payload += '|fee:' + draft.feeAtomic + '|kind:4|validator:|reward:|owned:|assets-v1|';
+        const kind = { pool: 7, swap: 8, lock: 7, close: 9 }[draft.operation];
+        if (draft.transactionKind !== kind) fail();
+        payload += '|fee:' + draft.feeAtomic + '|kind:' + kind + '|validator:|reward:|owned:|assets-v1|';
         draft.outputs.forEach(item => { payload += field(item.assetId === 'povix' ? null : item.assetId); });
+        if (draft.operation === 'swap') payload += '|pool-swap-v1|' + draft.inputSide + '|' + draft.amountAtomic;
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) fail();
         return true;
     }
@@ -263,7 +273,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 16 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 17 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||
