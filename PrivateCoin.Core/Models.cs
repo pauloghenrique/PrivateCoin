@@ -196,6 +196,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 8, EmitDefaultValue = false)] public int ConsensusVersion { get; set; }
         [DataMember(Order = 9, EmitDefaultValue = false)] public List<TransactionValidation> TransactionValidations { get; set; }
 
+        [DataMember(Order = 10, EmitDefaultValue = false)] public GenesisRules Rules { get; set; }
+
         internal string CalculateHash()
         {
             string validatorProof = Validators == null ? string.Empty : string.Join("|", Validators.Select(v =>
@@ -205,7 +207,7 @@ namespace PrivateCoin.Core
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
                 string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof) +
-                ValidationProofPayload());
+                ValidationProofPayload() + (Rules == null ? string.Empty : "|genesis-rules:" + Rules.CalculateHash()));
         }
 
         internal string ValidationProofPayload()

@@ -248,7 +248,8 @@ namespace PrivateCoin.Desktop
             });
             WriteJson(networkFilePath, new StoredNetwork
             {
-                SchemaVersion = 4,
+                SchemaVersion = 5,
+                Genesis = blockchain.Blocks[0],
                 Data = Convert.ToBase64String(networkData),
                 Sha256 = CalculateSha256(networkData)
             }, false);
@@ -457,7 +458,7 @@ namespace PrivateCoin.Desktop
                     blocks = Deserialize<List<Block>>(networkData);
                     NetworkNeedsUpgrade = true;
                 }
-                NetworkNeedsUpgrade = state.SchemaVersion < 4;
+                NetworkNeedsUpgrade = state.SchemaVersion < 5;
             }
             else if (state.Blocks != null)
             {
@@ -468,6 +469,16 @@ namespace PrivateCoin.Desktop
             else throw new SerializationException("O arquivo da rede está incompleto.");
 
             var blockchain = new Blockchain(blocks);
+            if (state.SchemaVersion >= 5 && state.Genesis == null)
+                throw new SerializationException("O manifesto do bloco gênesis está ausente.");
+            if (state.Genesis != null)
+            {
+                // The readable projection must be the same canonical genesis as the
+                // SHA-256-protected payload; neither copy is an editable configuration.
+                var genesisChain = new Blockchain(new[] { state.Genesis });
+                if (genesisChain.Blocks[0].Hash != blockchain.Blocks[0].Hash)
+                    throw new SerializationException("As regras do gênesis não conferem com a blockchain.");
+            }
             blockchain.ValidatePendingTransactions(pendingTransactions);
             if (validatePublicBalances)
             {
@@ -591,6 +602,7 @@ namespace PrivateCoin.Desktop
             [DataMember(Order = 2, EmitDefaultValue = false)] public string Data { get; set; }
             [DataMember(Order = 3, EmitDefaultValue = false)] public string Sha256 { get; set; }
             [DataMember(Order = 4, EmitDefaultValue = false)] public List<Block> Blocks { get; set; }
+            [DataMember(Order = 5, EmitDefaultValue = false)] public Block Genesis { get; set; }
         }
 
         [DataContract]
