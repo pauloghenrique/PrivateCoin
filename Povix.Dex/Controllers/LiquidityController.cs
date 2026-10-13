@@ -117,7 +117,8 @@ namespace Povix.Dex.Controllers
             if (!ValidId(poolId) || MvcApplication.TokenNetwork?.GetPoolMarket(poolId, 300) == null)
                 return HttpNotFound();
             ViewBag.PoolId = poolId;
-            return View();
+            ViewBag.SelectedPoolId = poolId;
+            return View(MvcApplication.TokenNetwork.GetNetwork());
         }
 
         [HttpGet]
