@@ -55,6 +55,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 22)] public string InitialDistributionRule { get; private set; }
         [DataMember(Order = 23)] public string ImplementationHash { get; private set; }
 
+        [DataMember(Order = 24)] public string CoreConfigurationManifest { get; private set; }
+
         private static readonly string implementationHash = CalculateImplementationHash();
 
         internal static GenesisRules CreateCanonical()
@@ -83,7 +85,8 @@ namespace PrivateCoin.Core
                 BlockProductionRule = "Produce a nonempty eligible batch at the operation limit or after the wait from first local observation. The local monotonic wait is not remotely verifiable consensus.",
                 BlockValidationRule = "Every block requires proof of work, valid ordered operations, supply and UTXO conservation. Wallet and collateral operations are self-validated. Transfers, tokens and pools require signed collateral-backed approvals; stake blocks require the globally eligible validator set, deterministic creator selection and signed votes. Fork choice uses cumulative required work.",
                 InitialDistributionRule = "No premine in genesis. One confirmed wallet reward per address, up to the rewarded-wallet limit; later wallets receive zero. No replay of historical distribution receipts.",
-                ImplementationHash = implementationHash
+                ImplementationHash = implementationHash,
+                CoreConfigurationManifest = CoreConfiguration.Manifest
             };
         }
 

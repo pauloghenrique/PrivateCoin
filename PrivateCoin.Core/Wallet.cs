@@ -36,7 +36,7 @@ namespace PrivateCoin.Core
         public string CreateReceiveAddress()
         {
             var key = deterministicSeed == null
-                ? new RSACryptoServiceProvider(2048)
+                ? new RSACryptoServiceProvider(Crypto.RsaKeyBits)
                 : DeterministicRsa.Create(deterministicSeed, nextKeyIndex);
             key.PersistKeyInCsp = false;
             string publicKey = key.ToXmlString(false);
@@ -55,7 +55,7 @@ namespace PrivateCoin.Core
             string publicKey = key.ToXmlString(false);
             string validatorId = Crypto.Sha256(publicKey);
             return new ValidatorStake(validatorId, rewardAddress, lockedAmount, new[] { rewardAddress }, publicKey, payload =>
-                Convert.ToBase64String(key.SignData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"))));
+                Convert.ToBase64String(key.SignData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm))));
         }
 
         /// <summary>Indicates whether this wallet sends or receives value in a transaction.</summary>
@@ -80,7 +80,7 @@ namespace PrivateCoin.Core
         public static Wallet FromPrivateKeys(IEnumerable<string> privateKeys, byte[] seed)
         {
             if (privateKeys == null) throw new ArgumentNullException(nameof(privateKeys));
-            if (seed != null && seed.Length < 16)
+            if (seed != null && seed.Length < Crypto.MinimumSeedBytes)
                 throw new ArgumentException("A deterministic seed must contain at least 128 bits.", nameof(seed));
             var wallet = seed == null ? new Wallet() : new Wallet(seed);
             try
@@ -88,7 +88,7 @@ namespace PrivateCoin.Core
                 foreach (string privateKey in privateKeys)
                 {
                     if (string.IsNullOrWhiteSpace(privateKey)) throw new ArgumentException("A private key is invalid.", nameof(privateKeys));
-                    var key = new RSACryptoServiceProvider(2048);
+                    var key = new RSACryptoServiceProvider(Crypto.RsaKeyBits);
                     key.PersistKeyInCsp = false;
                     try
                     {
@@ -175,7 +175,7 @@ namespace PrivateCoin.Core
             transaction.Outputs.Add(new TransactionOutput { Amount = collateral.Output.Amount - fee, OneTimeAddress = CreateReceiveAddress() });
             byte[] payload = Encoding.UTF8.GetBytes(transaction.SigningPayload());
             transaction.Inputs[0].PublicKey = key.ToXmlString(false);
-            transaction.Inputs[0].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+            transaction.Inputs[0].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm)));
             transaction.Id = transaction.CalculateId();
             return transaction;
         }
@@ -227,7 +227,7 @@ namespace PrivateCoin.Core
             {
                 var key = keys[selected[index].Output.OneTimeAddress];
                 transaction.Inputs[index].PublicKey = key.ToXmlString(false);
-                transaction.Inputs[index].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+                transaction.Inputs[index].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm)));
             }
             transaction.Id = transaction.CalculateId();
             return transaction;
@@ -315,7 +315,7 @@ namespace PrivateCoin.Core
             {
                 var key = keys[selected[i].Output.OneTimeAddress];
                 tx.Inputs[i].PublicKey = key.ToXmlString(false);
-                tx.Inputs[i].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID("SHA256")));
+                tx.Inputs[i].Signature = Convert.ToBase64String(key.SignData(payload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm)));
             }
             tx.Id = tx.CalculateId();
         }

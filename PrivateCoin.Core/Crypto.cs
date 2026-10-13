@@ -6,6 +6,11 @@ namespace PrivateCoin.Core
 {
     internal static class Crypto
     {
+        internal const int RsaKeyBits = 2048;
+        internal const int MinimumSeedBytes = 16;
+        internal const int MessageIdBytes = 32;
+        internal const string SignatureHashAlgorithm = "SHA256";
+
         internal static string Sha256(string value)
         {
             using (var sha = SHA256.Create())
@@ -21,7 +26,7 @@ namespace PrivateCoin.Core
 
         internal static string NewId()
         {
-            var bytes = new byte[32];
+            var bytes = new byte[MessageIdBytes];
             using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
             return ToHex(bytes);
         }

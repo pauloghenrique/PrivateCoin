@@ -54,6 +54,7 @@
     <Compile Include="BlockProductionScheduler.cs" />
     <Compile Include="BlockchainQueryApi.cs" />
     <Compile Include="Crypto.cs" />
+    <Compile Include="CoreConfiguration.cs" />
     <Compile Include="DeterministicRsa.cs" />
     <Compile Include="Models.cs" />
     <Compile Include="PeerAddressBook.cs" />

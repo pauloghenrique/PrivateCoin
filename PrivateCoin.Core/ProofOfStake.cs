@@ -123,7 +123,7 @@ namespace PrivateCoin.Core
                 {
                     rsa.PersistKeyInCsp = false;
                     rsa.FromXmlString(publicKey);
-                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID("SHA256"), Convert.FromBase64String(signature));
+                    return rsa.VerifyData(Encoding.UTF8.GetBytes(payload), CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm), Convert.FromBase64String(signature));
                 }
             }
             catch (FormatException) { return false; }
