@@ -432,6 +432,29 @@ namespace PrivateCoin.Desktop
             }
         }
 
+        public Blockchain LoadNetworkOrRecreate(IEnumerable<NamedWallet> wallets, out List<Transaction> pendingTransactions)
+        {
+            if (wallets == null) throw new ArgumentNullException(nameof(wallets));
+            try
+            {
+                return LoadNetwork(out pendingTransactions);
+            }
+            catch (Exception error) when (error is SerializationException || error is InvalidOperationException ||
+                error is ArgumentException || error is FormatException || error is OverflowException)
+            {
+                // Only the rejected public state is discarded. Private wallet files
+                // stay intact. This executable's rules determine the new genesis
+                // and network identity; incompatible peers cannot join this chain.
+                var blockchain = new Blockchain();
+                pendingTransactions = new List<Transaction>();
+                knownNetworkWallets.Clear();
+                File.Delete(networkFilePath);
+                SaveNetwork(wallets, blockchain, pendingTransactions);
+                System.Diagnostics.Trace.TraceWarning("Estado público da rede recriado: {0}", error.GetType().Name);
+                return blockchain;
+            }
+        }
+
         public Blockchain LoadNetwork(out List<Transaction> pendingTransactions)
         {
             pendingTransactions = new List<Transaction>();
