@@ -67,7 +67,7 @@
         }
         const pool = selectedPool();
         if (integrated) {
-            for (const [id, side] of [['swap-buy', '0'], ['swap-sell', '1']]) {
+            for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
                 const button = byId(id);
                 if (!button) continue;
                 button.disabled = !editing || !ready || !pool?.available;
@@ -323,8 +323,8 @@
     });
     byId('wallet-lock').addEventListener('click', lock); byId('wallet-file').addEventListener('change', lock); byId('wallet-choice').addEventListener('change', update);
     if (integrated && byId('swap-buy') && byId('swap-sell')) {
-        byId('swap-side').value = '0';
-        for (const [id, side] of [['swap-buy', '0'], ['swap-sell', '1']]) {
+        byId('swap-side').value = '1';
+        for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
             byId(id).addEventListener('click', () => {
                 if (byId(id).disabled || busy || draft || byId('swap-side').value === side) return;
                 byId('swap-side').value = side;
