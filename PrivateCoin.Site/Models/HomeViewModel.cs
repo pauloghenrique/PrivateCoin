@@ -37,7 +37,7 @@ namespace PrivateCoin.Site.Models
                     entry.SwapOutputAssetId == null ? entry.SwapOutputAmount : 0;
 
             // Token quantities and native change are not POVIX payments.
-            if (entry.Type == LedgerEntryType.TokenCreation || entry.Type == LedgerEntryType.TokenTransfer) return 0;
+            if (IsTokenEntry(entry)) return 0;
 
             // Wallet transfers always place the payment first and an optional
             // refund to the sender second. The sum of all outputs therefore
@@ -61,13 +61,31 @@ namespace PrivateCoin.Site.Models
             }
         }
 
+        public static string EntryTypeName(LedgerEntry entry)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+            return entry.Type == LedgerEntryType.Transfer && IsTokenEntry(entry)
+                ? "Transferência de token" : EntryTypeName(entry.Type);
+        }
+
+        private static bool IsTokenEntry(LedgerEntry entry)
+        {
+            if (entry.Type == LedgerEntryType.TokenCreation || entry.Type == LedgerEntryType.TokenTransfer)
+                return true;
+            // Use the transferred asset, even if the ledger labels this as a generic transfer.
+            if (entry.Type == LedgerEntryType.Transfer)
+                foreach (var output in entry.Outputs)
+                    if (!string.IsNullOrEmpty(output.AssetId)) return true;
+            return false;
+        }
+
         public string FormatLedgerAmount(LedgerEntry entry)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             if (entry.Type == LedgerEntryType.LiquiditySwap)
                 return FormatAssetAmount(entry.SwapInputAmount, entry.SwapInputAssetId) + " → " +
                     FormatAssetAmount(entry.SwapOutputAmount, entry.SwapOutputAssetId);
-            if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
+            if (!IsTokenEntry(entry))
                 return FormatTokens(LedgerAmount(entry));
 
             // The first token output is the recipient's quantity; later outputs include change.
@@ -103,7 +121,7 @@ namespace PrivateCoin.Site.Models
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             if (entry.Type == LedgerEntryType.LiquiditySwap)
                 return AssetName(entry.SwapInputAssetId) + " → " + AssetName(entry.SwapOutputAssetId);
-            if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
+            if (!IsTokenEntry(entry))
                 return "—";
 
             foreach (var output in entry.Outputs)
