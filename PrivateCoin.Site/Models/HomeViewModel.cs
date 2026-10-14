@@ -11,7 +11,7 @@ namespace PrivateCoin.Site.Models
 
         public BlockchainSummary Summary { get; set; }
         public IReadOnlyList<LedgerEntry> Ledger { get; set; }
-        public IReadOnlyDictionary<string, string> TokenNames { get; set; }
+        public IReadOnlyDictionary<string, TokenDefinition> Tokens { get; set; }
         public IReadOnlyList<Transaction> ValidationQueue { get; set; }
         public string[] ConnectedPeers { get; set; }
         public int KnownPeerCount { get; set; }
@@ -56,6 +56,26 @@ namespace PrivateCoin.Site.Models
             }
         }
 
+        public string FormatLedgerAmount(LedgerEntry entry)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+            if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
+                return FormatTokens(LedgerAmount(entry));
+
+            // The first token output is the recipient's quantity; later outputs include change.
+            foreach (var output in entry.Outputs)
+            {
+                if (string.IsNullOrEmpty(output.AssetId)) continue;
+                TokenDefinition token;
+                if (Tokens == null || !Tokens.TryGetValue(output.AssetId, out token))
+                    return output.Amount.ToString("N0", Portuguese) + " unidades atômicas · " + output.AssetId;
+                decimal scale = 1;
+                for (int index = 0; index < token.Decimals; index++) scale *= 10;
+                return (output.Amount / scale).ToString("N" + token.Decimals, Portuguese) + " " + LedgerTokenName(entry);
+            }
+            return "—";
+        }
+
         public string LedgerTokenName(LedgerEntry entry)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
@@ -65,9 +85,9 @@ namespace PrivateCoin.Site.Models
             foreach (var output in entry.Outputs)
             {
                 if (string.IsNullOrEmpty(output.AssetId)) continue;
-                string name;
-                if (TokenNames != null && TokenNames.TryGetValue(output.AssetId, out name) && !string.IsNullOrWhiteSpace(name))
-                    return name;
+                TokenDefinition token;
+                if (Tokens != null && Tokens.TryGetValue(output.AssetId, out token) && !string.IsNullOrWhiteSpace(token.Name))
+                    return token.Name;
                 return output.AssetId;
             }
             return "—";
