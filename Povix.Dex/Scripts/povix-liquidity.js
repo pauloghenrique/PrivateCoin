@@ -17,6 +17,33 @@
         pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada',
         unlocked: 'Reservas antigas sem bloqueio', closed: 'Encerrada' };
     const atomicText = (value, decimals) => wallet.formatAtomic(String(value), decimals);
+    function reservePrice(a, b, reserveA, reserveB) {
+        if (!a || !b || a.id === b.id) throw new Error('Ativos inválidos.');
+        if (![a.decimals, b.decimals].every(value => Number.isInteger(value) && value >= 0 && value <= 8)) throw new Error('Precisão inválida.');
+        const numerator = BigInt(reserveB) * 10n ** BigInt(a.decimals);
+        const denominator = BigInt(reserveA) * 10n ** BigInt(b.decimals);
+        if (numerator <= 0n || denominator <= 0n) throw new Error('Reservas inválidas.');
+        const scaled = numerator * 10n ** 12n / denominator;
+        const value = scaled === 0n ? '< 0,000000000001' : atomicText(scaled, 12).replace(/(,[0-9]*?)0+$/, '$1').replace(/,$/, '');
+        return '1 ' + a.symbol + ' = ' + value + ' ' + b.symbol;
+    }
+    function priceText(a, b, reserveA, reserveB) {
+        return 'Preço ' + a.symbol + ' / ' + b.symbol + ': ' + reservePrice(a, b, reserveA, reserveB) + ' · ' + reservePrice(b, a, reserveB, reserveA);
+    }
+    function updatePrices(pool) {
+        const initial = byId('pool-price');
+        if (initial) {
+            try {
+                const a = asset(byId('pool-asset-a').value), b = asset(byId('pool-asset-b').value);
+                initial.textContent = priceText(a, b, wallet.parseSupply(byId('pool-amount-a').value, a.decimals), wallet.parseSupply(byId('pool-amount-b').value, b.decimals));
+            } catch (_) { initial.textContent = 'Preço A / B: selecione dois ativos distintos e informe as reservas.'; }
+        }
+        const current = byId('swap-price');
+        if (current) {
+            try { current.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
+            catch (_) { current.textContent = 'Preço A / B: indisponível. Selecione uma pool com reservas positivas.'; }
+        }
+    }
     function fee() {
         const index = { '1': 0, '2': 1, '4': 2 }[byId('exchange-priority').value];
         if (!network || !Array.isArray(network.Fees) || index == null) throw new Error('Aguarde a consulta da taxa da rede.');
@@ -68,6 +95,7 @@
             byId('pool-balance-' + side).textContent = token ? 'Saldo livre: ' + atomicText(token.balanceAtomic, token.decimals) + ' ' + token.symbol : 'Escolha um ativo';
         }
         const pool = selectedPool();
+        updatePrices(pool);
         if (integrated) {
             byId('swap-side').value = swapDirection;
             for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
@@ -286,7 +314,10 @@
                 entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
-                entry.append(detail, state); byId('pool-list').appendChild(entry);
+                const price = document.createElement('small');
+                try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
+                catch (_) { price.textContent = 'Preço A / B: indisponível.'; }
+                entry.append(detail, price, state); byId('pool-list').appendChild(entry);
                 if (pool.managementMessage) {
                     const management = document.createElement('small'); management.textContent = pool.managementMessage;
                     byId('pool-list').appendChild(management);

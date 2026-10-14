@@ -33,11 +33,38 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #profile-review { margin-top: 25px; border-top: 1px solid var(--line); padding-top: 20px; }
 #profile-review p { overflow-wrap: anywhere; white-space: pre-wrap; }
 
-.liquidity-grid .token-form { padding: 25px; margin-bottom: 20px; }
-.liquidity-grid .token-form > p { color: var(--muted); font-size: 12px; margin: 10px 0 18px; }
+/* Liquidity overview: setup, operations and signing review. */
+.liquidity-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 24px; align-items: start; margin-bottom: 24px; }
+.liquidity-grid > *, .liquidity-setup > *, .liquidity-operations > * { min-width: 0; }
+.liquidity-setup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 24px; align-items: stretch; }
+.liquidity-setup .wallet-card { margin: 0; }
+.liquidity-grid .token-form, .liquidity-pools { padding: 25px; margin: 0; }
+.liquidity-grid .token-form > p, .liquidity-pools > p { color: var(--muted); font-size: 12px; margin: 10px 0 18px; }
+.liquidity-operations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.liquidity-operations .token-form { display: flex; flex-direction: column; }
+.liquidity-operations .section-heading { min-height: 125px; }
+.liquidity-operations .form-bottom { margin-top: auto; }
 .liquidity-grid fieldset > label:not(:first-child) { margin-top: 18px; }
 .liquidity-grid .form-bottom { padding: 20px 0 0; }
-.liquidity-grid .transfer-history-list > button { display: block; width: 100%; margin-top: 12px; }
+.liquidity-grid .form-bottom .button { width: 100%; }
+.liquidity-review .review-card h2 { margin-bottom: 12px; }
+.liquidity-review #review-description { color: var(--muted); font-size: 12px; }
+.liquidity-review .review-list > div > * { min-width: 0; overflow-wrap: anywhere; }
+.liquidity-pools .transfer-history-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.liquidity-pools .transfer-history-list > button { display: block; width: 100%; min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.liquidity-help { margin-top: 24px; border: 1px solid var(--line); }
+@media (max-width: 1100px) {
+    .liquidity-operations { grid-template-columns: 1fr; }
+    .liquidity-operations .section-heading { min-height: 0; }
+}
+@media (max-width: 740px) {
+    .liquidity-grid, .liquidity-setup { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .liquidity-setup { grid-column: auto; }
+    .liquidity-pools .transfer-history-list { grid-template-columns: minmax(0, 1fr); }
+    .liquidity-grid .token-form, .liquidity-pools { padding: 20px; }
+    #liquidity-app > .network-strip { flex-wrap: wrap; }
+}
+
 #liquidity-app > .review-note { margin-bottom: 24px; }
 #liquidity-app #review-description { color: var(--muted); font-size: 12px; }
 @media (max-width: 740px) { .site-header { height: auto; min-height: 90px; flex-wrap: wrap; gap: 8px; padding-top: 12px; padding-bottom: 12px; } .site-header nav { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 12px; } }
@@ -207,3 +234,5 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .market-buy[aria-pressed="true"] { border-color:var(--green); background:var(--soft-green); }
 #pool-market .market-sell[aria-pressed="true"] { border-color:#c94450; background:#fff0f1; }
 #pool-market .market-order-sides button:disabled { opacity:.5; }
+
+#liquidity-app .liquidity-price { padding: 12px; margin: 16px 0 0; border: 1px solid #b9d4c8; border-radius: 7px; background: var(--soft-green); color: var(--dark-green); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
