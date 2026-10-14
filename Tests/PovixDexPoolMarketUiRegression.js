@@ -14,13 +14,13 @@ class Element {
     const ids = {}, timers = new Map(); let sequence = 0, calls = 0, failing = false;
     const element = id => ids[id] || (ids[id] = new Element());
     element('pool-market').dataset = { url: '/Liquidity/MarketData?poolId=test' };
-    const data = { pool: { assetA: { symbol: 'POVIX', decimals: 8 }, assetB: { symbol: 'TKN', decimals: 2 }, reserveAAtomic: '100000000', reserveBAtomic: '10000', status: 'available', statusMessage: 'Disponível' }, price: 0.01, interval: 300, updatedUtc: new Date().toISOString(), peerCount: 2, ledgerTotal: 1,
+    const data = { pool: { assetA: { symbol: 'POVIX', decimals: 8 }, assetB: { symbol: 'TKN', decimals: 2 }, reserveAAtomic: '100000000', reserveBAtomic: '10000', status: 'available', statusMessage: 'Disponível' }, price: 100, interval: 300, updatedUtc: new Date().toISOString(), peerCount: 2, ledgerTotal: 1,
         candles: [{ time: 1700000000, open: 100, high: 105, low: 95, close: 101 }], ledger: [{ time: 1700000000, operation: 'swap', status: 'pending', deltaAAtomic: '123456789012345678', deltaBAtomic: '-100', transactionId: '<script>bad</script>', blockHeight: null }] };
     const document = { hidden: false, getElementById: element, createElement: () => new Element(), createElementNS: () => new Element(), addEventListener: () => {} };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-pool-market.js', 'utf8'), { document, window: { addEventListener: () => {} }, location: { href: 'https://example.test/' }, URL, AbortController, setTimeout: callback => { timers.set(++sequence, callback); return sequence; }, clearTimeout: key => timers.delete(key), fetch: async url => { calls++; assert.equal(new URL(url).searchParams.get('interval'), element('market-interval').value); return { ok: !failing, status: 503, json: async () => data }; } });
     const settle = () => new Promise(resolve => setImmediate(resolve)); await settle();
     assert.equal(element('market-pair').textContent, 'POVIX / TKN');
-    assert.equal(element('market-price').textContent, '0,01 POVIX por TKN');
+    assert.equal(element('market-price').textContent, '100 TKN por POVIX');
     assert.equal(element('market-reserve-b').textContent, '100,00 TKN');
     assert.equal(element('market-token-info').children.length, 2);
     assert.equal(element('market-label-a').textContent, 'Reserva de POVIX');
