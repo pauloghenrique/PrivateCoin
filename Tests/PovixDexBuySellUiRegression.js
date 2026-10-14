@@ -18,12 +18,12 @@ class Element {
     const pool = { poolId: 'a'.repeat(64), available: true, status: 'available', assetA: { id: 'aaa', symbol: 'AAA', decimals: 2 }, assetB: { id: 'bbb', symbol: 'BBB', decimals: 2 }, reserveAAtomic: '10000', reserveBAtomic: '20000' };
     get('liquidity-app').dataset = { integrated: 'true', poolId: pool.poolId, networkUrl: '/network', catalogueUrl: '/catalogue', prepareSwapUrl: '/prepare-swap', marketUrl: '/market/__id__', receiptUrl: '/receipt/__id__' };
     get('exchange-priority').value = '2';
-    let unlocked = true; const preparedSides = [];
+    let unlocked = true; const preparedSwaps = [];
     const wallet = { isUnlocked: () => unlocked, hasSavedWallet: () => false, publicKeys: () => [], addresses: () => ['address'], formatAtomic: value => value, parseSupply: value => { if (!value) throw Error(); return '100'; }, quoteExchange: () => '200', lock: () => { unlocked = false; } };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'), {
         document: { getElementById: get, createElement: () => new Element(), addEventListener() {} }, window: { PovixTokenWallet: wallet },
         fetch: async (url, options) => {
-            if (url === '/prepare-swap') { preparedSides.push(options.body.get('InputSide')); return { ok: false, status: 400, json: async () => ({ error: 'Test stops before signing' }) }; }
+            if (url === '/prepare-swap') { preparedSwaps.push({ side: options.body.get('InputSide'), input: options.body.get('InputAssetId'), output: options.body.get('OutputAssetId') }); return { ok: false, status: 400, json: async () => ({ error: 'Test stops before signing' }) }; }
             return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: '10000' }], pools: [pool] } };
         },
         URL, location: { origin: 'https://example.test' }, URLSearchParams, Option: class { constructor(text, value) { this.textContent = text; this.value = value; } }, setInterval() {}, sessionStorage: { getItem: () => null }
@@ -56,19 +56,21 @@ class Element {
         assert.equal(get('swap-side').value, side, 'input bubbling must not restore the previous selection');
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
         await get('swap-form').handlers.submit({ preventDefault() {} });
-        assert.equal(preparedSides.at(-1), side, 'the request must preserve the selected direction');
+        assert.deepEqual(preparedSwaps.at(-1), side === '0' ? { side, input: 'aaa', output: 'bbb' } : { side, input: 'bbb', output: 'aaa' },
+            'the request must preserve the selected direction and exact asset IDs');
     }
     for (const [button, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
         get(button).handlers.click();
         get('swap-side').value = side === '1' ? '0' : '1';
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
         await get('swap-form').handlers.submit({ preventDefault() {} });
-        assert.equal(preparedSides.at(-1), side, 'the active button controls the prepared order');
+        assert.deepEqual(preparedSwaps.at(-1), side === '0' ? { side, input: 'aaa', output: 'bbb' } : { side, input: 'bbb', output: 'aaa' },
+            'the active button controls the prepared order and exact asset IDs');
     }
     get('swap-side').value = 'invalid'; get('swap-side').handlers.change();
-    const before = preparedSides.length;
+    const before = preparedSwaps.length;
     await get('swap-form').handlers.submit({ preventDefault() {} });
-    assert.equal(preparedSides.length, before, 'an invalid direction must not prepare a swap');
+    assert.equal(preparedSwaps.length, before, 'an invalid direction must not prepare a swap');
     get('swap-side').value = '1'; get('swap-side').handlers.change();
     get('wallet-lock').handlers.click();
     assert.equal(get('swap-buy').disabled, true); assert.equal(get('swap-sell').disabled, true);
