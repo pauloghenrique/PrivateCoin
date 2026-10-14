@@ -21,19 +21,10 @@
     }
     function chart(candles, interval) {
         const root = byId('market-candles'); root.replaceChildren();
-        const received = Array.isArray(candles) ? candles : [];
-        candles = received.map(c => ({ time: Number(c.time), open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close) }))
-            .filter(c => Object.values(c).every(Number.isFinite) && c.time > 0 && c.low > 0 && c.low <= Math.min(c.open, c.close) && c.high >= Math.max(c.open, c.close))
-            .sort((a, b) => a.time - b.time);
-        interval = Number(interval);
-        if (!Number.isFinite(interval) || interval <= 0) interval = Number(byId('market-interval').value);
         byId('market-chart-empty').hidden = candles.length > 0;
         root.hidden = !candles.length;
         byId('market-chart-empty').textContent = 'Ainda não há trocas confirmadas nesta pool. Os candles aparecerão após a primeira troca confirmada.';
-        if (!candles.length) {
-            if (received.length) byId('market-chart-empty').textContent = 'O histórico recebido contém preços inválidos. Tente atualizar o gráfico.';
-            return;
-        }
+        if (!candles.length) return;
         const values = candles.flatMap(c => [Number(c.low), Number(c.high)]);
         const low = Math.min(...values), high = Math.max(...values), pad = (high - low || high * .01 || .01) * .15;
         const min = low - pad, max = high + pad, y = price => 305 - (price - min) / (max - min) * 280;

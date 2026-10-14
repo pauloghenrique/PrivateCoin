@@ -373,8 +373,7 @@ segundos, sem abrir carteira, e pausa as consultas quando a aba está oculta.
 Os intervalos disponíveis são 1, 5 e 15 minutos, 1 hora e 1 dia.
 
 Os candles representam o preço A/B das reservas após trocas confirmadas,
-agrupadas pelo horário do bloco. A abertura usa as reservas imediatamente
-anteriores à primeira troca do intervalo; máxima e mínima incluem esse preço. Não são candles de uma bolsa externa nem
+agrupadas pelo horário do bloco. Não são candles de uma bolsa externa nem
 um livro de ofertas. Períodos sem trocas não produzem candles artificiais.
 A resposta inclui até 200 candles e as 100 movimentações mais recentes.
 O livro caixa mostra criação, troca, bloqueio e encerramento, com entradas e
