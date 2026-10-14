@@ -79,8 +79,12 @@
             pools.length ? 'Selecione uma pool. A lista informa a disponibilidade de cada uma.' : 'Crie uma pool e aguarde a confirmação das reservas em bloco.';
         byId('swap-provider').textContent = pool ? 'Provedor: ' + pool.providerAddress : '';
         if (pool) {
-            byId('swap-side').options[0].textContent = pool.assetA.symbol + ' → ' + pool.assetB.symbol;
-            byId('swap-side').options[1].textContent = pool.assetB.symbol + ' → ' + pool.assetA.symbol;
+            const selector = byId('swap-side'), selectedSide = selector.value;
+            for (const option of Array.from(selector.options)) {
+                const label = option.value === '0' ? pool.assetA.symbol + ' → ' + pool.assetB.symbol : pool.assetB.symbol + ' → ' + pool.assetA.symbol;
+                if (option.textContent !== label) option.textContent = label;
+            }
+            selector.value = selectedSide;
         }
         try {
             if (!pool) throw new Error();
@@ -165,11 +169,13 @@
     });
     byId('swap-form').addEventListener('submit', async event => {
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
+        const selectedSide = byId('swap-side').value;
+        if (selectedSide !== '0' && selectedSide !== '1') { message('Selecione um sentido válido para a troca.'); return; }
         busy = true; message(''); update();
         try {
             const pool = selectedPool(); if (!pool) throw new Error('Selecione uma pool para a troca.');
             if (!pool.available) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
-            const inputSide = Number(byId('swap-side').value), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
+            const inputSide = Number(selectedSide), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
             const receive = wallet.quoteExchange(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic);
             if (BigInt(receive) < BigInt(minimumReceiveAtomic)) throw new Error('O mínimo a receber supera a cotação atual.');
