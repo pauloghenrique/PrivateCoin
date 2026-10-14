@@ -58,13 +58,17 @@ namespace Povix.Dex.Services
                 var candles = history.Where(item => item.Status == "confirmed" && item.Operation == "swap" && item.ReserveA > 0 && item.ReserveB > 0)
                     .GroupBy(item => item.Time / interval * interval).OrderBy(group => group.Key)
                     .Select(group => {
-                        var prices = group.Select(item => (item.ReserveB / scaleB) / (item.ReserveA / scaleA)).ToArray();
-                        return new { time = group.Key, open = prices.First(), high = prices.Max(), low = prices.Min(), close = prices.Last(),
+                        var prices = group.Select(item => (item.ReserveA / scaleA) / (item.ReserveB / scaleB)).ToArray();
+                        var first = group.First();
+                        var beforeA = first.ReserveA - first.DeltaA;
+                        var beforeB = first.ReserveB - first.DeltaB;
+                        var opening = beforeA > 0 && beforeB > 0 ? (beforeA / scaleA) / (beforeB / scaleB) : prices.First();
+                        return new { time = group.Key, open = opening, high = Math.Max(opening, prices.Max()), low = Math.Min(opening, prices.Min()), close = prices.Last(),
                             volume = group.Sum(item => Math.Abs(item.DeltaA / scaleA)) };
                     }).ToArray();
                 var latest = history.LastOrDefault(item => item.Status == "confirmed");
                 return new { pool = PoolResponse(pool), tokens = new[] { MarketToken(pool.AssetA), MarketToken(pool.AssetB) }, interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
-                    price = latest == null || closed || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
+                    price = latest == null || closed || latest.ReserveA <= 0 || latest.ReserveB <= 0 ? (decimal?)null : (latest.ReserveA / scaleA) / (latest.ReserveB / scaleB),
                     candles = candles.Skip(Math.Max(0, candles.Length - 200)).ToArray(),
                     ledger = history.OrderByDescending(item => item.Time).ThenByDescending(item => item.Height).Take(100).Select(item => new {
                         transactionId = item.Id, operation = item.Operation, status = item.Status, time = item.Time, blockHeight = item.Height,
