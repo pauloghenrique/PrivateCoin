@@ -446,6 +446,21 @@ hash divergente ou ausente, rede antiga, versão diferente e cadeia inválida
 mesmo quando o peer anuncia o hash oficial. Um peer compatível entrega a cadeia.
 O teste usa somente diretórios e sockets locais descartáveis.
 
+## Transferências de tokens entre carteiras no explorador
+
+```sh
+mkdir -p work
+mcs -r:System.Net.Http -r:System.Core -r:System.Runtime.Serialization \
+  -r:System.Numerics -r:System.Xml -r:System.Xml.Linq \
+  -out:work/PrivateCoinSiteTokenTransferRegression.exe PrivateCoin.Core/*.cs \
+  PrivateCoin.Site/Models/HomeViewModel.cs Tests/PrivateCoinSiteTokenTransferRegression.cs
+mono work/PrivateCoinSiteTokenTransferRegression.exe
+```
+
+Verifica nome e quantidade enviada, sem somar troco do token ou de POVIX,
+inclusive quando a entrada tem o tipo genérico `Transfer`. Cobre taxa em POVIX,
+metadados ausentes, casas decimais distintas e transferências nativas.
+
 ## Valores de trocas no explorador
 
 ```sh
