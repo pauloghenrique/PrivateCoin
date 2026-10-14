@@ -2,13 +2,13 @@
 @{ ViewBag.Title = "Mercado da pool"; ViewBag.PageClass = "market-page"; }
 <main id="pool-market" data-url="@Url.Action("MarketData", new { poolId = ViewBag.PoolId })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
     <div class="market-topbar"><span class="market-chain"><span class="market-chain-icon" aria-hidden="true">P</span> Blockchain POVIX</span><a class="market-catalogue-link" href="@Url.Action("Index", new { poolId = ViewBag.PoolId })"><span aria-hidden="true">⌕</span> Explorar pools e pares <span aria-hidden="true">→</span></a><a class="button button-secondary" href="#market-trading-panel">Abrir carteira</a></div>
-    <div class="market-explorer">
-        <aside class="market-overview" aria-label="Informações da pool">
     <header class="market-pair-header">
         <div class="market-pair-identity"><span class="market-pair-avatar" aria-hidden="true">⇄</span><div><span class="eyebrow">MERCADO · BLOCKCHAIN POVIX</span><h1 id="market-pair">Carregando pool…</h1><p class="market-pair-caption">Explore o mercado. Negocie com sua carteira.</p></div></div>
         <div class="market-header-price"><span>PREÇO ATUAL · A POR B</span><strong id="market-price">—</strong></div>
     </header>
     <p id="market-connection" class="market-connection" data-state="loading" role="status" aria-live="polite">Consultando a blockchain…</p>
+    <div class="market-explorer">
+        <aside class="market-overview" aria-label="Informações da pool">
             <section class="card market-pool-card"><div class="market-panel-heading"><span class="eyebrow">POOL DE LIQUIDEZ</span><h2>Visão geral</h2></div>
                 <p id="market-state" class="market-pool-state" role="status">Consultando o estado da pool…</p>
                 <div class="market-summary" aria-label="Reservas da pool"><div><span id="market-label-a">Reserva A</span><strong id="market-reserve-a">—</strong></div><div><span id="market-label-b">Reserva B</span><strong id="market-reserve-b">—</strong></div></div>
