@@ -7,14 +7,15 @@
       data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
     <div class="page-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>Crie uma pool. Troque tokens.</h1><p>Use tokens nativos confirmados ou um par com POVIX. Cada troca é assinada pelo comprador e validada pela rede, sem aprovação do criador da pool.</p></div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
-    <div class="review-note"><strong>Troque com a carteira selecionada</strong><p>Sua carteira assina e envia a troca diretamente à rede, sem aprovação do criador da pool. As reservas ficam bloqueadas na blockchain: transferências comuns não podem gastá-las. Para liberar os valores, o provedor precisa revisar, assinar e confirmar o encerramento da pool. Se o criador renunciar ao token neste DEX, ele perde a permissão de encerrar suas pools desse token; as reservas continuam destinadas às trocas. As duas partes da troca são confirmadas juntas, sem enviar chaves privadas ao servidor.</p></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
-    <div class="create-grid liquidity-grid">
-        <div>
+    <div class="liquidity-grid">
+        <div class="liquidity-setup">
             @Html.Partial("_Wallet")
-            <section class="card token-form"><h2>Taxa da rede</h2><p>A taxa de rede é paga em POVIX pela carteira que cria a pool ou executa a troca. A taxa da pool é 0,30% e permanece nas reservas.</p>
+            <section class="card token-form liquidity-fee"><h2>Taxa da rede</h2><p>A taxa de rede é paga em POVIX pela carteira que cria a pool ou executa a troca. A taxa da pool é 0,30% e permanece nas reservas.</p>
                 <label for="exchange-priority">Prioridade</label><select id="exchange-priority"><option value="1">Econômica</option><option value="2" selected>Normal</option><option value="4">Prioritária</option></select><small id="exchange-fee">Consultando a taxa…</small>
             </section>
+        </div>
+        <div class="liquidity-operations">
             <form id="pool-form" class="card token-form">
                 @Html.AntiForgeryToken()
                 <div class="section-heading"><span class="step-number">01</span><div><h2>Criar pool de liquidez</h2><p>Escolha dois ativos distintos. As duas reservas ficam bloqueadas na blockchain e separadas do saldo livre da carteira.</p></div></div>
@@ -24,12 +25,14 @@
                     <label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
                     <label for="pool-amount-b">Quantidade do segundo ativo</label><input id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                 </fieldset>
+                <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço A / B: selecione dois ativos distintos e informe as reservas.</p>
                 <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
             </form>
             <form id="swap-form" class="card token-form">
                 <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>Assine a troca com sua carteira. Não é necessária a aprovação do criador da pool. As reservas precisam estar confirmadas.</p></div></div>
                 <fieldset id="swap-fields" disabled>
                     <label for="swap-pool">Pool para troca</label><select id="swap-pool" required></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
+                    <p id="swap-price" class="liquidity-price" role="status" aria-live="polite">Preço A / B: selecione uma pool.</p><small>Preço pelas reservas, antes da taxa da pool e do impacto da quantidade trocada.</small>
                     <label for="swap-side">Ativo que você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
                     <label for="swap-amount">Quantidade a trocar</label><input id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     <p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>
@@ -37,12 +40,13 @@
                 </fieldset>
                 <div class="form-bottom"><button id="prepare-swap" class="button button-primary" type="submit" disabled>Revisar troca →</button></div>
             </form>
-            <section class="card token-form"><h2>Pools registradas neste DEX</h2><div id="pool-list" class="transfer-history-list"></div><p id="pools-empty" class="muted-text">Nenhuma pool registrada.</p></section>
         </div>
-        <aside class="review-column"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise sua operação</h2><p id="review-description">Quantidades, reservas, taxa e endereços serão apresentados antes da assinatura.</p>
+        <aside class="review-column liquidity-review"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise sua operação</h2><p id="review-description">Quantidades, reservas, taxa e endereços serão apresentados antes da assinatura.</p>
             <dl id="exchange-review" class="review-list"></dl>
             <div id="sign-actions" hidden><button id="download-backup" type="button" class="button button-secondary">Baixar backup cifrado</button><label class="checkbox-label"><input id="backup-confirmed" type="checkbox" /> Guardei o backup e conferi as quantidades, a taxa e os endereços.</label><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Assinar</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
         </section></aside>
     </div>
+    <section class="card token-form liquidity-pools"><h2>Pools registradas neste DEX</h2><p>Selecione uma pool para consultar o mercado e suas reservas.</p><div id="pool-list" class="transfer-history-list"></div><p id="pools-empty" class="muted-text">Nenhuma pool registrada.</p></section>
+    <section class="review-note liquidity-help"><strong>Troque com a carteira selecionada</strong><p>Sua carteira assina e envia a troca diretamente à rede, sem aprovação do criador da pool. As reservas ficam bloqueadas na blockchain: transferências comuns não podem gastá-las. Para liberar os valores, o provedor precisa revisar, assinar e confirmar o encerramento da pool. Se o criador renunciar ao token neste DEX, ele perde a permissão de encerrar suas pools desse token; as reservas continuam destinadas às trocas. As duas partes da troca são confirmadas juntas, sem enviar chaves privadas ao servidor.</p></section>
 </main>
 @section scripts { <script src="@Scripts.Url("~/bundles/povix-liquidity")"></script> }
