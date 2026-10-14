@@ -30,19 +30,19 @@ class Element {
     });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(get('swap-sell').disabled, false, get('app-message').textContent);
-    assert.equal(get('swap-side').value, '0');
+    assert.equal(get('swap-side').value, '1');
     assert.equal(get('swap-buy')['aria-pressed'], 'true');
-    assert.equal(get('swap-buy').title, 'AAA → BBB');
-    assert.equal(get('swap-sell').title, 'BBB → AAA');
+    assert.equal(get('swap-buy').title, 'BBB → AAA');
+    assert.equal(get('swap-sell').title, 'AAA → BBB');
     get('swap-amount').value = '1'; get('swap-minimum').value = '0,5';
     get('swap-sell').handlers.click();
-    assert.equal(get('swap-side').value, '1');
+    assert.equal(get('swap-side').value, '0');
     assert.equal(get('swap-sell')['aria-pressed'], 'true');
     assert.equal(get('swap-amount').value, ''); assert.equal(get('swap-minimum').value, '');
     get('swap-amount').value = '1'; get('swap-form').handlers.input();
-    assert.match(get('swap-estimate').textContent, /AAA/);
-    get('swap-buy').handlers.click(); get('swap-amount').value = '1'; get('swap-form').handlers.input();
     assert.match(get('swap-estimate').textContent, /BBB/);
+    get('swap-buy').handlers.click(); get('swap-amount').value = '1'; get('swap-form').handlers.input();
+    assert.match(get('swap-estimate').textContent, /AAA/);
     assert.equal(get('swap-side').options[0].textContent, 'BBB → AAA', 'labels must follow option values rather than position');
     assert.equal(get('swap-side').options[1].textContent, 'AAA → BBB');
     for (const side of ['0', '1']) {
@@ -58,7 +58,7 @@ class Element {
         await get('swap-form').handlers.submit({ preventDefault() {} });
         assert.equal(preparedSides.at(-1), side, 'the request must preserve the selected direction');
     }
-    for (const [button, side] of [['swap-buy', '0'], ['swap-sell', '1']]) {
+    for (const [button, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
         get(button).handlers.click();
         get('swap-side').value = side === '1' ? '0' : '1';
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
@@ -69,9 +69,9 @@ class Element {
     const before = preparedSides.length;
     await get('swap-form').handlers.submit({ preventDefault() {} });
     assert.equal(preparedSides.length, before, 'an invalid direction must not prepare a swap');
-    get('swap-side').value = '0'; get('swap-side').handlers.change();
+    get('swap-side').value = '1'; get('swap-side').handlers.change();
     get('wallet-lock').handlers.click();
     assert.equal(get('swap-buy').disabled, true); assert.equal(get('swap-sell').disabled, true);
-    get('swap-sell').handlers.click(); assert.equal(get('swap-side').value, '0');
-    console.log('PASS: BUY A → B, SELL B → A, quote asset, cleared amounts and locked-wallet guards.');
+    get('swap-sell').handlers.click(); assert.equal(get('swap-side').value, '1');
+    console.log('PASS: BUY B → A, SELL A → B, quote asset, cleared amounts and locked-wallet guards.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
