@@ -445,3 +445,19 @@ adulteração da projeção legível e peers TCP reais. Verifica desconexão por
 hash divergente ou ausente, rede antiga, versão diferente e cadeia inválida
 mesmo quando o peer anuncia o hash oficial. Um peer compatível entrega a cadeia.
 O teste usa somente diretórios e sockets locais descartáveis.
+
+## Valores de trocas no explorador
+
+```sh
+mkdir -p work
+mcs -r:System.Net.Http -r:System.Core -r:System.Runtime.Serialization \
+  -r:System.Numerics -r:System.Xml -r:System.Xml.Linq \
+  -out:work/PrivateCoinSiteSwapLedgerRegression.exe PrivateCoin.Core/*.cs \
+  PrivateCoin.Site/Models/HomeViewModel.cs Tests/PrivateCoinSiteSwapLedgerRegression.cs
+mono work/PrivateCoinSiteSwapLedgerRegression.exe
+```
+
+Verifica os valores e nomes dos dois lados da troca, POVIX em qualquer lado
+da pool, tokens com casas decimais distintas e metadados ausentes. Usa entradas
+de livro caixa construídas localmente com reservas e troco deliberadamente
+diferentes das quantidades negociadas, sem rede ou carteira de produção.
