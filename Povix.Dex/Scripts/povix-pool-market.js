@@ -118,7 +118,22 @@
             if (current === generation && !stopped && !document.hidden) timer = setTimeout(refresh, 5000);
         }
     }
-    byId('market-interval').addEventListener('change', refresh);
+    const intervals = [60, 300, 900, 3600, 86400];
+    function syncInterval() {
+        intervals.forEach(value => {
+            const button = byId('market-time-' + value);
+            if (button) button.setAttribute('aria-pressed', String(value) === byId('market-interval').value ? 'true' : 'false');
+        });
+    }
+    intervals.forEach(value => {
+        const button = byId('market-time-' + value);
+        if (button) button.addEventListener('click', () => {
+            byId('market-interval').value = String(value);
+            syncInterval();
+            return refresh();
+        });
+    });
+    byId('market-interval').addEventListener('change', () => { syncInterval(); return refresh(); });
     byId('market-refresh').addEventListener('click', refresh);
     document.addEventListener('visibilitychange', refresh);
     document.addEventListener('povix-pool-updated', refresh);

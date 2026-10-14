@@ -44,6 +44,11 @@ class Element {
     assert.ok(element('market-candles').children.length > 0);
     data.candles = []; data.ledger = []; data.pool.status = 'closed'; data.price = null;
     element('market-interval').value = '3600'; await element('market-interval').listeners.change();
+    assert.equal(element('market-time-3600')['aria-pressed'], 'true');
+    assert.equal(element('market-time-300')['aria-pressed'], 'false');
+    await element('market-time-900').listeners.click();
+    assert.equal(element('market-interval').value, '900');
+    assert.equal(element('market-time-900')['aria-pressed'], 'true');
     assert.equal(element('market-candles').hidden, true);
     assert.equal(element('market-chart-empty').hidden, false);
     assert.match(element('market-chart-empty').textContent, /primeira troca confirmada/);

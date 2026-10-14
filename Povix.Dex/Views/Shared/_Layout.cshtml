@@ -8,6 +8,17 @@
     <link rel="stylesheet" href="@Url.Content("~/Content/Site.css")" />
 </head>
 <body class="@ViewBag.PageClass">
+    @if (ViewBag.PageClass == "market-page")
+    {
+        <nav class="market-rail" aria-label="Navegação principal">
+            <a class="market-rail-brand" href="@Url.Action("Index", "Liquidity")" aria-label="Povix.Dex">P</a>
+            <a href="@Url.Action("Create", "Tokens")" aria-label="Criar token" title="Criar token"><span aria-hidden="true">◇</span></a>
+            <a href="@Url.Action("Index", "TokenTransfers")" aria-label="Movimentar tokens" title="Movimentar tokens"><span aria-hidden="true">⇄</span></a>
+            <a class="market-rail-active" href="@Url.Action("Index", "Liquidity")" aria-current="page" aria-label="Pools e trocas" title="Pools e trocas"><span aria-hidden="true">▥</span></a>
+            <a href="@Url.Action("Index", "TokenProfiles")" aria-label="Editar tokens" title="Editar tokens"><span aria-hidden="true">✎</span></a>
+            <a href="#market-trading-panel" aria-label="Carteira" title="Carteira"><span aria-hidden="true">▣</span></a>
+        </nav>
+    }
     <header class="site-header">
         <a class="brand" href="@Url.Action("Create", "Tokens")" aria-label="Povix.Dex início"><span class="brand-mark">P</span><span>povix<span class="brand-dex">.dex</span></span></a>
         <nav aria-label="Navegação principal"><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Tokens" ? "nav-active" : "")" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenTransfers" ? "nav-active" : "")" href="@Url.Action("Index", "TokenTransfers")">Movimentar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenProfiles" ? "nav-active" : "")" href="@Url.Action("Index", "TokenProfiles")">Editar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Liquidity" ? "nav-active" : "")" href="@Url.Action("Index", "Liquidity")">Pools e trocas</a><span class="network-label"><i></i> Blockchain POVIX</span></nav>
