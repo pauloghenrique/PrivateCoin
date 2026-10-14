@@ -10,6 +10,8 @@
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const integrated = app.dataset.integrated === 'true';
+    let swapDirection = integrated ? '1' : null;
+    const swapSide = () => integrated ? swapDirection : byId('swap-side').value;
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
     const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
         pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada',
@@ -67,11 +69,12 @@
         }
         const pool = selectedPool();
         if (integrated) {
+            byId('swap-side').value = swapDirection;
             for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
                 const button = byId(id);
                 if (!button) continue;
                 button.disabled = !editing || !ready || !pool?.available;
-                button.setAttribute('aria-pressed', byId('swap-side').value === side ? 'true' : 'false');
+                button.setAttribute('aria-pressed', swapSide() === side ? 'true' : 'false');
                 button.setAttribute('title', pool ? (side === '1' ? pool.assetB.symbol + ' → ' + pool.assetA.symbol : pool.assetA.symbol + ' → ' + pool.assetB.symbol) : 'Aguarde a pool');
             }
         }
@@ -88,7 +91,7 @@
         }
         try {
             if (!pool) throw new Error();
-            const side = Number(byId('swap-side').value), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
+            const side = Number(swapSide()), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
             const amount = wallet.parseSupply(byId('swap-amount').value, input.decimals);
             const receive = wallet.quoteExchange(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount);
             byId('swap-estimate').textContent = 'Cotação estimada: ' + atomicText(receive, output.decimals) + ' ' + output.symbol + ' · Taxa da pool: 0,30%';
@@ -169,7 +172,7 @@
     });
     byId('swap-form').addEventListener('submit', async event => {
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
-        const selectedSide = byId('swap-side').value;
+        const selectedSide = swapSide();
         if (selectedSide !== '0' && selectedSide !== '1') { message('Selecione um sentido válido para a troca.'); return; }
         busy = true; message(''); update();
         try {
@@ -332,7 +335,8 @@
         byId('swap-side').value = '1';
         for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
             byId(id).addEventListener('click', () => {
-                if (byId(id).disabled || busy || draft || byId('swap-side').value === side) return;
+                if (byId(id).disabled || busy || draft || swapDirection === side) return;
+                swapDirection = side;
                 byId('swap-side').value = side;
                 byId('swap-amount').value = '';
                 byId('swap-minimum').value = '';
@@ -340,6 +344,13 @@
             });
         }
     }
+    if (integrated) byId('swap-side').addEventListener('change', () => {
+        if (busy || draft) { update(); return; }
+        swapDirection = byId('swap-side').value;
+        byId('swap-amount').value = '';
+        byId('swap-minimum').value = '';
+        update();
+    });
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
     if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um backup cifrado neste navegador. Informe a senha ou escolha outro arquivo.';
