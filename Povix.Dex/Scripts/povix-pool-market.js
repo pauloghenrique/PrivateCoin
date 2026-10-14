@@ -50,7 +50,7 @@
     function render(data) {
         const p = data.pool;
         byId('market-pair').textContent = p.assetA.symbol + ' / ' + p.assetB.symbol;
-        byId('market-price').textContent = data.price == null ? '—' : Number(data.price).toLocaleString('pt-BR', { maximumSignificantDigits: 10 }) + ' ' + p.assetA.symbol + ' por ' + p.assetB.symbol;
+        byId('market-price').textContent = data.price == null ? '—' : Number(data.price).toLocaleString('pt-BR', { maximumSignificantDigits: 10 }) + ' ' + p.assetB.symbol + ' por ' + p.assetA.symbol;
         byId('market-reserve-a').textContent = atomic(p.reserveAAtomic, p.assetA.decimals).replace(/^\+/, '') + ' ' + p.assetA.symbol;
         byId('market-reserve-b').textContent = atomic(p.reserveBAtomic, p.assetB.decimals).replace(/^\+/, '') + ' ' + p.assetB.symbol;
         if (p.status === 'closed') { byId('market-reserve-a').textContent = '0'; byId('market-reserve-b').textContent = '0'; }
