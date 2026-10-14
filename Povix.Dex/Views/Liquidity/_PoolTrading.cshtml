@@ -36,6 +36,7 @@
                 <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
             </form>
             <form id="swap-form" class="card token-form">
+                <div class="market-order-sides" role="group" aria-label="Direção da troca"><button id="swap-buy" class="market-buy" type="button" aria-pressed="false" disabled>BUY</button><button id="swap-sell" class="market-sell" type="button" aria-pressed="false" disabled>SELL</button></div>
                 <div class="market-order-mode"><span>Troca a mercado</span><small>Assinatura local</small></div>
                 <fieldset id="swap-fields" disabled>
                     <label for="swap-pool">Pool selecionada</label><select id="swap-pool" required aria-readonly="true"></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
