@@ -66,6 +66,15 @@
             byId('pool-balance-' + side).textContent = token ? 'Saldo livre: ' + atomicText(token.balanceAtomic, token.decimals) + ' ' + token.symbol : 'Escolha um ativo';
         }
         const pool = selectedPool();
+        if (integrated) {
+            for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
+                const button = byId(id);
+                if (!button) continue;
+                button.disabled = !editing || !ready || !pool?.available;
+                button.setAttribute('aria-pressed', byId('swap-side').value === side ? 'true' : 'false');
+                button.setAttribute('title', pool ? (side === '1' ? pool.assetB.symbol + ' → ' + pool.assetA.symbol : pool.assetA.symbol + ' → ' + pool.assetB.symbol) : 'Aguarde a pool');
+            }
+        }
         byId('swap-pool-state').textContent = pool ? pool.statusMessage || poolStates[pool.status] || 'Consulte o comprovante da pool.' :
             pools.length ? 'Selecione uma pool. A lista informa a disponibilidade de cada uma.' : 'Crie uma pool e aguarde a confirmação das reservas em bloco.';
         byId('swap-provider').textContent = pool ? 'Provedor: ' + pool.providerAddress : '';
@@ -313,6 +322,18 @@
         } catch (error) { message(error.message); } finally { busy = false; update(); if (wallet.isUnlocked()) refresh(); }
     });
     byId('wallet-lock').addEventListener('click', lock); byId('wallet-file').addEventListener('change', lock); byId('wallet-choice').addEventListener('change', update);
+    if (integrated && byId('swap-buy') && byId('swap-sell')) {
+        byId('swap-side').value = '1';
+        for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
+            byId(id).addEventListener('click', () => {
+                if (byId(id).disabled || busy || draft || byId('swap-side').value === side) return;
+                byId('swap-side').value = side;
+                byId('swap-amount').value = '';
+                byId('swap-minimum').value = '';
+                update();
+            });
+        }
+    }
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
     if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um backup cifrado neste navegador. Informe a senha ou escolha outro arquivo.';

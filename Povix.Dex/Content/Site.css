@@ -199,3 +199,11 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .market-wallet-access .wallet-form { margin-top:14px; }
 #pool-market .market-wallet-access #wallet-connect { width:100%; }
 #pool-market .pool-trading .review-card { padding:18px 0 0; }
+
+#pool-market .market-order-sides { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:16px; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+#pool-market .market-order-sides button { padding:14px 10px; border:1px solid transparent; background:var(--paper); font-size:13px; font-weight:750; letter-spacing:1px; min-height:50px; border-radius:8px; }
+#pool-market .market-buy { color:var(--green); }
+#pool-market .market-sell { color:#c94450; }
+#pool-market .market-buy[aria-pressed="true"] { border-color:var(--green); background:var(--soft-green); }
+#pool-market .market-sell[aria-pressed="true"] { border-color:#c94450; background:#fff0f1; }
+#pool-market .market-order-sides button:disabled { opacity:.5; }
