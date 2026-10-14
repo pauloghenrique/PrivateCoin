@@ -32,6 +32,10 @@ namespace PrivateCoin.Site.Models
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
 
+            if (entry.Type == LedgerEntryType.LiquiditySwap)
+                return entry.SwapInputAssetId == null ? entry.SwapInputAmount :
+                    entry.SwapOutputAssetId == null ? entry.SwapOutputAmount : 0;
+
             // Token quantities and native change are not POVIX payments.
             if (entry.Type == LedgerEntryType.TokenCreation || entry.Type == LedgerEntryType.TokenTransfer) return 0;
 
@@ -52,6 +56,7 @@ namespace PrivateCoin.Site.Models
                 case LedgerEntryType.ValidatorReward: return "Recompensa";
                 case LedgerEntryType.TokenCreation: return "Criação de token";
                 case LedgerEntryType.TokenTransfer: return "Transferência de token";
+                case LedgerEntryType.LiquiditySwap: return "Troca";
                 default: return "Transferência";
             }
         }
@@ -59,6 +64,9 @@ namespace PrivateCoin.Site.Models
         public string FormatLedgerAmount(LedgerEntry entry)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
+            if (entry.Type == LedgerEntryType.LiquiditySwap)
+                return FormatAssetAmount(entry.SwapInputAmount, entry.SwapInputAssetId) + " → " +
+                    FormatAssetAmount(entry.SwapOutputAmount, entry.SwapOutputAssetId);
             if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
                 return FormatTokens(LedgerAmount(entry));
 
@@ -66,19 +74,35 @@ namespace PrivateCoin.Site.Models
             foreach (var output in entry.Outputs)
             {
                 if (string.IsNullOrEmpty(output.AssetId)) continue;
-                TokenDefinition token;
-                if (Tokens == null || !Tokens.TryGetValue(output.AssetId, out token))
-                    return output.Amount.ToString("N0", Portuguese) + " unidades atômicas · " + output.AssetId;
-                decimal scale = 1;
-                for (int index = 0; index < token.Decimals; index++) scale *= 10;
-                return (output.Amount / scale).ToString("N" + token.Decimals, Portuguese) + " " + LedgerTokenName(entry);
+                return FormatAssetAmount(output.Amount, output.AssetId);
             }
             return "—";
+        }
+
+        private string AssetName(string assetId)
+        {
+            if (assetId == null) return "POVIX";
+            TokenDefinition token;
+            return Tokens != null && Tokens.TryGetValue(assetId, out token) && !string.IsNullOrWhiteSpace(token.Name)
+                ? token.Name : assetId;
+        }
+
+        private string FormatAssetAmount(long amount, string assetId)
+        {
+            if (assetId == null) return FormatTokens(amount);
+            TokenDefinition token;
+            if (Tokens == null || !Tokens.TryGetValue(assetId, out token))
+                return amount.ToString("N0", Portuguese) + " unidades atômicas · " + assetId;
+            decimal scale = 1;
+            for (int index = 0; index < token.Decimals; index++) scale *= 10;
+            return (amount / scale).ToString("N" + token.Decimals, Portuguese) + " " + AssetName(assetId);
         }
 
         public string LedgerTokenName(LedgerEntry entry)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
+            if (entry.Type == LedgerEntryType.LiquiditySwap)
+                return AssetName(entry.SwapInputAssetId) + " → " + AssetName(entry.SwapOutputAssetId);
             if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
                 return "—";
 

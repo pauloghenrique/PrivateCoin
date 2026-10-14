@@ -53,7 +53,7 @@ namespace PrivateCoin.Core
         public long MaximumTokenAmount => checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply);
     }
 
-    public enum LedgerEntryType { InitialDistribution, ValidatorReward, Transfer, TokenCreation, TokenTransfer }
+    public enum LedgerEntryType { InitialDistribution, ValidatorReward, Transfer, TokenCreation, TokenTransfer, LiquiditySwap }
 
     /// <summary>A transaction entry in the public cash book.</summary>
     public sealed class LedgerEntry
@@ -71,6 +71,13 @@ namespace PrivateCoin.Core
             OutputAmount = outputAmount;
             Fee = transaction.Fee;
             IssuedAmount = issuedAmount;
+            if (transaction.Kind == TransactionKind.LiquiditySwap && transaction.LiquiditySwap != null)
+            {
+                SwapInputAssetId = transaction.Outputs[transaction.LiquiditySwap.InputSide].AssetId;
+                SwapInputAmount = transaction.LiquiditySwap.Amount;
+                SwapOutputAssetId = transaction.Outputs[2].AssetId;
+                SwapOutputAmount = transaction.Outputs[2].Amount;
+            }
             Outputs = transaction.Outputs.Concat(transaction.GetValidationFeeOutput() == null ? new TransactionOutput[0] : new[] { transaction.GetValidationFeeOutput() }).Select(output => new LedgerOutput(output.OneTimeAddress, output.Amount, output.AssetId)).ToArray();
         }
 
@@ -84,6 +91,10 @@ namespace PrivateCoin.Core
         public long OutputAmount { get; }
         public long Fee { get; }
         public long IssuedAmount { get; }
+        public string SwapInputAssetId { get; }
+        public long SwapInputAmount { get; }
+        public string SwapOutputAssetId { get; }
+        public long SwapOutputAmount { get; }
         public IReadOnlyList<LedgerOutput> Outputs { get; }
     }
 
@@ -162,6 +173,7 @@ namespace PrivateCoin.Core
                     }
                     if (transaction.Kind == TransactionKind.TokenCreate) type = LedgerEntryType.TokenCreation;
                     else if (transaction.Kind == TransactionKind.TokenTransfer) type = LedgerEntryType.TokenTransfer;
+                    else if (transaction.Kind == TransactionKind.LiquiditySwap) type = LedgerEntryType.LiquiditySwap;
                     entries.Add(new LedgerEntry(block.Height, block.Hash, transaction, type,
                         inputAmount, outputAmount, issuedAmount, snapshot.Length - block.Height));
                     for (int outputIndex = 0; outputIndex < transaction.Outputs.Count; outputIndex++)
