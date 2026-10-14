@@ -89,16 +89,16 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .pool-analysis { grid-area:analysis; min-width:0; display:grid; gap:12px; }
 #pool-market .market-overview { grid-area:overview; min-width:0; display:grid; gap:12px; }
 #pool-market .card { border-radius:8px; background:var(--white); box-shadow:none; }
-#pool-market .market-pair-header { display:block; margin:0; padding:18px; background:white; border:1px solid var(--line); border-radius:8px; }
-#pool-market .market-pair-identity { display:flex; align-items:center; gap:12px; }
+#pool-market .market-pair-header { display:flex; align-items:center; justify-content:space-between; gap:20px; margin:0; padding:18px; background:white; border:1px solid var(--line); border-radius:8px; }
+#pool-market .market-pair-identity { min-width:0; display:flex; align-items:center; gap:12px; }
 #pool-market .market-pair-avatar { width:45px; height:45px; flex-shrink:0; border-radius:50%; display:grid; place-items:center; color:var(--green); background:var(--soft-green); font-size:26px; }
 #pool-market .market-pair-header .eyebrow { font-size:9px; letter-spacing:1px; }
 #pool-market .market-pair-header h1 { margin:3px 0; font-size:21px; letter-spacing:-.6px; overflow-wrap:anywhere; }
 #pool-market .market-pair-caption { font-size:11px; color:var(--muted); margin-top:4px; }
-#pool-market .market-header-price { border:1px solid var(--line); border-radius:7px; padding:16px; margin-top:16px; text-align:center; background:var(--paper); }
+#pool-market .market-header-price { border:1px solid var(--line); border-radius:7px; padding:12px 16px; margin-top:0; text-align:right; background:var(--paper); }
 #pool-market .market-header-price span { display:block; font-size:10px; color:var(--muted); }
-#pool-market .market-header-price strong { display:block; font-size:26px; font-weight:600; color:var(--dark-green); margin-top:5px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-#pool-market .market-connection { padding:10px 12px; margin:0; border:1px solid var(--line); border-radius:7px; background:var(--soft-green); color:var(--dark-green); font-size:11px; line-height:1.7; }
+#pool-market .market-header-price strong { display:block; font-size:22px; font-weight:600; color:var(--dark-green); margin-top:5px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+#pool-market .market-connection { padding:10px 12px; margin:12px 0 20px; border:1px solid var(--line); border-radius:7px; background:var(--soft-green); color:var(--dark-green); font-size:11px; line-height:1.7; }
 #pool-market .market-connection[data-state="loading"] { color:var(--muted); background:white; }
 #pool-market .market-connection[data-state="error"] { color:#896016; background:#fff8e9; border-color:#e2cb91; }
 #pool-market .market-pool-card, #pool-market .market-tokens { padding:18px; }
@@ -139,7 +139,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .market-down::before { background:#c94450; }
 #pool-market #market-candles { width:100%; height:450px; display:block; }
 #pool-market .market-empty { padding:36px 18px; text-align:center; color:var(--muted); font-size:12px; white-space:normal; }
-#pool-market .market-chart .market-empty { min-height:450px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:linear-gradient(90deg,transparent 99%,#dbe4e3 99%),linear-gradient(transparent 99%,#dbe4e3 99%); background-size:64px 64px; }
+#pool-market .market-chart .market-empty { min-height:320px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); background:linear-gradient(90deg,transparent 99%,#dbe4e3 99%),linear-gradient(transparent 99%,#dbe4e3 99%); background-size:64px 64px; }
 #pool-market .market-ledger { padding:16px; }
 #pool-market .market-ledger-header { display:flex; align-items:center; justify-content:space-between; gap:10px; border-bottom:2px solid var(--green); padding-bottom:14px; }
 #pool-market .market-ledger-header h2 { color:var(--green); font-size:14px; text-transform:uppercase; letter-spacing:.3px; }
@@ -183,13 +183,15 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 @media(max-width:1250px) {
     #pool-market .market-explorer { grid-template-columns:290px minmax(0,1fr); grid-template-areas:"trade analysis" "overview analysis"; }
 }
-@media(max-width:800px) {
+@media(max-width:850px) {
     .market-page .page-shell { margin-left:54px; padding:12px; }
     .market-rail { width:54px; }
     #pool-market .market-topbar { flex-wrap:wrap; gap:10px; }
     #pool-market .market-catalogue-link { flex-basis:100%; order:3; }
     #pool-market .market-topbar > .button { margin-left:auto; }
-    #pool-market .market-explorer { grid-template-columns:minmax(0,1fr); grid-template-areas:"overview" "analysis" "trade"; }
+    #pool-market .market-explorer { grid-template-columns:minmax(0,1fr); grid-template-areas:"analysis" "trade" "overview"; }
+    #pool-market .market-pair-header { flex-direction:column; align-items:stretch; gap:14px; }
+    #pool-market .market-header-price { text-align:left; }
     #pool-market .market-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
     #pool-market #market-candles { height:auto; }
     #pool-market .market-chart .market-empty { min-height:280px; }
@@ -236,3 +238,8 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .market-order-sides button:disabled { opacity:.5; }
 
 #liquidity-app .liquidity-price { padding: 12px; margin: 16px 0 0; border: 1px solid #b9d4c8; border-radius: 7px; background: var(--soft-green); color: var(--dark-green); font-size: 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+@media(max-width:480px) {
+    #pool-market .market-overview { grid-template-columns:minmax(0,1fr); }
+    #pool-market .market-chart-title span { display:block; margin-top:4px; }
+    #pool-market .market-chain { padding:8px 10px; font-size:11px; }
+}

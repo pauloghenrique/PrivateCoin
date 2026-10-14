@@ -8,11 +8,14 @@ class Element {
     appendChild(node) { this.append(node); }
     replaceChildren(...nodes) { this.children = nodes; }
     setAttribute(key, value) { this[key] = value; }
+    removeAttribute(key) { delete this[key]; }
     addEventListener(event, callback) { this.listeners[event] = callback; }
 }
 (async () => {
     const ids = {}, timers = new Map(); let sequence = 0, calls = 0, failing = false;
     const element = id => ids[id] || (ids[id] = new Element());
+    // Model SVG visibility as an attribute, independent from an HTML hidden property.
+    element('market-candles').setAttribute('hidden', '');
     element('pool-market').dataset = { url: '/Liquidity/MarketData?poolId=test' };
     const data = { pool: { assetA: { symbol: 'POVIX', decimals: 8 }, assetB: { symbol: 'TKN', decimals: 2 }, reserveAAtomic: '100000000', reserveBAtomic: '10000', status: 'available', statusMessage: 'Disponível' }, price: 0.01, interval: 300, updatedUtc: new Date().toISOString(), peerCount: 2, ledgerTotal: 1,
         candles: [{ time: 1700000000, open: 0.01, high: 0.0105, low: 0.0095, close: 0.0101 }], ledger: [{ time: 1700000000, operation: 'swap', status: 'pending', deltaAAtomic: '123456789012345678', deltaBAtomic: '-100', transactionId: '<script>bad</script>', blockHeight: null }] };
@@ -44,6 +47,29 @@ class Element {
     assert.equal(row.children[2]['data-status'], 'pending');
     assert.equal(row.children[3].className, 'market-amount', 'pending movements must not imply confirmed reserve changes');
     assert.ok(element('market-candles').children.length > 0);
+    assert.equal(Object.hasOwn(element('market-candles'), 'hidden'), false, 'loaded candles must remove the SVG hidden attribute');
+    assert.equal(element('market-chart-empty').hidden, true);
+    // Numeric strings must compare by price, and invalid records must not poison SVG coordinates.
+    data.candles = [
+        { time: 1700000300, open: '9', high: '10', low: '9', close: '10' },
+        { time: 1700000000, open: '10', high: '10', low: '10', close: '10' },
+        { time: 1700000600, open: 'bad', high: 'bad', low: 'bad', close: 'bad' }
+    ];
+    await element('market-refresh').listeners.click();
+    const groups = element('market-candles').children.filter(node => node.children.length === 3);
+    assert.equal(groups.length, 2);
+    assert.equal(groups[1].children[2].fill, '#12836d', '10 is greater than 9 when prices arrive as strings');
+    for (const group of groups) {
+        for (const shape of group.children.slice(1)) {
+            for (const key of ['x', 'y', 'x1', 'x2', 'y1', 'y2', 'width', 'height']) {
+                if (shape[key] !== undefined) assert.ok(Number.isFinite(Number(shape[key])), 'SVG coordinates must be finite');
+            }
+        }
+    }
+    data.candles = [{ time: 1700000000, open: 0, high: 0, low: 0, close: 0 }];
+    await element('market-refresh').listeners.click();
+    assert.equal(element('market-candles').hidden, '', 'empty history must set the SVG hidden attribute');
+    assert.match(element('market-chart-empty').textContent, /preços inválidos/);
     data.ledger[0].deltaAAtomic = '-14042055324596';
     data.ledger[0].deltaBAtomic = '20000000000000';
     data.pool.assetA.symbol = 'AUR'; data.pool.assetB.symbol = 'KIK'; data.pool.assetB.decimals = 8;
@@ -58,7 +84,7 @@ class Element {
     await element('market-time-900').listeners.click();
     assert.equal(element('market-interval').value, '900');
     assert.equal(element('market-time-900')['aria-pressed'], 'true');
-    assert.equal(element('market-candles').hidden, true);
+    assert.equal(element('market-candles').hidden, '', 'empty history must set the SVG hidden attribute');
     assert.equal(element('market-chart-empty').hidden, false);
     assert.match(element('market-chart-empty').textContent, /primeira troca confirmada/);
     assert.equal(element('market-ledger').children[0].children[0].colspan, '7');
