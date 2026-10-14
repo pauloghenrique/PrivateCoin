@@ -46,16 +46,23 @@ class Element {
     assert.equal(get('swap-side').options[0].textContent, 'BBB → AAA', 'labels must follow option values rather than position');
     assert.equal(get('swap-side').options[1].textContent, 'AAA → BBB');
     for (const side of ['0', '1']) {
-        get('swap-side').value = side;
+        get('swap-side').value = side; get('swap-side').handlers.change();
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
         await get('swap-form').handlers.submit({ preventDefault() {} });
         assert.equal(preparedSides.at(-1), side, 'the request must preserve the selected direction');
     }
-    get('swap-side').value = 'invalid';
+    for (const [button, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
+        get(button).handlers.click();
+        get('swap-side').value = side === '1' ? '0' : '1';
+        get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
+        await get('swap-form').handlers.submit({ preventDefault() {} });
+        assert.equal(preparedSides.at(-1), side, 'the active button controls the prepared order');
+    }
+    get('swap-side').value = 'invalid'; get('swap-side').handlers.change();
     const before = preparedSides.length;
     await get('swap-form').handlers.submit({ preventDefault() {} });
     assert.equal(preparedSides.length, before, 'an invalid direction must not prepare a swap');
-    get('swap-side').value = '1';
+    get('swap-side').value = '1'; get('swap-side').handlers.change();
     get('wallet-lock').handlers.click();
     assert.equal(get('swap-buy').disabled, true); assert.equal(get('swap-sell').disabled, true);
     get('swap-sell').handlers.click(); assert.equal(get('swap-side').value, '1');
