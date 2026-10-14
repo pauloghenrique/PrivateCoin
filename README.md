@@ -466,10 +466,19 @@ bloco zero, que também permanece no payload `Data` protegido por SHA-256.
 O carregamento valida ambas as cópias. O arquivo é um registro público, não uma
 configuração que autoriza editar as regras da rede.
 
-Esta mudança cria uma rede com outro gênesis. Arquivos da rede antiga são
-rejeitados e preservados; não há migração automática, remintagem, reescrita de
-histórico nem exclusão de carteiras. Atualizar uma rede já existente exige uma
-estratégia de migração separada. Os números de versão de consenso históricos
+Esta mudança cria uma rede com outro gênesis. No Desktop, quando o arquivo
+`Blockchain.json` é rejeitado na abertura por alteração, inconsistência ou regras
+incompatíveis, ele é apagado e recriado com o gênesis canônico, sem mensagem de
+erro na tela. O cadastro público e as pendências rejeitadas são descartados;
+`wallets.dat` e `recovery.dat` são preservados e o nó aguarda sincronização com
+os pares compatíveis para restaurar o histórico e os saldos confirmados.
+Se as configurações ou o código do Core foram alterados, o novo gênesis é
+gerado com essas regras locais e terá outro `GenesisHash`, `RulesHash` e
+`NetworkId`: o nó começa sua própria cadeia, sem entrar na rede que o rejeitou.
+Somente pares com as mesmas regras podem participar dessa cadeia. Editar apenas
+o JSON não altera as regras do executável. Falhas de acesso
+ao disco e de abertura da carteira continuam sendo informadas. Não há remintagem
+nem migração do histórico antigo. Os números de versão de consenso históricos
 continuam disponíveis apenas em cadeias ancoradas no novo gênesis.
 
 O compromisso detecta incompatibilidades entre builds normais. Não é atestação

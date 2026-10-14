@@ -62,7 +62,7 @@ namespace PrivateCoin.Desktop
                     if (walletStore.NetworkExists)
                     {
                         List<Transaction> restoredPendingTransactions;
-                        blockchain = walletStore.LoadNetwork(out restoredPendingTransactions);
+                        blockchain = walletStore.LoadNetworkOrRecreate(wallets, out restoredPendingTransactions);
                         pendingTransactions.AddRange(restoredPendingTransactions);
                         foreach (Transaction transaction in restoredPendingTransactions) pendingIds.Add(transaction.Id);
                         // Losing wallets.dat must not mutate the public chain or consume a
