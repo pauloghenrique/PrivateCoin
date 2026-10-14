@@ -69,13 +69,29 @@ namespace PrivateCoin.Desktop
         private readonly Dictionary<string, StoredNetworkWallet> knownNetworkWallets =
             new Dictionary<string, StoredNetworkWallet>(StringComparer.Ordinal);
 
-        public WalletStore() : this(FindDataDirectory()) { }
+        public WalletStore() : this(FindDataDirectory(), AppDomain.CurrentDomain.BaseDirectory) { }
 
-        internal WalletStore(string directory)
+        internal WalletStore(string directory) : this(directory, directory) { }
+
+        private WalletStore(string directory, string privateDirectory)
         {
-            walletFilePath = Path.Combine(directory, "wallets.dat");
+            // Keep the public chain in its existing location; private files belong
+            // beside the executable, independently of the current working directory.
+            walletFilePath = Path.Combine(privateDirectory, "wallets.dat");
             networkFilePath = Path.Combine(directory, "Blockchain.json");
-            recoveryFilePath = Path.Combine(directory, "recovery.dat");
+            recoveryFilePath = Path.Combine(privateDirectory, "recovery.dat");
+            if (!PathsEqual(directory, privateDirectory) && !File.Exists(walletFilePath))
+            {
+                // Preserve the originals and never overwrite files beside the executable.
+                // Copy recovery first so a failed wallet copy can be retried on startup.
+                foreach (string fileName in new[] { "recovery.dat", "wallets.dat" })
+                {
+                    string source = Path.Combine(directory, fileName);
+                    string destination = Path.Combine(privateDirectory, fileName);
+                    if (File.Exists(source) && !File.Exists(destination))
+                        File.Copy(source, destination, false);
+                }
+            }
             string previousNetworkFilePath = Path.Combine(directory, "blockchain.json");
             if (!File.Exists(networkFilePath) && File.Exists(previousNetworkFilePath))
                 File.Move(previousNetworkFilePath, networkFilePath);
@@ -194,7 +210,8 @@ namespace PrivateCoin.Desktop
             // Copy first because LocalApplicationData may be on another volume. Keeping
             // the source until the copy succeeds also avoids losing wallet material.
             File.Copy(source, destination, false);
-            File.Delete(source);
+            if (fileName != "wallets.dat" && fileName != "recovery.dat")
+                File.Delete(source);
         }
 
         public void Save(IEnumerable<NamedWallet> wallets, Blockchain blockchain, IEnumerable<Transaction> pendingTransactions)
