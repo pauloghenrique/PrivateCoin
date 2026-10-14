@@ -41,10 +41,12 @@ class Element {
     assert.equal(get('swap-amount').value, ''); assert.equal(get('swap-minimum').value, '');
     get('swap-amount').value = '1'; get('swap-form').handlers.input();
     assert.match(get('swap-estimate').textContent, /BBB/);
+    assert.equal(get('swap-receive-label').textContent, 'Mínimo a receber em BBB');
     get('swap-buy').handlers.click(); get('swap-amount').value = '1'; get('swap-form').handlers.input();
     assert.match(get('swap-estimate').textContent, /AAA/);
-    assert.equal(get('swap-side').options[0].textContent, 'BBB → AAA', 'labels must follow option values rather than position');
-    assert.equal(get('swap-side').options[1].textContent, 'AAA → BBB');
+    assert.equal(get('swap-receive-label').textContent, 'Mínimo a receber em AAA');
+    assert.equal(get('swap-side').options[0].textContent, 'BBB · Token B', 'labels must follow option values rather than position');
+    assert.equal(get('swap-side').options[1].textContent, 'AAA · Token A');
     for (const side of ['0', '1']) {
         get('swap-side').value = side;
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
