@@ -344,13 +344,22 @@
             });
         }
     }
-    if (integrated) byId('swap-side').addEventListener('change', () => {
-        if (busy || draft) { update(); return; }
-        swapDirection = byId('swap-side').value;
-        byId('swap-amount').value = '';
-        byId('swap-minimum').value = '';
-        update();
-    });
+    if (integrated) {
+        const selectDirection = () => {
+            if (busy || draft) { update(); return; }
+            const direction = byId('swap-side').value;
+            if (direction !== swapDirection) {
+                swapDirection = direction;
+                byId('swap-amount').value = '';
+                byId('swap-minimum').value = '';
+            }
+            update();
+        };
+        // The select emits input before change. Capture it before the input
+        // bubbles to the form, whose update restores the stored direction.
+        byId('swap-side').addEventListener('input', selectDirection);
+        byId('swap-side').addEventListener('change', selectDirection);
+    }
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
     if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um backup cifrado neste navegador. Informe a senha ou escolha outro arquivo.';
