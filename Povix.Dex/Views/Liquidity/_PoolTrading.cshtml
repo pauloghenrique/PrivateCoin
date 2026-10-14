@@ -40,10 +40,10 @@
                 <div class="market-order-mode"><span>Troca a mercado</span><small>Assinatura local</small></div>
                 <fieldset id="swap-fields" disabled>
                     <label for="swap-pool">Pool selecionada</label><select id="swap-pool" required aria-readonly="true"></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
-                    <div class="market-send-block"><label for="swap-side">Você entrega</label><select id="swap-side"><option value="0">Token A</option><option value="1">Token B</option></select>
+                    <div class="market-send-block"><label for="swap-side">Você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
                     <label for="swap-amount">Quantidade a trocar</label><input placeholder="0,00" id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     </div><p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>
-                    <div class="market-receive-block"><label id="swap-receive-label" for="swap-minimum">Mínimo a receber</label><input placeholder="0,00" id="swap-minimum" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required /><small>Você define esse limite. Uma cotação menor exige outra revisão.</small></div>
+                    <div class="market-receive-block"><label for="swap-minimum">Mínimo a receber</label><input placeholder="0,00" id="swap-minimum" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required /><small>Você define esse limite. Uma cotação menor exige outra revisão.</small></div>
                 </fieldset>
                 <div class="form-bottom"><button id="prepare-swap" class="button button-primary" type="submit" disabled>Revisar troca →</button></div>
             </form>
