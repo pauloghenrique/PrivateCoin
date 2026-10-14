@@ -44,7 +44,7 @@ namespace PrivateCoin.Site.Services
                 {
                     Summary = query.GetSummary(),
                     Ledger = query.GetLedger(0, LedgerPageSize),
-                    TokenNames = blockchain.GetTokens().ToDictionary(token => token.Id, token => token.Name, StringComparer.Ordinal),
+                    Tokens = blockchain.GetTokens().ToDictionary(token => token.Id, StringComparer.Ordinal),
                     ValidationQueue = Blockchain.OrderByFeePriority(pending).ToArray(),
                     ConnectedPeers = node.ConnectedPeers,
                     KnownPeerCount = node.KnownPeers.Length,
