@@ -10,7 +10,7 @@
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const integrated = app.dataset.integrated === 'true';
-    let swapDirection = integrated ? '1' : null;
+    let swapDirection = integrated ? '0' : null;
     const swapSide = () => integrated ? swapDirection : byId('swap-side').value;
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
     const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
@@ -28,7 +28,7 @@
         return '1 ' + a.symbol + ' = ' + value + ' ' + b.symbol;
     }
     function priceText(a, b, reserveA, reserveB) {
-        return 'Preço ' + a.symbol + ' / ' + b.symbol + ': ' + reservePrice(a, b, reserveA, reserveB) + ' · ' + reservePrice(b, a, reserveB, reserveA);
+        return 'Preço ' + a.symbol + ' / ' + b.symbol + ': ' + reservePrice(b, a, reserveB, reserveA);
     }
     function updatePrices(pool) {
         const initial = byId('pool-price');
@@ -98,7 +98,7 @@
         updatePrices(pool);
         if (integrated) {
             byId('swap-side').value = swapDirection;
-            for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
+            for (const [id, side] of [['swap-buy', '0'], ['swap-sell', '1']]) {
                 const button = byId(id);
                 if (!button) continue;
                 button.disabled = !editing || !ready || !pool?.available;
@@ -363,8 +363,8 @@
     });
     byId('wallet-lock').addEventListener('click', lock); byId('wallet-file').addEventListener('change', lock); byId('wallet-choice').addEventListener('change', update);
     if (integrated && byId('swap-buy') && byId('swap-sell')) {
-        byId('swap-side').value = '1';
-        for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
+        byId('swap-side').value = '0';
+        for (const [id, side] of [['swap-buy', '0'], ['swap-sell', '1']]) {
             byId(id).addEventListener('click', () => {
                 if (byId(id).disabled || busy || draft || swapDirection === side) return;
                 swapDirection = side;
