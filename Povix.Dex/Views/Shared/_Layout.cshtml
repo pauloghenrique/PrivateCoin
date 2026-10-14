@@ -7,7 +7,7 @@
     <meta name="description" content="Crie tokens e pools de liquidez e troque ativos na blockchain POVIX com assinatura local da sua carteira." />
     <link rel="stylesheet" href="@Url.Content("~/Content/Site.css")" />
 </head>
-<body>
+<body class="@ViewBag.PageClass">
     <header class="site-header">
         <a class="brand" href="@Url.Action("Create", "Tokens")" aria-label="Povix.Dex início"><span class="brand-mark">P</span><span>povix<span class="brand-dex">.dex</span></span></a>
         <nav aria-label="Navegação principal"><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Tokens" ? "nav-active" : "")" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenTransfers" ? "nav-active" : "")" href="@Url.Action("Index", "TokenTransfers")">Movimentar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenProfiles" ? "nav-active" : "")" href="@Url.Action("Index", "TokenProfiles")">Editar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Liquidity" ? "nav-active" : "")" href="@Url.Action("Index", "Liquidity")">Pools e trocas</a><span class="network-label"><i></i> Blockchain POVIX</span></nav>

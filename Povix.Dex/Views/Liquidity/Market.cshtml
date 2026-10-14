@@ -1,18 +1,28 @@
 @model Povix.Dex.Models.TokenNetworkViewModel
-@{ ViewBag.Title = "Mercado da pool"; }
+@{ ViewBag.Title = "Mercado da pool"; ViewBag.PageClass = "market-page"; }
 <main id="pool-market" data-url="@Url.Action("MarketData", new { poolId = ViewBag.PoolId })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
-    <a class="back-link" href="@Url.Action("Index", new { poolId = ViewBag.PoolId })">← Pools e trocas</a>
-    <div class="page-intro market-intro"><span class="eyebrow">MERCADO DA POOL</span><h1 id="market-pair">Carregando pool…</h1><p>Acompanhe as reservas e as trocas confirmadas na blockchain.</p><details class="market-pool-id"><summary>Identificador da pool</summary><p class="address-input">@ViewBag.PoolId</p></details></div>
+    <nav class="market-breadcrumb" aria-label="Localização"><a href="@Url.Action("Index", new { poolId = ViewBag.PoolId })">Pools e trocas</a><span aria-hidden="true">/</span><span>Explorador da pool</span></nav>
+    <header class="market-pair-header">
+        <div class="market-pair-identity"><span class="market-pair-avatar" aria-hidden="true">⇄</span><div><span class="eyebrow">PAIR EXPLORER · POVIX</span><h1 id="market-pair">Carregando pool…</h1></div></div>
+        <div class="market-header-price"><span>Preço atual · A por B</span><strong id="market-price">—</strong></div>
+    </header>
     <p id="market-connection" class="market-connection" data-state="loading" role="status" aria-live="polite">Consultando a blockchain…</p>
-    <section class="card market-summary" aria-label="Resumo da pool"><div class="market-price-stat"><span>Preço atual · A por B</span><strong id="market-price">—</strong></div><div><span id="market-label-a">Reserva A</span><strong id="market-reserve-a">—</strong></div><div><span id="market-label-b">Reserva B</span><strong id="market-reserve-b">—</strong></div></section>
-    <p id="market-state" class="market-pool-state" role="status"></p>
-    <div class="pool-workspace"><div class="pool-analysis">
-    <section class="card market-chart"><div class="market-toolbar"><div><span class="eyebrow">PREÇO A / B</span><h2>Histórico de preço</h2></div><label for="market-interval">Intervalo <select id="market-interval"><option value="60">1 minuto</option><option value="300" selected>5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option><option value="86400">1 dia</option></select></label><button id="market-refresh" type="button" class="button button-secondary">Atualizar</button></div>
+    <div class="market-explorer">
+        <aside class="market-overview" aria-label="Informações da pool">
+            <section class="card market-pool-card"><div class="market-panel-heading"><span class="eyebrow">POOL DE LIQUIDEZ</span><h2>Visão geral</h2></div>
+                <p id="market-state" class="market-pool-state" role="status">Consultando o estado da pool…</p>
+                <div class="market-summary" aria-label="Reservas da pool"><div><span id="market-label-a">Reserva A</span><strong id="market-reserve-a">—</strong></div><div><span id="market-label-b">Reserva B</span><strong id="market-reserve-b">—</strong></div></div>
+                <dl class="market-pool-facts"><div><dt>Rede</dt><dd>POVIX</dd></div><div><dt>Taxa da pool</dt><dd>0,30%</dd></div></dl>
+                <details class="market-pool-id"><summary>Identificador da pool</summary><p class="address-input">@ViewBag.PoolId</p></details>
+            </section>
+            <section class="card market-tokens"><div class="market-panel-heading"><span class="eyebrow">ATIVOS DO PAR</span><h2>Informações dos tokens</h2></div><div id="market-token-info" class="market-token-grid"></div></section>
+        </aside>
+        <div class="pool-analysis">
+    <section id="market-chart-panel" class="card market-chart"><div class="market-toolbar"><div><span class="eyebrow">PREÇO A / B</span><h2>Histórico de preço</h2></div><label for="market-interval">Intervalo <select id="market-interval"><option value="60">1 minuto</option><option value="300" selected>5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option><option value="86400">1 dia</option></select></label><button id="market-refresh" type="button" class="button button-secondary">Atualizar</button></div>
         <p class="muted-text">Preço A/B após cada troca confirmada. Períodos sem trocas ficam sem candles. Até 200 candles.</p>
         <div class="market-chart-legend"><span class="market-up">Alta</span><span class="market-down">Baixa</span></div><svg id="market-candles" hidden viewBox="0 0 960 360" role="img" aria-label="Gráfico de candles do preço Reserva A por Reserva B"></svg><p id="market-chart-empty" class="market-empty" role="status">Carregando histórico de preço…</p>
     </section>
-    <section class="card market-ledger"><span class="eyebrow">MOVIMENTAÇÕES</span><h2>Livro caixa da pool</h2><p>Entradas (+) e saídas (−) das reservas. Pendentes e rejeitadas não alteram o saldo confirmado. Valores de encerramento são devolvidos à carteira.</p><p id="market-ledger-count" class="muted-text"></p><div class="market-table-scroll" tabindex="0" role="region" aria-label="Movimentações da pool"><table><caption class="market-table-caption">Histórico de entradas e saídas das reservas</caption><thead><tr><th scope="col">Data / hora</th><th scope="col">Operação</th><th scope="col">Status</th><th scope="col" id="market-heading-a">Movimento A</th><th scope="col" id="market-heading-b">Movimento B</th><th scope="col">Bloco</th><th scope="col">Transação</th></tr></thead><tbody id="market-ledger"><tr><td colspan="7" class="market-empty">Carregando movimentações…</td></tr></tbody></table></div></section>
-    <section class="card market-tokens"><h2>Informações dos tokens</h2><div id="market-token-info" class="market-token-grid"></div></section>
-    </div><aside class="pool-trading" aria-label="Troca da pool">@Html.Partial("_PoolTrading", Model)</aside></div>
+    <section id="market-ledger-panel" class="card market-ledger"><div class="market-ledger-header"><div><span class="eyebrow">ATIVIDADE DA POOL</span><h2>Histórico de transações</h2></div><a class="market-section-link" href="#market-chart-panel">Voltar ao gráfico ↑</a></div><p>Entradas (+) e saídas (−) das reservas. Pendentes e rejeitadas não alteram o saldo confirmado. Valores de encerramento são devolvidos à carteira.</p><p id="market-ledger-count" class="muted-text"></p><div class="market-table-scroll" tabindex="0" role="region" aria-label="Movimentações da pool"><table><caption class="market-table-caption">Histórico de entradas e saídas das reservas</caption><thead><tr><th scope="col">Data / hora</th><th scope="col">Operação</th><th scope="col">Status</th><th scope="col" id="market-heading-a">Movimento A</th><th scope="col" id="market-heading-b">Movimento B</th><th scope="col">Bloco</th><th scope="col">Transação</th></tr></thead><tbody id="market-ledger"><tr><td colspan="7" class="market-empty">Carregando movimentações…</td></tr></tbody></table></div></section>
+    </div><aside class="pool-trading" aria-label="Troca da pool"><div class="market-trade-heading"><span class="eyebrow">NEGOCIAR</span><h2>Trocar neste par</h2><p>Conecte sua carteira para revisar e assinar.</p></div>@Html.Partial("_PoolTrading", Model)</aside></div>
 </main>
 @section scripts { <script src="@Scripts.Url("~/bundles/povix-liquidity")"></script> <script src="@Url.Content("~/Scripts/povix-pool-market.js")"></script> }
