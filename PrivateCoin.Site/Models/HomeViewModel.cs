@@ -11,6 +11,7 @@ namespace PrivateCoin.Site.Models
 
         public BlockchainSummary Summary { get; set; }
         public IReadOnlyList<LedgerEntry> Ledger { get; set; }
+        public IReadOnlyDictionary<string, string> TokenNames { get; set; }
         public IReadOnlyList<Transaction> ValidationQueue { get; set; }
         public string[] ConnectedPeers { get; set; }
         public int KnownPeerCount { get; set; }
@@ -53,6 +54,23 @@ namespace PrivateCoin.Site.Models
                 case LedgerEntryType.TokenTransfer: return "Transferência de token";
                 default: return "Transferência";
             }
+        }
+
+        public string LedgerTokenName(LedgerEntry entry)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+            if (entry.Type != LedgerEntryType.TokenCreation && entry.Type != LedgerEntryType.TokenTransfer)
+                return "—";
+
+            foreach (var output in entry.Outputs)
+            {
+                if (string.IsNullOrEmpty(output.AssetId)) continue;
+                string name;
+                if (TokenNames != null && TokenNames.TryGetValue(output.AssetId, out name) && !string.IsNullOrWhiteSpace(name))
+                    return name;
+                return output.AssetId;
+            }
+            return "—";
         }
     }
 }
