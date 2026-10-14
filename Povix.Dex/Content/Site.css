@@ -169,3 +169,33 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
     #pool-market .market-toolbar { gap:6px; }
     .market-page .site-footer { margin-left:66px; }
 }
+
+/* Wallet, order, fees and review belong to the same trading surface. */
+#pool-market .market-trade-heading { padding:18px 20px; }
+#pool-market .market-trade-heading h2 { font-size:17px; }
+#pool-market #liquidity-app { padding:0 18px 18px; }
+#pool-market .pool-trading .network-strip { border:0; border-radius:0; background:transparent; padding:12px 0; border-bottom:1px solid var(--line); margin:0; }
+#pool-market .pool-trading #swap-form { padding:0 0 18px; border-top:0; }
+#pool-market .market-order-mode { display:flex; justify-content:space-between; align-items:center; gap:12px; border-bottom:1px solid var(--line); margin-bottom:18px; }
+#pool-market .market-order-mode > span { padding:14px 0; border-bottom:2px solid var(--green); color:var(--green); font-size:12px; font-weight:650; }
+#pool-market .market-order-mode small { margin:0; }
+#pool-market .market-send-block, #pool-market .market-receive-block { padding:14px; border:1px solid var(--line); border-radius:8px; background:var(--paper); margin-top:16px; }
+#pool-market .market-send-block label, #pool-market .market-receive-block label { margin-bottom:8px; color:var(--muted); font-size:11px; }
+#pool-market .market-send-block #swap-side { background:white; }
+#pool-market .market-send-block #swap-amount { border:0; background:transparent; padding:10px 0 0; font-size:26px; }
+#pool-market .market-receive-block #swap-minimum { background:white; font-variant-numeric:tabular-nums; }
+#pool-market .pool-trading .market-fee-card { padding:16px 0; }
+#pool-market .market-fee-card > p { line-height:1.7; }
+#pool-market .market-wallet-access { margin:0 0 18px; border:1px solid #b9d4c8; border-radius:8px; overflow:hidden; }
+#pool-market .market-wallet-access > summary { display:flex; align-items:center; gap:8px; padding:14px; font-size:12px; font-weight:650; color:var(--green); background:var(--soft-green); list-style:none; }
+#pool-market .market-wallet-access > summary::-webkit-details-marker { display:none; }
+#pool-market .market-wallet-action { margin-left:auto; font-size:10px; font-weight:400; }
+#pool-market .market-wallet-access > summary::after { content:"+"; font-size:18px; }
+#pool-market .market-wallet-access[open] > summary::after { content:"−"; }
+#pool-market .market-wallet-access .wallet-card { padding:14px; border:0; }
+#pool-market .market-wallet-access .card-heading { gap:8px; }
+#pool-market .market-wallet-access .card-heading .step-icon { display:none; }
+#pool-market .market-wallet-access #wallet-title { font-size:13px; }
+#pool-market .market-wallet-access .wallet-form { margin-top:14px; }
+#pool-market .market-wallet-access #wallet-connect { width:100%; }
+#pool-market .pool-trading .review-card { padding:18px 0 0; }
