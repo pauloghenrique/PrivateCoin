@@ -81,11 +81,16 @@
         if (pool) {
             const selector = byId('swap-side'), selectedSide = selector.value;
             for (const option of Array.from(selector.options)) {
-                const label = option.value === '0' ? pool.assetA.symbol + ' → ' + pool.assetB.symbol : pool.assetB.symbol + ' → ' + pool.assetA.symbol;
+                const token = option.value === '0' ? pool.assetA : pool.assetB;
+                const label = integrated ? token.symbol + ' · Token ' + (option.value === '0' ? 'A' : 'B') :
+                    (option.value === '0' ? pool.assetA.symbol + ' → ' + pool.assetB.symbol : pool.assetB.symbol + ' → ' + pool.assetA.symbol);
                 if (option.textContent !== label) option.textContent = label;
             }
             selector.value = selectedSide;
         }
+        const receiveLabel = byId('swap-receive-label');
+        if (integrated && receiveLabel) receiveLabel.textContent = pool ? 'Mínimo a receber em ' +
+            (byId('swap-side').value === '0' ? pool.assetB.symbol : pool.assetA.symbol) : 'Mínimo a receber';
         try {
             if (!pool) throw new Error();
             const side = Number(byId('swap-side').value), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
