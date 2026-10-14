@@ -46,7 +46,14 @@ class Element {
     assert.equal(get('swap-side').options[0].textContent, 'BBB → AAA', 'labels must follow option values rather than position');
     assert.equal(get('swap-side').options[1].textContent, 'AAA → BBB');
     for (const side of ['0', '1']) {
-        get('swap-side').value = side; get('swap-side').handlers.change();
+        get('swap-side').value = side;
+        // Browser order: input on the select, bubbling input on the form,
+        // then change on the select and bubbling change on the form.
+        get('swap-side').handlers.input?.();
+        get('swap-form').handlers.input();
+        get('swap-side').handlers.change();
+        get('swap-form').handlers.change();
+        assert.equal(get('swap-side').value, side, 'input bubbling must not restore the previous selection');
         get('swap-amount').value = '1'; get('swap-minimum').value = '0,1';
         await get('swap-form').handlers.submit({ preventDefault() {} });
         assert.equal(preparedSides.at(-1), side, 'the request must preserve the selected direction');
