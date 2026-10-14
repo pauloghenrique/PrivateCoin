@@ -185,7 +185,7 @@
             const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map([['povix', BigInt(feeAtomic)]]);
             funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(amountAtomic)); ensureFunds(funds);
             const wanted = { ...wantedFromPool(pool), operation: 'swap', inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
-            const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, Amount: byId('swap-amount').value,
+            const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, InputAssetId: input.id, OutputAssetId: output.id, Amount: byId('swap-amount').value,
                 MinimumReceive: byId('swap-minimum').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await review(result, wanted);
         } catch (error) { reset(); message(error.message); }

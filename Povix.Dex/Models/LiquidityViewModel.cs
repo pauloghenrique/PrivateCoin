@@ -25,6 +25,8 @@ namespace Povix.Dex.Models
     {
         [Required, RegularExpression("[0-9a-f]{64}")] public string PoolId { get; set; }
         [Range(0, 1)] public int InputSide { get; set; }
+        [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string InputAssetId { get; set; }
+        [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string OutputAssetId { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string Amount { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string MinimumReceive { get; set; }
     }

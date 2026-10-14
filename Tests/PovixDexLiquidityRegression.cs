@@ -109,6 +109,9 @@ internal static partial class PovixDexRegression
                         Check(second.Inputs.All(input => input.TransactionId != poolId || input.OutputIndex > 1), "creating another pool cannot consume registered reserves");
                         batches.Confirm(chain, new[] { second }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => (bool)ExchangePool(service, secondPool)["available"], "two distinct token reserves form another confirmed pool");
+                        RejectExchange(() => service.PrepareSwap(new SwapViewModel { PoolId = poolId, InputSide = 1,
+                            InputAssetId = "povix", OutputAssetId = tokenA.Token.Id, Amount = "0,1", MinimumReceive = "9", FeeAtomic = 2 },
+                            PublicKeys(buyer), buyerAddress, "inverted-direction"), "direction_invalid");
                         var swapModel = new SwapViewModel { PoolId = poolId, InputSide = 0, Amount = "0,1", MinimumReceive = "9", FeeAtomic = 2 };
                         var minimumController = LiquidityControllerFor(service, "minimum-limit", new SessionStateItemCollection());
                         var minimumResult = ExchangeData(((JsonResult)minimumController.PrepareSwap(new SwapViewModel { PoolId = poolId,

@@ -57,8 +57,8 @@
         byId('market-state').textContent = p.statusMessage;
         byId('market-label-a').textContent = 'Reserva de ' + p.assetA.symbol;
         byId('market-label-b').textContent = 'Reserva de ' + p.assetB.symbol;
-        byId('market-heading-a').textContent = 'Movimento ' + p.assetA.symbol;
-        byId('market-heading-b').textContent = 'Movimento ' + p.assetB.symbol;
+        byId('market-heading-a').textContent = 'Carteira ' + p.assetA.symbol;
+        byId('market-heading-b').textContent = 'Carteira ' + p.assetB.symbol;
         byId('market-ledger-count').textContent = 'Últimas ' + data.ledger.length + ' de ' + data.ledgerTotal + ' movimentações · Horário local';
         const body = byId('market-ledger'); body.replaceChildren();
         if (!data.ledger.length) {
@@ -68,8 +68,14 @@
         }
         data.ledger.forEach(item => {
             const row = document.createElement('tr');
-            [new Date(item.time * 1000).toLocaleString('pt-BR'), operations[item.operation] || item.operation, statuses[item.status] || item.status,
-                atomic(item.deltaAAtomic, p.assetA.decimals), atomic(item.deltaBAtomic, p.assetB.decimals), item.blockHeight == null ? '—' : item.blockHeight].forEach((text, index) => {
+            const reserveA = BigInt(item.deltaAAtomic), reserveB = BigInt(item.deltaBAtomic);
+            let operation = operations[item.operation] || item.operation;
+            if (item.operation === 'swap') {
+                if (reserveA > 0n && reserveB < 0n) operation += ' · ' + p.assetA.symbol + ' → ' + p.assetB.symbol;
+                else if (reserveB > 0n && reserveA < 0n) operation += ' · ' + p.assetB.symbol + ' → ' + p.assetA.symbol;
+            }
+            [new Date(item.time * 1000).toLocaleString('pt-BR'), operation, statuses[item.status] || item.status,
+                atomic(-reserveA, p.assetA.decimals), atomic(-reserveB, p.assetB.decimals), item.blockHeight == null ? '—' : item.blockHeight].forEach((text, index) => {
                     const cell = document.createElement('td'); cell.textContent = text;
                     if (index === 2) cell.setAttribute('data-status', item.status);
                     if (index === 3 || index === 4) cell.className = 'market-amount' + (item.status === 'confirmed' ? (String(text).startsWith('−') ? ' market-negative' : ' market-positive') : '');

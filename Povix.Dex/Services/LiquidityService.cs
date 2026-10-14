@@ -59,14 +59,23 @@ namespace Povix.Dex.Services
                     pool.Status == "busy" ? "pool_reserved" : "pool_unavailable", pool.StatusMessage,
                     pool.Status == "pending" || pool.Status == "validated" || pool.Status == "busy");
                 if (model.InputSide != 0 && model.InputSide != 1) throw new TokenOperationException("fields_invalid", "Selecione um lado da troca.");
-                var input = model.InputSide == 0 ? pool.AssetA : pool.AssetB;
-                var output = model.InputSide == 0 ? pool.AssetB : pool.AssetA;
+                int inputSide = model.InputSide;
+                if (model.InputAssetId != null || model.OutputAssetId != null)
+                {
+                    int assetSide = model.InputAssetId == pool.AssetA.Id && model.OutputAssetId == pool.AssetB.Id ? 0 :
+                        model.InputAssetId == pool.AssetB.Id && model.OutputAssetId == pool.AssetA.Id ? 1 : -1;
+                    if (assetSide < 0 || assetSide != model.InputSide)
+                        throw new TokenOperationException("direction_invalid", "A direção da troca mudou. Atualize a página e selecione novamente BUY ou SELL.");
+                    inputSide = assetSide;
+                }
+                var input = inputSide == 0 ? pool.AssetA : pool.AssetB;
+                var output = inputSide == 0 ? pool.AssetB : pool.AssetA;
                 long amount = ParseAmount(model.Amount, input.Decimals), minimum = ParseAmount(model.MinimumReceive, output.Decimals);
                 var tx = TokenExchange.PrepareSwap(blockchain, pending, publicKeys, pool.ReserveA, pool.ReserveB, pool.ProviderKey,
-                    model.InputSide, amount, minimum, address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
+                    inputSide, amount, minimum, address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
                 var draft = new PreparedExchange { Transaction = tx, Operation = "swap", Owner = owner, ProviderKey = pool.ProviderKey,
                     PoolId = pool.Id, ReserveId = pool.Transaction.Id, Address = address, AssetA = pool.AssetA, AssetB = pool.AssetB,
-                    ReserveA = pool.ReserveA.Output.Amount, ReserveB = pool.ReserveB.Output.Amount, InputSide = model.InputSide,
+                    ReserveA = pool.ReserveA.Output.Amount, ReserveB = pool.ReserveB.Output.Amount, InputSide = inputSide,
                     Amount = amount, MinimumReceive = minimum, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 return AddExchangeDraft(draft);
             }
