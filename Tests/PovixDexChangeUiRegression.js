@@ -6,6 +6,7 @@ const vm = require('node:vm');
 
 module.exports = async function checkChangeUi(wallet, fixture) {
     const originalAddresses = wallet.addresses();
+    const events = {};
     const nodes = new Map();
     const node = id => {
         if (!nodes.has(id)) nodes.set(id, {
@@ -25,7 +26,7 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     let pending = false, refresh, preparations = 0;
     const quotedFee = fixture.draft.feeAtomic;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-create.js'), 'utf8'), {
-        window: { PovixTokenWallet: wallet }, document: { getElementById: node, querySelectorAll: () => [] },
+        window: { PovixTokenWallet: wallet }, document: { getElementById: node, querySelectorAll: () => [], addEventListener: (name, fn) => { events[name] = fn; } },
         Option: class { constructor(text, value) { this.text = text; this.value = value; } },
         URLSearchParams, setInterval(callback) { refresh = callback; },
         fetch: async (url, options) => {
@@ -46,22 +47,16 @@ module.exports = async function checkChangeUi(wallet, fixture) {
             return { ok: true, json: async () => result };
         }
     });
-    const bytes = new TextEncoder().encode(JSON.stringify(fixture.wallet));
-    node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.slice().buffer }];
-    node('wallet-password').value = 'dex-test-password-only';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
-    node('wallet-choice').value = '0';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
+    await events['povix-wallet-change']();
     assert.equal(node('DestinationAddress').value, originalAddresses[0], 'opening the wallet defaults the issuance to an existing key');
     assert(node('destination-help').textContent.includes('já salvo'));
     node('DestinationAddress').value = '0'.repeat(64);
     node('token-form').listeners.input();
     assert(node('review-destination-help').textContent.includes('não pertence'), 'external issuance must explain why creator authorization alone cannot spend it');
-    node('wallet-lock').listeners.click();
-    node('wallet-password').value = 'dex-test-password-only';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
-    node('wallet-choice').value = '0';
-    await node('wallet-form').listeners.submit({ preventDefault() {} });
+    wallet.lock(); await events['povix-wallet-change']();
+    const bytes = new TextEncoder().encode(JSON.stringify(fixture.wallet));
+    await wallet.readFile({ size: bytes.length, arrayBuffer: async () => bytes.buffer }, 'dex-test-password-only');
+    await wallet.selectWallet('0'); await events['povix-wallet-change']();
     assert.equal(node('DestinationAddress').value, '0'.repeat(64), 'opening a wallet must preserve an explicitly chosen destination');
     assert.equal(node('app-message').textContent, '');
     assert.equal(wallet.isUnlocked(), true);

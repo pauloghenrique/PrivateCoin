@@ -3,7 +3,7 @@
     <div class="page-intro"><span class="eyebrow">PERFIL E PERMISSÕES</span><h1>Edite o perfil do seu token.</h1><p>A carteira do criador autoriza cada alteração com uma assinatura local.</p></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div class="create-grid"><div>
-        @Html.Partial("_Wallet")
+
         <form id="profile-form" class="card token-form">
             @Html.AntiForgeryToken()
             <label for="TokenId">Token confirmado criado por você</label><select id="TokenId" required disabled><option value="">Abra a carteira para consultar</option></select>

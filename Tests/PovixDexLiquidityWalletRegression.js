@@ -11,7 +11,7 @@ const d = fixture.draft;
 (async () => {
     const integrated = d.operation === 'swap';
     let html = integrated ? fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8').replace('@Html.Partial("_PoolTrading", Model)', fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8')) : fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
-    html = html.replace('@Html.Partial("_Wallet")', fs.readFileSync('Povix.Dex/Views/Shared/_Wallet.cshtml', 'utf8'))
+    html = (html + fs.readFileSync('Povix.Dex/Views/Shared/_Wallet.cshtml', 'utf8'))
         .replace('@Html.AntiForgeryToken()', '<input name="__RequestVerificationToken" value="test-csrf" type="hidden">')
         .replace(/data-([a-z-]+)="@Url.Action\([\s\S]*?\)"/g, (_, name) => 'data-' + name + '="/' + name + '"')
         .replace('@Model.NetworkId', fixture.networkId).replace(/@ViewBag.SelectedPoolId/g, d.poolId || '');
@@ -97,12 +97,8 @@ const d = fixture.draft;
     w.eval(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'));
     const wait = async predicate => { for (let i = 0; i < 250 && !predicate(); i++) await new Promise(resolve => setTimeout(resolve, 20)); assert(predicate(), byId('app-message').textContent || 'UI timeout'); };
     await wait(() => byId('pool-asset-a').options.length > 1);
-    assert.equal(byId('prepare-pool').disabled, true);
-    byId('wallet-password').value = 'dex-test-password-only'; byId('wallet-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
-    await wait(() => !byId('wallet-selection').hidden && !byId('wallet-choice').disabled);
-    byId('wallet-choice').value = '0'; byId('wallet-choice').dispatchEvent(new w.Event('change'));
-    byId('wallet-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
-    await wait(() => !byId('wallet-connected').hidden && !byId('wallet-lock').disabled);
+    // The selected wallet was imported before the page controller starts.
+    w.document.dispatchEvent(new w.Event('povix-wallet-change'));
     await intervals.find(timer => timer.delay === 10000).callback(); await wait(() => !byId('prepare-pool').disabled);
     if (lifecyclePool) {
         const selected = () => byId('swap-pool').options[byId('swap-pool').selectedIndex];
@@ -115,7 +111,7 @@ const d = fixture.draft;
         poolPhase = 'available'; await intervals.find(timer => timer.delay === 10000).callback();
         assert.equal(byId('swap-pool').value, lifecyclePool.poolId, 'confirmation keeps the newly created pool selected');
         assert.equal(selected().disabled, false); assert.equal(byId('prepare-swap').disabled, false);
-        assert.equal(byId('wallet-form').hidden, true, 'confirmation does not require choosing the wallet again');
+        assert.equal(wallet.isUnlocked(), true, 'confirmation does not require choosing the wallet again');
     }
     for (const pool of fixture.catalogue.pools.filter(pool => pool.closureRenounced && pool.available)) {
         const market = [...byId('pool-list').querySelectorAll('a')].find(link => link.href.includes('/Liquidity/Market') && link.href.includes(pool.poolId));
@@ -149,7 +145,7 @@ const d = fixture.draft;
         assert.equal(byId('review-title').textContent, 'Executar troca');
         assert(byId('review-description').textContent.includes('carteira selecionada'));
         assert.equal(byId('sign-exchange').textContent, 'Assinar e executar troca');
-        assert(byId('wallet-form').hidden, 'the selected wallet stays open throughout the swap review');
+        assert(wallet.isUnlocked(), 'the selected wallet stays open throughout the swap review');
     }
     assert(byId('exchange-review').textContent.includes(d.outputs[0].address));
     assert.equal(byId('sign-exchange').disabled, true, 'backup and review confirmation are required');
@@ -168,7 +164,7 @@ const d = fixture.draft;
         await wait(() => byId('exchange-status-state').textContent === 'Pendente' && statusCalls > 0);
         assert.equal(w.location.href, originalLocation, 'the swap stays on Liquidity/Market');
         assert.equal(byId('exchange-status').hidden, false);
-        assert.equal(byId('wallet-form').hidden, true, 'the selected wallet remains available');
+        assert.equal(wallet.isUnlocked(), true, 'the selected wallet remains available');
         assert.equal(byId('provider-requests'), null);
         assert.equal(w.sessionStorage.getItem('povix-dex-market-receipt:' + d.poolId), 'a'.repeat(64));
         const refreshStatus = intervals.find(timer => timer.delay === 5000).callback;

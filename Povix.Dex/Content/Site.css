@@ -316,3 +316,10 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .dex-disclaimer { font-size: 11px; color: var(--muted); margin-top: 18px; }
 @media (max-width: 950px) { .dex-home .site-header { height: auto; min-height: 92px; gap: 20px; padding-block: 18px; flex-wrap: wrap; } .dex-hero { gap: 25px; } }
 @media (max-width: 740px) { .dex-hero { grid-template-columns: 1fr; } .dex-network { display: none; } .dex-metrics > div { padding: 0 14px; } .dex-metrics strong { font-size: 22px; } .dex-metrics em { display: none; } .dex-list-heading, .dex-tools { padding: 20px; } .dex-tools { flex-direction: column; align-items: stretch; } .dex-tools > div:last-child { width: 100%; } .dex-tabs button { flex: 1; } .dex-list-footer { flex-direction: column; } .dex-home .site-header nav { gap: 14px; justify-content: flex-start; } }
+/* A single wallet connection, accessible from the menu on every page. */
+#wallet-menu { width:min(560px, calc(100vw - 32px)); max-height:85vh; overflow:auto; border:1px solid var(--line); border-radius:14px; padding:20px; color:var(--ink); background:var(--white); }
+#wallet-menu::backdrop { background:rgb(0 0 0 / 40%); }
+#wallet-menu .wallet-card { border:0; margin:0; padding:16px 0; }
+#wallet-menu .wallet-form { display:grid; grid-template-columns:1fr; }
+#wallet-menu [hidden] { display:none !important; }
+#wallet-message { color:var(--muted); font-size:13px; }

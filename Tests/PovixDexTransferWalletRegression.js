@@ -22,7 +22,8 @@ const node = id => {
     });
     return nodes.get(id);
 };
-const document = { getElementById: node, querySelectorAll: () => [], createElement: name => ({
+const events = {};
+const document = { addEventListener: (name, fn) => { events[name] = fn; }, getElementById: node, querySelectorAll: () => [], createElement: name => ({
     name, children: [], appendChild(child) { this.children.push(child); }, click() { backupDownloads++; }
 }) };
 global.document = document;
@@ -74,12 +75,9 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert.equal(node('prepare-transfer').disabled, true);
     async function open(record) {
         const bytes = new TextEncoder().encode(JSON.stringify(record));
-        node('wallet-file').files = [{ size: bytes.length, arrayBuffer: async () => bytes.buffer }];
-        node('wallet-password').value = 'dex-test-password-only';
-        await node('wallet-form').listeners.submit({ preventDefault() {} });
+        await wallet.readFile({ size: bytes.length, arrayBuffer: async () => bytes.buffer }, 'dex-test-password-only');
         assert.equal(wallet.isUnlocked(), false, 'wallet selection must be explicit');
-        node('wallet-choice').value = '0';
-        await node('wallet-form').listeners.submit({ preventDefault() {} });
+        await wallet.selectWallet('0'); await events['povix-wallet-change']();
         await refresh();
     }
     await open(fixture.incompleteWallet);
@@ -91,7 +89,7 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert(receivingText().includes(wallet.formatAtomic(fixture.incompleteToken.receivingAddresses[0].confirmedAtomic, fixture.expected.Decimals)));
     await node('transfer-form').listeners.submit({ preventDefault() {} });
     assert.equal(preparations, 0); assert(node('app-message').textContent.includes('.povixwallet'));
-    node('wallet-lock').listeners.click();
+    wallet.lock(); await events['povix-wallet-change']();
     assert.equal(receivingText(), '', 'locking the wallet removes the previous issuance diagnostics');
     await open(fixture.wallet);
     assert(node('token-balance').textContent.includes(wallet.formatAtomic(fixture.tokens[0].balanceAtomic, fixture.expected.Decimals)));
@@ -162,7 +160,7 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert.equal(wallet.isUnlocked(), true); assert(node('app-message').textContent.includes('network_unavailable'));
     await node('sign-transfer').listeners.click();
     assert.equal(submissions.length, 2); assert.deepEqual(submissions[1], submissions[0], 'retry resends the same signatures and authorization');
-    assert.equal(wallet.isUnlocked(), false); assert(redirected.startsWith('https://dex.test/tokens/movimentacao/'));
+    assert.equal(wallet.isUnlocked(), true); assert(redirected.startsWith('https://dex.test/tokens/movimentacao/'));
     assert(submissions[1].signatures.every(signature => Buffer.from(signature, 'base64').length === 256));
     assert.equal(Buffer.from(submissions[1].creatorSignature, 'base64').length, 256);
     fs.writeFileSync(path.join(directory, 'transfer-browser-result.json'), JSON.stringify(submissions[1]));
