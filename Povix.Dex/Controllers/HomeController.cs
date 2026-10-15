@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
@@ -10,7 +10,9 @@ namespace Povix.Dex.Controllers
     {
         public ActionResult Index()
         {
-            return RedirectToAction("Create", "Tokens");
+            Response.Cache.SetCacheability(HttpCacheability.NoCache);
+            Response.Cache.SetNoStore();
+            return View();
         }
 
         public ActionResult About()
