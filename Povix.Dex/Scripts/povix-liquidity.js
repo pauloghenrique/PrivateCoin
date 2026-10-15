@@ -77,6 +77,18 @@
     }
     function update() {
         updateUserLiquidity();
+        if (byId('pool-reward-mode')) {
+            const loyalty = byId('pool-reward-mode').value === 'loyalty';
+            byId('pool-reward-title').textContent = loyalty ? 'Bônus por permanência' : 'Participação nas taxas';
+            byId('pool-reward-summary').textContent = loyalty ? 'Incentiva liquidez estável.' : 'Destinar aos provedores uma parcela das taxas geradas pelas negociações.';
+            byId('pool-reward-detail').textContent = loyalty ? 'O criador define a parcela das taxas, a reserva mínima e a regra de saída. O provedor escolherá dias, meses ou anos. Este cadastro ainda não gera pagamentos de bônus.' :
+                'Recompensa acompanha o uso do pool. Retorno varia conforme o volume.';
+            if (byId('pool-loyalty-policy')) {
+                byId('pool-loyalty-policy').hidden = !loyalty;
+                byId('pool-loyalty-policy').disabled = !loyalty || busy || Boolean(draft) || !wallet.isUnlocked();
+                for (const id of ['pool-loyalty-fee', 'pool-loyalty-minimum']) byId(id).required = loyalty;
+            }
+        }
         const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate && assets.length > 0, editing = !busy && !draft;
         window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         byId('pool-fields').disabled = !editing || !unlocked;
@@ -147,6 +159,15 @@
             addReview('Quantidade recebida pelo comprador', atomicText(result.receiveAtomic, output.decimals) + ' ' + output.symbol);
             addReview('Mínimo a receber', atomicText(result.minimumReceiveAtomic, output.decimals) + ' ' + output.symbol);
         }
+        if (result.operation === 'pool') {
+            addReview('Opção de recompensa', result.rewardMode === 'loyalty' ? 'Bônus por permanência · configuração, sem pagamento de bônus ativo' : 'Participação nas taxas · retorno varia conforme o volume');
+        }
+        if (result.operation === 'pool' && result.loyaltyPolicy) {
+            addReview('Parcela das taxas para bônus', atomicText(result.loyaltyPolicy.feeBasisPoints, 2) + '%');
+            addReview('Reserva mínima planejada (não debitada)', atomicText(result.loyaltyPolicy.minimumReserveAtomic, 8) + ' POVIX');
+            addReview('Saída antecipada planejada', result.loyaltyPolicy.earlyExit === 'locked' ? 'Bloquear retirada até o fim do prazo' : 'Permitir retirar o aporte com perda do bônus');
+            addReview('Prazo', 'O provedor escolherá dias, meses ou anos; bloqueio e pagamentos ainda não estão ativos.');
+        }
         if (result.operation === 'pool') addReview('Liquidez de usuários', result.allowUserLiquidity ? 'Habilitada: adicionar e remover a própria participação' : 'Desabilitada');
         if (['add', 'remove'].includes(result.operation)) {
             byId('review-title').textContent = result.operation === 'add' ? 'Adicionar liquidez' : 'Remover minha liquidez';
@@ -197,9 +218,19 @@
             for (const [id, value] of [[a.id, reserveAAtomic], [b.id, reserveBAtomic]]) funds.set(id, (funds.get(id) || 0n) + BigInt(value));
             ensureFunds(funds);
             const allowUserLiquidity = Boolean(byId('pool-user-liquidity')?.checked);
-            const wanted = { operation: 'pool', allowUserLiquidity, assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
+            const rewardMode = byId('pool-reward-mode')?.value || 'fees';
+            if (!['fees', 'loyalty'].includes(rewardMode)) throw new Error('Escolha uma opção de recompensa válida.');
+            let loyaltyPolicy = null;
+            if (rewardMode === 'loyalty') {
+                const feeBasisPoints = Number(wallet.parseSupply(byId('pool-loyalty-fee').value, 2));
+                const minimumReserveAtomic = wallet.parseSupply(byId('pool-loyalty-minimum').value, 8), earlyExit = byId('pool-loyalty-exit').value;
+                if (feeBasisPoints > 10000 || !['forfeit', 'locked'].includes(earlyExit)) throw new Error('Defina uma parcela de até 100% das taxas e uma regra de saída válida.');
+                loyaltyPolicy = { feeBasisPoints, minimumReserveAtomic, earlyExit };
+            }
+            const wanted = { operation: 'pool', rewardMode, loyaltyPolicy, allowUserLiquidity, assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.preparePoolUrl, { AssetA: a.id, AssetB: b.id, AmountA: byId('pool-amount-a').value,
-                AmountB: byId('pool-amount-b').value, AllowUserLiquidity: allowUserLiquidity, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
+                AmountB: byId('pool-amount-b').value, AllowUserLiquidity: allowUserLiquidity, RewardMode: rewardMode, LoyaltyFeePercent: rewardMode === 'loyalty' ? byId('pool-loyalty-fee').value : '',
+                LoyaltyMinimumReserve: rewardMode === 'loyalty' ? byId('pool-loyalty-minimum').value : '', LoyaltyEarlyExit: loyaltyPolicy?.earlyExit || '', FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
@@ -366,7 +397,7 @@
             pools.forEach(pool => {
                 const entry = document.createElement('a'); entry.href = receipt(pool.poolId);
                 entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
-                const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada') + ' · Pool ' + pool.poolId;
+                const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Recompensa: ' + (pool.rewardMode === 'loyalty' ? 'Bônus por permanência (configuração, sem pagamento ativo)' : 'Participação nas taxas') + ' · Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada') + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 const price = document.createElement('small');
                 try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
