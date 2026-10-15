@@ -30,6 +30,17 @@ namespace Povix.Dex.Controllers
         }
 
         [HttpPost, ValidateAntiForgeryToken]
+        public ActionResult PrepareLiquidityChange(LiquidityChangeViewModel model, string[] publicKeys, string changeAddress)
+        {
+            if (!ModelState.IsValid) return Error("Confira a pool e a participação de liquidez.", 400, "fields_invalid");
+            return Read(() => { Session["Povix.Dex.TokenDraftSession"] = true;
+                return MvcApplication.TokenNetwork.PrepareLiquidityChange(model, TokensController.DecodePublicKeys(publicKeys), changeAddress, Session.SessionID); });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        public Task<ActionResult> SubmitLiquidityChange(string draftId, string[] signatures) => Submit(draftId, signatures, false, false, true);
+
+        [HttpPost, ValidateAntiForgeryToken]
         public ActionResult PrepareSwap(SwapViewModel model, string[] publicKeys, string changeAddress)
         {
             if (!ModelState.IsValid) return Error("Confira a pool, a quantidade, o mínimo a receber e a taxa.", 400, "fields_invalid");
@@ -55,13 +66,13 @@ namespace Povix.Dex.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         public Task<ActionResult> SubmitSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true);
 
-        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool reserveOperation = false)
+        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool reserveOperation = false, bool liquidityChange = false)
         {
             NoCache();
             if (!ValidDraft(draftId) || !ValidSignatures(signatures)) return Error("Assinaturas inválidas.", 400, "signatures_invalid");
             if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503, "network_unavailable");
             try {
-                string id = reserveOperation ? await MvcApplication.TokenNetwork.SubmitReserveOperationAsync(draftId, signatures, Session.SessionID) :
+                string id = liquidityChange ? await MvcApplication.TokenNetwork.SubmitLiquidityChangeAsync(draftId, signatures, Session.SessionID) : reserveOperation ? await MvcApplication.TokenNetwork.SubmitReserveOperationAsync(draftId, signatures, Session.SessionID) :
                     swap ? await MvcApplication.TokenNetwork.SubmitSwapAsync(draftId, signatures, Session.SessionID) :
                     await MvcApplication.TokenNetwork.SubmitPoolAsync(draftId, signatures, Session.SessionID);
                 return Json(new { transactionId = id, receiptUrl = Url.Action("Details", new { id }) });

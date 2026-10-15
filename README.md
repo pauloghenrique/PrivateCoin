@@ -315,11 +315,11 @@ encerramento exigem as assinaturas do dono. Blocos históricos v17 mantêm a
 exigência original de assinatura das reservas. A ativação requer atualizar o
 DEX e os nós da rede em conjunto.
 
-Novos blocos usam `ConsensusVersion = 18`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17 com suas regras originais e permite
-sua extensão em v18. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
+Novos blocos usam `ConsensusVersion = 19`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18 com suas regras originais e permite
+sua extensão em v19. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
 v4 a v14 mantêm os lotes originais de 20 quando exigidos por suas regras.
-Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17 são revalidados
+Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18 são revalidados
 antes da migração. Nós e clientes DEX precisam atualizar juntos, pois o handshake
 rejeita versões diferentes. As pendências antigas passam a aguardar inclusão
 em bloco, sem apagar transações ou alterar saldos já confirmados.
@@ -474,3 +474,22 @@ remota: software malicioso pode anunciar os hashes oficiais ou adulterar seu
 binário/recursos. Os nós honestos continuam validando toda cadeia e rejeitando
 resultados contrários às suas regras; nenhum hash anunciado prova que um peer
 executa exatamente o código oficial.
+
+### Liquidez de usuários nas pools (v19)
+
+Na criação em Povix.Dex, “Permitir que usuários adicionem e removam liquidez”
+define uma permissão permanente, desabilitada por padrão. Pools existentes
+continuam com liquidez de usuários desabilitada. Quando habilitada, cada aporte
+recebe participação proporcional aos dois ativos; a retirada paga apenas a
+participação da carteira que assina, incluindo sua proporção das taxas acumuladas.
+A interface recebe o limite do primeiro ativo no aporte e uma porcentagem da
+participação na retirada. Arredondamentos usam inteiros: aportes arredondam para
+cima e retiradas para baixo. Quantidades menores que uma unidade atômica são
+rejeitadas. O criador mantém participação positiva até encerrar a pool; não pode
+encerrá-la enquanto outros provedores tiverem participação.
+
+Permissão e participações integram o payload assinado e são verificadas pelo Core;
+as reservas continuam fora do saldo livre. A taxa da rede exige POVIX livres.
+A v19 preserva a leitura dos blocos v18 e caches anteriores. Nós e clientes devem
+ser atualizados juntos para validar novas operações; a identidade de rede segue
+a regra existente de hash dos fontes do Core.

@@ -27,11 +27,11 @@ namespace Povix.Dex.Services
                     var record = submitted.FirstOrDefault(item => item.Transaction.Id == tx.Id && item.Exchange?.PoolId == poolId);
                     bool next = started && !closed && tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 0) &&
                         tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 1) &&
-                        (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose || record != null);
+                        (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove || record != null);
                     if (tx.Id != poolId && !next) continue;
                     if (tx.Outputs.Count < 2) continue;
                     string operation = tx.Id == poolId ? "pool" : tx.Kind == TransactionKind.LiquidityClose ? "close" :
-                        tx.Kind == TransactionKind.LiquiditySwap ? "swap" : record.Exchange.Operation;
+                        tx.Kind == TransactionKind.LiquiditySwap ? "swap" : tx.Kind == TransactionKind.LiquidityAdd ? "add" : tx.Kind == TransactionKind.LiquidityRemove ? "remove" : record.Exchange.Operation;
                     long a = tx.Outputs[0].Amount, b = tx.Outputs[1].Amount;
                     history.Add(new MarketMovement { Id = tx.Id, Operation = operation, Status = "confirmed", Height = block.Height,
                         Time = UnixTime(block.TimestampUtcTicks), ReserveA = a, ReserveB = b,

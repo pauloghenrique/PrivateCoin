@@ -25,7 +25,8 @@ const d = fixture.draft;
     const wallet = w.PovixTokenWallet;
     const recordText = JSON.stringify(fixture.wallet);
     await wallet.importFile({ size: Buffer.byteLength(recordText), arrayBuffer: async () => new TextEncoder().encode(recordText).buffer }, 'dex-test-password-only');
-    const expected = { operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
+    const previousPool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
+    const expected = { allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
@@ -39,15 +40,18 @@ const d = fixture.draft;
         draft => { draft.assetA.id = draft.assetB.id; },
         draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
         await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId));
+    if (d.allowUserLiquidity) {
+        await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.participation.holders[0].sharesAtomic = '1'; }), expected, fixture.networkId));
+        await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.allowUserLiquidity = false; }), expected, fixture.networkId));
+    }
     if (d.operation === 'swap') {
         assert.equal(wallet.quoteExchange(d.inputSide === 0 ? d.reserveAAtomic : d.reserveBAtomic, d.inputSide === 0 ? d.reserveBAtomic : d.reserveAAtomic, d.amountAtomic), d.receiveAtomic);
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.inputs[draft.userInputCount].outputIndex = 2; }), expected, fixture.networkId));
         await assert.rejects(wallet.verifyExchangeDraft(d, { ...expected, minimumReceiveAtomic: String(BigInt(d.receiveAtomic) + 1n) }, fixture.networkId));
     }
     assert(BigInt(wallet.quoteExchange('4611686018427387903', '9223372036854775807', '4611686018427387903')) > 0n);
-    wallet.lock();
     const app = byId('liquidity-app');
-    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl']) app.dataset[key] = '/' + key;
+    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareLiquidityUrl', 'submitLiquidityUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl']) app.dataset[key] = '/' + key;
     app.dataset.marketUrl = '/Liquidity/Market?poolId=__id__';
     app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__'; app.dataset.statusUrl = '/status/__id__';
     const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available && (!integrated || pool.poolId === d.poolId));
@@ -68,12 +72,13 @@ const d = fixture.draft;
                 pool.statusMessage = poolPhase === 'pending' ? 'A criação aguarda validação da rede e confirmação em bloco.' : 'A criação foi validada e aguarda confirmação em bloco.';
             }
         }
+        else if (url === '/prepareLiquidityUrl') { preparations++; result = d; assert.equal(body.get('Shares'), d.sharesAtomic); assert.equal(body.get('Operation'), d.operation); }
         else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
         else if (url === '/prepareReservesUrl') {
             preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
             assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
         }
-        else if (url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl') {
+        else if (url === '/submitLiquidityUrl' || url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl') {
             assert.equal(body.get('draftId'), d.draftId); attempts++;
             const currentSignatures = body.getAll('signatures');
             if (integrated && attempts === 1) {
@@ -121,10 +126,21 @@ const d = fixture.draft;
     }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
     if (d.operation === 'pool') {
+        byId('pool-user-liquidity').checked = Boolean(d.allowUserLiquidity);
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);
         byId('pool-amount-b').value = wallet.formatAtomic(d.reserveBAtomic, d.assetB.decimals);
+        assert.equal(byId('pool-asset-a').value, d.assetA.id, 'first asset is selected');
+        assert.equal(byId('pool-asset-b').value, d.assetB.id, 'second asset is selected');
         byId('pool-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    } else if (['add', 'remove'].includes(d.operation)) {
+        const pool = previousPool, total = BigInt(pool.participation.totalSharesAtomic), shares = BigInt(d.sharesAtomic);
+        byId('user-liquidity-pool').value = d.poolId;
+        byId('user-liquidity-operation').value = d.operation;
+        byId('user-liquidity-amount').value = d.operation === 'add' ? wallet.formatAtomic((BigInt(d.reserveAAtomic) * shares + total - 1n) / total, d.assetA.decimals) : '100';
+        byId('user-liquidity-form').dispatchEvent(new w.Event('input'));
+        assert.equal(byId('prepare-user-liquidity').disabled, false);
+        byId('user-liquidity-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
     } else if (d.operation === 'lock' || d.operation === 'close') {
         const pool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
         assert(pool.canManage); assert.equal(pool.locked, d.operation === 'close');
@@ -133,6 +149,7 @@ const d = fixture.draft;
         assert(button); button.click();
     } else {
         byId('swap-pool').value = d.poolId; byId('swap-side').value = String(d.inputSide);
+        byId('swap-side').dispatchEvent(new w.Event('input', { bubbles: true }));
         const input = d.inputSide === 0 ? d.assetA : d.assetB, output = d.inputSide === 0 ? d.assetB : d.assetA;
         byId('swap-amount').value = wallet.formatAtomic(d.amountAtomic, input.decimals);
         byId('swap-minimum').value = wallet.formatAtomic(d.minimumReceiveAtomic, output.decimals);
@@ -150,14 +167,14 @@ const d = fixture.draft;
     assert(byId('exchange-review').textContent.includes(d.outputs[0].address));
     assert.equal(byId('sign-exchange').disabled, true, 'backup and review confirmation are required');
     byId('download-backup').click(); byId('backup-confirmed').checked = true; byId('backup-confirmed').dispatchEvent(new w.Event('change'));
-    assert.equal(byId('sign-exchange').disabled, false); byId('sign-exchange').click();
+    await wait(() => !byId('sign-exchange').disabled); byId('sign-exchange').click();
     if (integrated) {
         await wait(() => byId('app-message').textContent.includes('Repita o mesmo envio') && !byId('sign-exchange').disabled);
         assert.equal(preparations, 1); assert.equal(byId('sign-actions').hidden, false);
         byId('sign-exchange').click();
     }
     await wait(() => captured !== null);
-    assert.equal(captured.length, d.operation === 'swap' ? d.userInputCount : d.inputs.length);
+    assert.equal(captured.length, ['swap', 'add', 'remove'].includes(d.operation) ? d.userInputCount : d.inputs.length);
     if (d.operation === 'lock' || d.operation === 'close') assert.equal(submittedUrl, '/submitReservesUrl');
     if (integrated) {
         assert.equal(submittedUrl, '/submitSwapUrl', 'all swaps submit directly using the buyer wallet');
