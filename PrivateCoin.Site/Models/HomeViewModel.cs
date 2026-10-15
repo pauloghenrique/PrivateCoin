@@ -105,7 +105,7 @@ namespace PrivateCoin.Site.Models
                 ? token.Name : assetId;
         }
 
-        public string FormatAssetAmount(long amount, string assetId)
+        private string FormatAssetAmount(long amount, string assetId)
         {
             if (assetId == null) return FormatTokens(amount);
             TokenDefinition token;

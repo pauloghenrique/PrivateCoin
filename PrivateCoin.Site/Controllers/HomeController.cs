@@ -14,14 +14,6 @@ namespace PrivateCoin.Site.Controllers
             return View(MvcApplication.PublicNetwork.GetDashboard());
         }
 
-        public ActionResult Transaction(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id)) return HttpNotFound("Transação não encontrada.");
-            var model = MvcApplication.PublicNetwork.GetTransactionDetails(id);
-            if (model == null) return HttpNotFound("Transação não encontrada na cadeia validada.");
-            return View(model);
-        }
-
         public ActionResult Token()
         {
             return View();
