@@ -175,24 +175,12 @@ atualização coordenada dos nós e da DEX antes da primeira produção de bloco
 alteração não agenda nem executa atualização de uma rede em funcionamento.
 Veja `Tests/README.md` para executar a regressão de tokens.
 
-## Povix Swap no site
+## Povix.Dex no site
 
-`PrivateCoin.Site` inclui o **Povix Swap** em `/swap`, integrado à API de
-ordens do serviço `PrivateCoin.Swap`. O par inicial é POVIX nativo ↔ USDT EVM
-com seis casas decimais, preço definido pela tesouraria e reservas verificadas
-nas blockchains. Ordens e reservas são persistidas em SQLite; depósitos e
-pagamentos precisam de provas de transação confirmadas.
-
-O operador realiza o pagamento por sua carteira externa. O site não guarda
-chaves privadas, não assina transações e só confirma a liquidação depois de
-verificá-la na blockchain. A operação está desativada por padrão até que rede,
-contrato, preço, carteiras, fundos e proxy estejam configurados. Consulte
-[instalação e limites operacionais](PrivateCoin.Swap/README.md).
-
-A demonstração anterior continua em `/Home/SwapDemo`, identificada como
-simulação com valores fixos e saldos fictícios. Rode
-`python3 Tests/PovixLiquidityRegression.py` para validar o serviço e
-`node Tests/PovixSwapRegression.js` para validar a demonstração.
+`PrivateCoin.Site` apresenta o **Povix.Dex** na página inicial, com informações
+sobre tokens nativos, pools de liquidez e trocas na blockchain Povix.
+O conteúdo, o menu e o rodapé oferecem acesso a https://dex.povix.org.
+As páginas locais `/swap`, `/Home/Swap` e `/Home/SwapDemo` foram removidas.
 
 ## Aplicação Desktop
 
