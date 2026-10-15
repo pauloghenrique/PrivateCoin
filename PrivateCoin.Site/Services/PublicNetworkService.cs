@@ -53,6 +53,27 @@ namespace PrivateCoin.Site.Services
             }
         }
 
+        public HomeViewModel GetTransactionDashboard(string id)
+        {
+            lock (sync)
+            {
+                // Search the complete ledger so bookmarked transactions remain accessible
+                // after leaving the explorer's 100 most recent entries.
+                var ledger = new BlockchainQueryApi(blockchain).GetLedger(0, int.MaxValue)
+                    .Where(entry => string.Equals(entry.TransactionId, id, StringComparison.OrdinalIgnoreCase)).ToArray();
+                var queue = ledger.Length > 0 ? new Transaction[0] : pending
+                    .Where(transaction => string.Equals(transaction.Id, id, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (ledger.Length == 0 && queue.Length == 0) return null;
+                return new HomeViewModel
+                {
+                    Ledger = ledger,
+                    ValidationQueue = queue,
+                    Tokens = blockchain.GetTokens().ToDictionary(token => token.Id, StringComparer.Ordinal),
+                    UpdatedAtUtc = DateTime.UtcNow
+                };
+            }
+        }
+
         private static string HashPublicKey(string publicKey)
         {
             using (var sha = System.Security.Cryptography.SHA256.Create())
