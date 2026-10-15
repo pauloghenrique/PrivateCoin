@@ -25,7 +25,7 @@
                             <dt>Emissão</dt><dd>@HomeViewModel.FormatTokens(entry.IssuedAmount)</dd>
                         </dl>
                         <h4>Saídas</h4>
-                        @foreach (var output in entry.Outputs)
+                        foreach (var output in entry.Outputs)
                         {
                             <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
                         }
@@ -42,12 +42,12 @@
                             <dt>Taxa</dt><dd>@HomeViewModel.FormatTokens(transaction.Fee)</dd>
                         </dl>
                         <h4>Entradas</h4>
-                        @foreach (var input in transaction.Inputs)
+                        foreach (var input in transaction.Inputs)
                         {
                             <p><code>@input.TransactionId</code> · saída #@input.OutputIndex</p>
                         }
                         <h4>Saídas</h4>
-                        @foreach (var output in transaction.Outputs)
+                        foreach (var output in transaction.Outputs)
                         {
                             <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
                         }
