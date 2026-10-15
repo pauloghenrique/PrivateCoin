@@ -5,7 +5,7 @@
     const wallet = window.PovixTokenWallet, byId = id => document.getElementById(id);
     const csrf = byId('pool-form').querySelector('[name="__RequestVerificationToken"]').value;
     let assets = [], pools = [], network = null, draft = null, expected = null, signatures = null;
-    let choices = null, busy = false, refreshing = false, backup = false, epoch = 0;
+    let busy = false, refreshing = false, backup = false, epoch = 0;
     const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
@@ -77,6 +77,7 @@
     }
     function update() {
         const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate, editing = !busy && !draft;
+        window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
         if (integrated) byId('swap-pool').disabled = true;
@@ -85,9 +86,6 @@
         byId('exchange-priority').disabled = !editing;
         byId('sign-exchange').disabled = busy || !draft || !ready || !backup || !byId('backup-confirmed').checked;
         byId('edit-exchange').disabled = busy; byId('download-backup').disabled = busy;
-        byId('wallet-connect').disabled = busy || Boolean(choices && !byId('wallet-choice').value);
-        byId('wallet-file').disabled = busy; byId('wallet-password').disabled = busy || Boolean(choices);
-        byId('wallet-choice').disabled = busy || !choices; byId('wallet-lock').disabled = busy;
         byId('pool-list').querySelectorAll('button').forEach(button => { button.disabled = !editing || !ready; });
         try { byId('exchange-fee').textContent = atomicText(fee(), 8) + ' POVIX'; } catch (_) { byId('exchange-fee').textContent = 'Consultando a taxa…'; }
         for (const side of ['a', 'b']) {
@@ -286,11 +284,11 @@
                 showReceipt(result.transactionId);
                 reset(); document.dispatchEvent(new Event('povix-pool-updated'));
                 refreshReceipt();
-            } else { wallet.lock(); location.assign(receiptUrl); }
+            } else { location.assign(receiptUrl); }
         } catch (error) { if (error.rejected) reset(); message(error.message + (error.rejected ? '' : ' Repita o mesmo envio para recuperar o resultado.')); }
         finally { busy = false; update(); if (integrated) refresh(); }
     });
-    byId('download-backup').addEventListener('click', () => { try { wallet.backup(); backup = true; update(); } catch (error) { message(error.message); } });
+    byId('download-backup').addEventListener('click', async () => { try { await wallet.backup(); backup = true; update(); } catch (error) { message(error.message); } });
     byId('backup-confirmed').addEventListener('change', update); byId('edit-exchange').addEventListener('click', reset);
     async function refresh() {
         if (refreshing || busy) return; refreshing = true; const currentEpoch = epoch;
@@ -335,33 +333,14 @@
                 const native = asset('povix'); byId('wallet-balance').textContent = native ? atomicText(native.balanceAtomic, 8) + ' POVIX livres' : 'Indisponível';
             }
         } catch (error) { network = null; byId('network-state').textContent = 'Consulta indisponível'; message(error.message); }
-        finally { refreshing = false; update(); }
+        finally { refreshing = false; update(); if (currentEpoch !== epoch) refresh(); }
     }
-    function lock() {
-        wallet.lock(); epoch++; choices = null; reset();
-        byId('wallet-form').hidden = false; byId('wallet-connected').hidden = true; byId('wallet-state').textContent = 'Bloqueada';
-        byId('wallet-selection').hidden = true; byId('wallet-password-field').hidden = false; byId('wallet-password').required = true;
-        byId('wallet-choice').required = false; byId('wallet-connect').textContent = 'Ler carteiras do arquivo';
-        assets = []; update();
-    }
-    byId('wallet-form').addEventListener('submit', async event => {
-        event.preventDefault(); if (busy) return; busy = true; message(''); update();
-        const password = byId('wallet-password').value; byId('wallet-password').value = '';
+    document.addEventListener('povix-wallet-change', async () => {
         try {
-            if (!choices) {
-                choices = byId('wallet-file').files[0] ? await wallet.readFile(byId('wallet-file').files[0], password) : await wallet.readSaved(password);
-                byId('wallet-choice').replaceChildren(new Option('Selecione uma carteira', ''));
-                choices.forEach(item => { const option = new Option(item.name + ' (' + item.addressCount + ' endereços)', item.id); option.disabled = item.addressCount === 0; byId('wallet-choice').add(option); });
-                byId('wallet-choice').required = true; byId('wallet-selection').hidden = false; byId('wallet-password-field').hidden = true;
-                byId('wallet-password').required = false; byId('wallet-connect').textContent = 'Abrir carteira selecionada';
-            } else {
-                const info = await wallet.selectWallet(byId('wallet-choice').value); epoch++; reset();
-                byId('wallet-name').textContent = info.name; byId('wallet-state').textContent = 'Assinatura local';
-                byId('wallet-form').hidden = true; byId('wallet-connected').hidden = false; byId('wallet-file').value = '';
-            }
-        } catch (error) { message(error.message); } finally { busy = false; update(); if (wallet.isUnlocked()) refresh(); }
+            epoch++; reset(); assets = [];
+            await refresh(); update();
+        } catch (error) { message(error.message); }
     });
-    byId('wallet-lock').addEventListener('click', lock); byId('wallet-file').addEventListener('change', lock); byId('wallet-choice').addEventListener('change', update);
     if (integrated && byId('swap-buy') && byId('swap-sell')) {
         byId('swap-side').value = '1';
         for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
@@ -393,7 +372,6 @@
     }
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
-    if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um backup cifrado neste navegador. Informe a senha ou escolha outro arquivo.';
     if (integrated) {
         try { const saved = sessionStorage.getItem(receiptStorageKey); if (/^[0-9a-f]{64}$/.test(saved || '')) showReceipt(saved); } catch (_) { }
         refreshReceipt(); setInterval(refreshReceipt, 5000);

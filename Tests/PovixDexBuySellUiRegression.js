@@ -18,10 +18,11 @@ class Element {
     const pool = { poolId: 'a'.repeat(64), available: true, status: 'available', assetA: { id: 'aaa', symbol: 'AAA', decimals: 2 }, assetB: { id: 'bbb', symbol: 'BBB', decimals: 2 }, reserveAAtomic: '10000', reserveBAtomic: '20000' };
     get('liquidity-app').dataset = { integrated: 'true', poolId: pool.poolId, networkUrl: '/network', catalogueUrl: '/catalogue', prepareSwapUrl: '/prepare-swap', marketUrl: '/market/__id__', receiptUrl: '/receipt/__id__' };
     get('exchange-priority').value = '2';
+    const events = {};
     let unlocked = true; const preparedSwaps = [];
     const wallet = { isUnlocked: () => unlocked, hasSavedWallet: () => false, publicKeys: () => [], addresses: () => ['address'], formatAtomic: value => value, parseSupply: value => { if (!value) throw Error(); return '100'; }, quoteExchange: () => '200', lock: () => { unlocked = false; } };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'), {
-        document: { getElementById: get, createElement: () => new Element(), addEventListener() {} }, window: { PovixTokenWallet: wallet },
+        document: { getElementById: get, createElement: () => new Element(), addEventListener(name, fn) { events[name] = fn; } }, window: { PovixTokenWallet: wallet },
         fetch: async (url, options) => {
             if (url === '/prepare-swap') { preparedSwaps.push({ side: options.body.get('InputSide'), input: options.body.get('InputAssetId'), output: options.body.get('OutputAssetId') }); return { ok: false, status: 400, json: async () => ({ error: 'Test stops before signing' }) }; }
             return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: '10000' }], pools: [pool] } };
@@ -72,7 +73,7 @@ class Element {
     await get('swap-form').handlers.submit({ preventDefault() {} });
     assert.equal(preparedSwaps.length, before, 'an invalid direction must not prepare a swap');
     get('swap-side').value = '1'; get('swap-side').handlers.change();
-    get('wallet-lock').handlers.click();
+    wallet.lock(); await events['povix-wallet-change']();
     assert.equal(get('swap-buy').disabled, true); assert.equal(get('swap-sell').disabled, true);
     get('swap-sell').handlers.click(); assert.equal(get('swap-side').value, '1');
     console.log('PASS: BUY B → A, SELL A → B, quote asset, cleared amounts and locked-wallet guards.');

@@ -22,6 +22,7 @@ async function run() {
         readSaved: async () => [{ id: '0', name: 'Criador', addressCount: 1 }], selectWallet: async () => { unlocked = true; return { name: 'Criador' }; },
         authorizeProfile: async (draft, expected, networkId) => { assert.equal(networkId, 'network'); assert.equal(draft.name, expected.name); return 'signature'; }
     };
+    const events = {};
     const requests = [];
     const fetch = async (url, options) => {
         assert.equal(options.body.get('__RequestVerificationToken'), 'csrf-test'); requests.push(url);
@@ -35,12 +36,11 @@ async function run() {
         throw Error('Unexpected URL');
     };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-token-profile.js', 'utf8'), {
-        document: { getElementById: get }, window: { PovixTokenWallet: wallet }, fetch, URLSearchParams,
+        document: { getElementById: get, addEventListener: (name, fn) => { events[name] = fn; } }, window: { PovixTokenWallet: wallet }, fetch, URLSearchParams,
         Option: class { constructor(text, value) { this.text = text; this.value = value; } }
     });
     assert.equal(get('prepare-profile').disabled, true);
-    await get('wallet-form').fire('submit'); assert.equal(unlocked, false);
-    get('wallet-choice').value = '0'; await get('wallet-form').fire('submit');
+    unlocked = true; await events['povix-wallet-change']();
     assert.equal(unlocked, true); assert.equal(get('prepare-profile').disabled, true);
     get('TokenId').value = token.tokenId; await get('TokenId').fire('change');
     assert.equal(get('Name').value, token.name); assert.equal(get('prepare-profile').disabled, false);
@@ -67,7 +67,7 @@ async function run() {
     assert.equal(renounced, true); assert.equal(get('profile-fields').disabled, true); assert.equal(get('prepare-profile').disabled, true);
     assert.match(get('profile-status').textContent, /encerramento.*bloqueados/);
     const before = requests.length; await get('profile-form').fire('submit'); assert.equal(requests.length, before);
-    await get('wallet-lock').fire('click'); assert.equal(unlocked, false); assert.equal(get('Name').value, '');
-    console.log('PASS profile UI: explicit wallet choice, selection, review, confirmation, outdated wallet rejection, retry, renunciation and locking');
+    wallet.lock(); await events['povix-wallet-change'](); assert.equal(unlocked, false); assert.equal(get('Name').value, '');
+    console.log('PASS profile UI: shared wallet session, selection, review, confirmation, outdated wallet rejection, retry, renunciation and locking');
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

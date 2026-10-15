@@ -5,7 +5,7 @@
     const wallet = window.PovixTokenWallet, byId = id => document.getElementById(id), form = byId('transfer-form');
     const csrf = form.querySelector('[name="__RequestVerificationToken"]').value;
     let network = null, tokens = [], balance = null, draft = null, expected = null, signed = null;
-    let busy = false, refreshing = false, choices = null, backupDownloaded = false, walletEpoch = 0;
+    let busy = false, refreshing = false, backupDownloaded = false, walletEpoch = 0;
     function message(text) { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; }
     async function post(url, values) {
         const body = new URLSearchParams({ __RequestVerificationToken: csrf });
@@ -63,12 +63,10 @@
     }
     function update() {
         const unlocked = wallet.isUnlocked(), token = selected(), ready = Boolean(network && network.CanCreate);
+        window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         byId('transfer-fields').disabled = busy || Boolean(draft) || !unlocked || !tokens.length;
         // A click can explain field/balance problems; preparation still checks every requirement.
         byId('prepare-transfer').disabled = busy || Boolean(draft) || !unlocked || !ready;
-        byId('wallet-connect').disabled = busy || Boolean(choices && !byId('wallet-choice').value);
-        byId('wallet-file').disabled = busy; byId('wallet-password').disabled = busy || Boolean(choices);
-        byId('wallet-choice').disabled = busy || !choices; byId('wallet-lock').disabled = busy;
         byId('sign-transfer').disabled = busy || !draft || !unlocked || !ready || !backupDownloaded || !byId('backup-confirmed').checked;
         byId('edit-transfer').disabled = busy; byId('download-backup').disabled = busy;
         byId('transfer-hint').textContent = busy ? 'Processando no seu dispositivo…' : draft ? 'Confira o resumo e assine.' : reviewIssue() || 'Revise a movimentação antes de assinar.';
@@ -170,48 +168,15 @@
         } catch (_) { network = null; byId('network-state').textContent = 'Conexão indisponível'; }
         finally { refreshing = false; update(); }
     }
-    function resetSelection() {
-        choices = null; byId('wallet-selection').hidden = true;
-        byId('wallet-choice').replaceChildren(new Option('Selecione uma carteira', '')); byId('wallet-choice').required = false;
-        byId('wallet-password-field').hidden = false; byId('wallet-password').required = true;
-        byId('wallet-connect').textContent = 'Ler carteiras do arquivo';
-    }
-    function lock() {
-        wallet.lock(); walletEpoch++; balance = null; tokens = []; resetDraft(); resetSelection();
-        byId('wallet-state').textContent = 'Bloqueada'; byId('wallet-form').hidden = false; byId('wallet-connected').hidden = true;
-        byId('TokenId').replaceChildren(new Option('Abra a carteira para consultar', ''));
-        byId('transfer-history').replaceChildren(); byId('history-empty').hidden = false;
-        byId('history-empty').textContent = 'Selecione um token para consultar os últimos 20 envios registrados neste DEX.'; update();
-    }
-    byId('wallet-form').addEventListener('submit', async event => {
-        event.preventDefault(); if (busy) return;
-        busy = true; message(''); update();
-        const password = byId('wallet-password').value; byId('wallet-password').value = '';
+    document.addEventListener('povix-wallet-change', async () => {
         try {
-            if (!choices) {
-                const file = byId('wallet-file').files[0];
-                choices = file ? await wallet.readFile(file, password) : await wallet.readSaved(password);
-                byId('wallet-choice').replaceChildren(new Option('Selecione uma carteira', ''));
-                choices.forEach(item => {
-                    const option = new Option(item.name + (item.addressCount ? ' (' + item.addressCount + ' endereços)' : ' (sem endereços)'), item.id);
-                    option.disabled = item.addressCount === 0; byId('wallet-choice').add(option);
-                });
-                byId('wallet-choice').required = true; byId('wallet-selection').hidden = false;
-                byId('wallet-password-field').hidden = true; byId('wallet-password').required = false;
-                byId('wallet-connect').textContent = 'Abrir carteira selecionada';
-                byId('wallet-choice-help').textContent = 'Escolha a carteira que criou o token. Carteiras sem endereços não podem assinar.';
-                return;
-            }
-            const info = await wallet.selectWallet(byId('wallet-choice').value);
-            walletEpoch++; resetDraft(); balance = null; tokens = [];
-            byId('wallet-name').textContent = info.name; byId('wallet-state').textContent = 'Assinatura local';
-            byId('wallet-form').hidden = true; byId('wallet-connected').hidden = false; byId('wallet-file').value = '';
-            await refreshWallet();
+            walletEpoch++; balance = null; tokens = []; resetDraft();
+            byId('TokenId').replaceChildren(new Option('Conecte a carteira no menu', ''));
+            byId('transfer-history').replaceChildren();
+            if (wallet.isUnlocked()) await refreshWallet();
+            update();
         } catch (error) { message(error.message); }
-        finally { busy = false; update(); }
     });
-    byId('wallet-file').addEventListener('change', () => { lock(); message(''); });
-    byId('wallet-choice').addEventListener('change', update); byId('wallet-lock').addEventListener('click', lock);
     byId('TokenId').addEventListener('change', () => { resetDraft(); update(); history(); });
     function fieldsChanged() { if (!draft) { message(''); update(); } }
     form.addEventListener('input', fieldsChanged);
@@ -239,7 +204,7 @@
         } catch (error) { resetDraft(); message(error.message); }
         finally { busy = false; update(); }
     });
-    byId('download-backup').addEventListener('click', () => { try { wallet.backup(); backupDownloaded = true; update(); } catch (error) { message(error.message); } });
+    byId('download-backup').addEventListener('click', async () => { try { await wallet.backup(); backupDownloaded = true; update(); } catch (error) { message(error.message); } });
     byId('backup-confirmed').addEventListener('change', update);
     byId('edit-transfer').addEventListener('click', () => { resetDraft(); message(''); });
     byId('sign-transfer').addEventListener('click', async () => {
@@ -253,12 +218,11 @@
             const result = await post(app.dataset.submitUrl, { draftId: draft.draftId, ...signed });
             const url = new URL(result.receiptUrl, location.origin);
             if (url.origin !== location.origin) throw new Error('Comprovante inválido.');
-            wallet.lock(); location.assign(url.href);
+            location.assign(url.href);
         } catch (error) {
             if (error.rejected) resetDraft();
             message(error.message + (error.rejected ? '' : ' Se o envio foi interrompido, repita o mesmo envio para recuperar o comprovante.'));
         } finally { busy = false; update(); }
     });
-    if (wallet.hasSavedWallet()) byId('wallet-file-help').textContent = 'Há um arquivo cifrado salvo neste navegador. Informe a senha ou escolha outro arquivo.';
     update(); refreshNetwork(); setInterval(refreshNetwork, 10000);
 })();

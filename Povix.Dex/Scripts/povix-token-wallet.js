@@ -8,6 +8,14 @@
     const algorithm = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
     let active = null;
     let staged = null;
+    const SESSION = 'povix.dex.wallet-session.v1';
+    let sessionPassword = null;
+    let automaticPassword = false;
+    function rememberSession() {
+        if (!global.sessionStorage || !active || !sessionPassword) return;
+        try { global.sessionStorage.setItem(SESSION, JSON.stringify({ password: sessionPassword, automaticPassword, selected: String(active.selectedIndex), record: active.record })); }
+        catch (_) { throw new Error('Permita o armazenamento de sessão para manter a carteira conectada entre as telas.'); }
+    }
 
     function requireCrypto() {
         if (!global.crypto || !global.crypto.subtle) throw new Error('Abra o Povix.Dex em HTTPS para assinar com segurança.');
@@ -119,6 +127,7 @@
         catch (_) { throw new Error('Não foi possível salvar a carteira cifrada neste navegador. Libere espaço ou permita o armazenamento local.'); }
         wallet.record = record;
         wallet.wallets = wallets;
+        rememberSession();
         staged = { wallets, legacy: wallet.legacy, salt: wallet.salt, protection: wallet.protection, record };
     }
     function requireWallet() { if (!active) throw new Error('Desbloqueie sua carteira primeiro.'); return active; }
@@ -323,6 +332,8 @@
     }
     global.PovixTokenWallet = {
         async readFile(file, password) {
+            password = password || '';
+            automaticPassword = false;
             active = null;
             staged = null;
             if (!file || file.size > 9000000) throw new Error('Escolha um arquivo de carteiras de até 9 MB.');
@@ -332,7 +343,10 @@
             let record;
             if (bytes.length >= 20 && bytes[0] === 1 && bytes[1] === 0 && bytes[2] === 0 && bytes[3] === 0 &&
                 toBase64(bytes.slice(4, 20)) === '0Iyd3wEV0RGMegDAT8KX6w==') {
-                if (password.length < 10) throw new Error('Defina uma senha de pelo menos 10 caracteres para a cópia local.');
+                if (!password) {
+                    password = toBase64(crypto.getRandomValues(new Uint8Array(32)));
+                    automaticPassword = true;
+                }
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 20000);
                 try {
@@ -357,12 +371,16 @@
                 catch (_) { throw new Error('Arquivo inválido. Escolha wallet.dat, wallets.dat ou um backup cifrado do DEX.'); }
                 finally { bytes.fill(0); }
             }
-            return read(record, password);
+            const choices = await read(record, password);
+            sessionPassword = password;
+            return choices;
         },
         async readSaved(password) {
             const saved = global.localStorage.getItem(STORAGE);
             if (!saved) throw new Error('Escolha o arquivo de carteiras primeiro.');
-            return read(JSON.parse(saved), password);
+            const choices = await read(JSON.parse(saved), password);
+            sessionPassword = password; automaticPassword = false;
+            return choices;
         },
         selectWallet,
         async importFile(file, password) {
@@ -378,7 +396,22 @@
             return selectWallet(choices[0].id);
         },
         hasSavedWallet() { try { return Boolean(global.localStorage.getItem(STORAGE)); } catch (_) { return false; } },
-        lock() { active = null; staged = null; },
+        lock() { active = null; staged = null; sessionPassword = null;
+            try { if (global.sessionStorage) global.sessionStorage.removeItem(SESSION); } catch (_) { }
+        },
+        info() { return active ? { name: active.name, addressCount: active.keys.size } : null; },
+        async restoreSession() {
+            if (!global.sessionStorage) return false;
+            try {
+                const saved = global.sessionStorage.getItem(SESSION);
+                if (!saved) return false;
+                const session = JSON.parse(saved);
+                await read(session.record, session.password);
+                sessionPassword = session.password; automaticPassword = !!session.automaticPassword;
+                await selectWallet(session.selected);
+                return true;
+            } catch (_) { this.lock(); return false; }
+        },
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
@@ -404,9 +437,22 @@
                 throw new Error('A carteira não pode autorizar esta movimentação como criadora do token.');
             return toBase64(await crypto.subtle.sign(algorithm.name, creator.key, fromBase64(draft.authorizationPayload)));
         },
-        backup() {
+        async backup() {
             const wallet = requireWallet();
-            const url = URL.createObjectURL(new Blob([JSON.stringify(wallet.record)], { type: 'application/json' }));
+            let record = wallet.record;
+            if (automaticPassword) {
+                const password = global.prompt('Defina uma senha de pelo menos 10 caracteres para proteger o arquivo de backup. Ela não é necessária para navegar no DEX.');
+                if (!password) throw new Error('Backup cancelado.');
+                const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(16));
+                const protection = await derive(password, salt);
+                const clear = encoder.encode(JSON.stringify(wallet.legacy ? wallet.wallets[0] : { Wallets: wallet.wallets }));
+                let cipher;
+                try { cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, protection.aes, clear)); }
+                finally { clear.fill(0); }
+                record = { format: FORMAT, iterations: ITERATIONS, salt: toBase64(salt), iv: toBase64(iv), data: toBase64(cipher),
+                    hmac: toBase64(await crypto.subtle.sign('HMAC', protection.hmac, concat(salt, iv, cipher))) };
+            }
+            const url = URL.createObjectURL(new Blob([JSON.stringify(record)], { type: 'application/json' }));
             const anchor = document.createElement('a');
             anchor.href = url;
             anchor.download = 'povix-dex-carteira-atualizada.povixwallet';

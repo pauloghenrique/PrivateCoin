@@ -50,9 +50,8 @@ reenvios contínuos entre nós DEX.
 
 ## Abrir o arquivo de carteiras
 
-Na tela, escolha `wallet.dat` ou `wallets.dat`, clique em **Ler carteiras do
-arquivo**, selecione uma das carteiras listadas e clique em **Abrir carteira
-selecionada**. A seleção é explícita, mesmo quando o arquivo contém uma única
+No menu **Conectar carteira**, escolha `wallet.dat` ou `wallets.dat`, clique em **Ler carteiras do
+arquivo**, selecione uma das carteiras listadas e clique em **Conectar carteira**. A seleção é explícita, mesmo quando o arquivo contém uma única
 carteira. Somente a carteira escolhida fornece as chaves e os endereços para
 consultar o saldo e assinar.
 
@@ -66,8 +65,8 @@ O arquivo original do Desktop é protegido pelo usuário do Windows. Para abri-l
 diretamente, execute o [Povix.WalletBridge](../Povix.WalletBridge/README.md) no
 seu Windows com a origem HTTPS do DEX autorizada. A leitura passa exclusivamente
 por `127.0.0.1:4781`; o arquivo e a senha não são enviados ao servidor do DEX.
-Defina uma senha para guardar a cópia cifrada no navegador. O original permanece
-inalterado. Se o navegador solicitar permissão de acesso à rede local, permita
+A cópia local é cifrada com uma senha aleatória gerada pelo navegador, sem pedir
+que você crie uma senha para conectar. O original permanece inalterado. Se o navegador solicitar permissão de acesso à rede local, permita
 a conexão com o auxiliar.
 
 Para escolher o arquivo correto, clique em **Pasta da carteira** no Desktop:
@@ -77,9 +76,13 @@ Use o diagnóstico local `Povix.WalletBridge.exe --check-wallet "C:\caminho\wall
 para verificar a proteção do Windows e o formato antes da criação da cópia cifrada.
 Consulte os códigos e as instruções no README do auxiliar.
 
-Também é possível listar as carteiras da cópia cifrada já salva no navegador:
-deixe o seletor de arquivo vazio e informe a senha existente. Backups antigos
-contendo uma única carteira continuam compatíveis.
+A carteira selecionada vale para criar, movimentar e editar tokens, pools,
+trocas e comprovantes na mesma aba. Navegar, recarregar ou enviar operações
+não exige outra conexão. Use **Desconectar** no menu para encerrar a sessão.
+Backups `.povixwallet` já cifrados precisam da senha original somente na abertura;
+backups antigos contendo uma única carteira continuam compatíveis.
+Ao exportar uma carteira conectada sem senha, defina uma senha para proteger
+o arquivo de backup. Essa senha não é exigida para navegar entre as telas.
 
 ### Exportação alternativa sem auxiliar em execução
 
@@ -101,8 +104,11 @@ Garantias de validador e UTXOs reservados não ficam disponíveis para essa taxa
 
 O backup usa PBKDF2-SHA256 com 210.000 iterações, AES-256-CBC e HMAC-SHA256
 (encrypt-then-MAC com chaves independentes). O navegador guarda somente o
-backup cifrado em armazenamento local. Desbloquear mantém o material privado
-em memória até bloquear, sair ou recarregar a página. Não há scripts externos
+backup cifrado em armazenamento local. A sessão da aba guarda a cópia cifrada,
+a credencial de abertura e o índice da carteira em `sessionStorage`, permitindo
+reimportar as chaves ao navegar sem enviá-las ao servidor. **Desconectar** remove
+essa sessão; uma nova aba independente não herda a conexão. As chaves importadas
+são descartadas da memória ao sair da página. Não há scripts externos
 na tela; a política CSP permite scripts da mesma origem e conexões ao servidor
 do DEX e ao auxiliar de loopback fixo.
 

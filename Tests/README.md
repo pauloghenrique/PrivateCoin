@@ -494,3 +494,11 @@ MONO_PATH=PrivateCoin.Site/bin mono work/PrivateCoinSiteTransactionViewRegressio
 Valida a página com o parser Razor usado pelo MVC. Detecta erros nos loops
 aninhados que a compilação padrão do projeto não verifica e que causavam
 "An error occurred while processing your request." ao abrir os detalhes.
+
+## Sessão compartilhada da carteira do DEX
+
+Execute `node Tests/PovixDexWalletSessionRegression.js` e
+`node Tests/PovixDexWalletMenuRegression.js` (sem dependências externas).
+Verifica conexão DPAPI sem senha informada, seleção preservada na navegação,
+assinatura após restauração, novas chaves, backup cifrado exportado, isolamento
+de abas, desconexão e descarte de sessões inválidas.

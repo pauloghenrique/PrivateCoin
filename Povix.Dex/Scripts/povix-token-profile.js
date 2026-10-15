@@ -3,18 +3,17 @@
     const app = document.getElementById('profile-app');
     if (!app) return;
     const wallet = window.PovixTokenWallet, el = id => document.getElementById(id);
-    let tokens = [], choices = null, draft = null, expected = null, signature = null, busy = false;
+    let tokens = [], draft = null, expected = null, signature = null, busy = false, walletEpoch = 0;
     const selected = () => tokens.find(token => token.tokenId === el('TokenId').value);
     function message(text) { el('app-message').textContent = text; el('app-message').hidden = !text; }
     function update() {
         const token = selected(), unlocked = wallet.isUnlocked(), editable = unlocked && token && !token.renounced;
+        window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         el('TokenId').disabled = busy || !!draft || !unlocked;
         el('profile-fields').disabled = busy || !!draft || !editable;
         el('prepare-profile').disabled = busy || !!draft || !editable;
         el('sign-profile').disabled = busy || !draft || !unlocked || !el('confirm-profile').checked;
-        ['wallet-file', 'wallet-password', 'wallet-lock', 'cancel-profile'].forEach(id => { el(id).disabled = busy; });
-        el('wallet-choice').disabled = busy || !choices;
-        el('wallet-connect').disabled = busy || !!(choices && !el('wallet-choice').value);
+        ['cancel-profile'].forEach(id => { el(id).disabled = busy; });
     }
     function resetDraft() { draft = null; expected = null; signature = null; el('profile-review').hidden = true; el('confirm-profile').checked = false; }
     function showToken() {
@@ -36,7 +35,10 @@
         return result;
     }
     async function loadTokens() {
-        tokens = await post(app.dataset.tokensUrl, { publicKeys: wallet.publicKeys() });
+        const epoch = walletEpoch;
+        const result = await post(app.dataset.tokensUrl, { publicKeys: wallet.publicKeys() });
+        if (epoch !== walletEpoch || !wallet.isUnlocked()) return;
+        tokens = result;
         const current = el('TokenId').value || app.dataset.tokenId;
         el('TokenId').replaceChildren(new Option('Selecione um token', ''));
         tokens.forEach(token => el('TokenId').add(new Option(token.symbol + ' · ' + token.name, token.tokenId)));
@@ -44,37 +46,17 @@
         showToken();
         if (!tokens.length) message('Nenhum token confirmado foi criado pelas chaves desta carteira.');
     }
-    function lock() {
-        wallet.lock(); tokens = []; choices = null; resetDraft();
-        el('wallet-form').hidden = false; el('wallet-connected').hidden = true; el('wallet-state').textContent = 'Bloqueada';
-        el('wallet-selection').hidden = true; el('wallet-password-field').hidden = false;
-        el('wallet-password').required = true; el('wallet-choice').required = false;
-        el('wallet-connect').textContent = 'Ler carteiras do arquivo';
-        el('TokenId').replaceChildren(new Option('Abra a carteira para consultar', '')); showToken();
-    }
-    el('wallet-form').addEventListener('submit', async event => {
-        event.preventDefault(); if (busy) return; busy = true; message(''); update();
-        const password = el('wallet-password').value; el('wallet-password').value = '';
+    document.addEventListener('povix-wallet-change', async () => {
         try {
-            if (!choices) {
-                const file = el('wallet-file').files[0]; choices = file ? await wallet.readFile(file, password) : await wallet.readSaved(password);
-                el('wallet-choice').replaceChildren(new Option('Selecione uma carteira', ''));
-                choices.forEach(item => { const option = new Option(item.name + (item.addressCount ? '' : ' (sem endereços)'), item.id); option.disabled = !item.addressCount; el('wallet-choice').add(option); });
-                el('wallet-selection').hidden = false; el('wallet-choice').required = true;
-                el('wallet-password-field').hidden = true; el('wallet-password').required = false;
-                el('wallet-connect').textContent = 'Abrir carteira selecionada';
-            } else {
-                const info = await wallet.selectWallet(el('wallet-choice').value);
-                el('wallet-name').textContent = info.name; el('wallet-form').hidden = true; el('wallet-connected').hidden = false;
-                el('wallet-state').textContent = 'Assinatura local'; el('wallet-balance').textContent = 'Sem taxa para editar o perfil';
-                await loadTokens();
-            }
+            walletEpoch++; tokens = []; resetDraft();
+            el('wallet-balance').textContent = 'Sem taxa para editar o perfil';
+            el('wallet-balance-detail').hidden = true;
+            el('TokenId').replaceChildren(new Option('Conecte a carteira no menu', ''));
+            if (wallet.isUnlocked()) await loadTokens();
+            else showToken();
+            update();
         } catch (error) { message(error.message); }
-        finally { busy = false; update(); }
     });
-    el('wallet-file').addEventListener('change', lock);
-    el('wallet-choice').addEventListener('change', update);
-    el('wallet-lock').addEventListener('click', lock);
     el('TokenId').addEventListener('change', showToken);
     el('cancel-profile').addEventListener('click', () => { resetDraft(); update(); });
     el('confirm-profile').addEventListener('change', update);
