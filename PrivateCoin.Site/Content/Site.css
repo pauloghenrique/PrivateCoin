@@ -273,11 +273,7 @@ body { background: var(--cream); }
 
 /* Full transaction hashes remain readable on narrow screens. */
 .ledger-table .transaction-cell { min-width: 240px; max-width: 640px; white-space: normal; }
-.transaction-details summary { cursor: pointer; color: var(--accent, #46dec5); }
-.transaction-details code { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
-.transaction-details summary:hover code { text-decoration: underline; }
-.transaction-details summary:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
-.transaction-detail-body { margin-top: 1rem; padding: 1rem; border: 1px solid currentColor; border-radius: .5rem; }
-.transaction-detail-body h3 { font-size: 1.1rem; }
-.transaction-detail-body h4 { font-size: 1rem; }
+ .transaction-cell code, .transaction-page code { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.transaction-detail-body { padding: 1.5rem; }
+.transaction-detail-body dt { margin-top: 1rem; }
 .transaction-detail-body dd, .transaction-detail-body p { overflow-wrap: anywhere; }

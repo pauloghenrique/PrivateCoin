@@ -1,0 +1,58 @@
+@model PrivateCoin.Site.Models.HomeViewModel
+@using PrivateCoin.Site.Models
+@{
+    ViewBag.Title = "Detalhamento da transação";
+}
+<main class="explorer container transaction-page">
+    <header class="explorer-header">
+        <div><p class="eyebrow">Povix Explorer</p><h1>Detalhamento da transação</h1></div>
+        <a href="@Url.Action("Explorer", "Home")">Voltar ao explorador</a>
+    </header>
+    <section class="panel transaction-detail-body" aria-label="Dados da transação">
+        @foreach (var entry in Model.Ledger)
+        {
+
+
+                        <dl>
+                            <dt>Hash da transação</dt><dd><code>@entry.TransactionId</code></dd>
+                            <dt>Status</dt><dd>Incluída no bloco #@entry.BlockHeight · @entry.Confirmations confirmação(ões)</dd>
+                            <dt>Hash do bloco</dt><dd><code>@entry.BlockHash</code></dd>
+                            <dt>Data (UTC)</dt><dd>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</dd>
+                            <dt>Tipo</dt><dd>@HomeViewModel.EntryTypeName(entry)</dd>
+                            <dt>Token</dt><dd>@Model.LedgerTokenName(entry)</dd>
+                            <dt>Valor</dt><dd>@Model.FormatLedgerAmount(entry)</dd>
+                            <dt>Taxa</dt><dd>@HomeViewModel.FormatTokens(entry.Fee)</dd>
+                            <dt>Emissão</dt><dd>@HomeViewModel.FormatTokens(entry.IssuedAmount)</dd>
+                        </dl>
+                        <h4>Saídas</h4>
+                        @foreach (var output in entry.Outputs)
+                        {
+                            <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
+                        }
+
+        }
+        @foreach (var transaction in Model.ValidationQueue)
+        {
+
+
+                        <dl>
+                            <dt>Hash da transação</dt><dd><code>@transaction.Id</code></dd>
+                            <dt>Status</dt><dd>Aguardando validação</dd>
+                            <dt>Horário (UTC)</dt><dd>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</dd>
+                            <dt>Taxa</dt><dd>@HomeViewModel.FormatTokens(transaction.Fee)</dd>
+                        </dl>
+                        <h4>Entradas</h4>
+                        @foreach (var input in transaction.Inputs)
+                        {
+                            <p><code>@input.TransactionId</code> · saída #@input.OutputIndex</p>
+                        }
+                        <h4>Saídas</h4>
+                        @foreach (var output in transaction.Outputs)
+                        {
+                            <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
+                        }
+
+        }
+    </section>
+    <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC</p>
+</main>

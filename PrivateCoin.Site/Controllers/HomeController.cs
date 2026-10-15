@@ -14,6 +14,17 @@ namespace PrivateCoin.Site.Controllers
             return View(MvcApplication.PublicNetwork.GetDashboard());
         }
 
+        public ActionResult Transaction(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || id.Length != 64 ||
+                !System.Linq.Enumerable.All(id, System.Uri.IsHexDigit))
+                return HttpNotFound("Transação não encontrada.");
+
+            var model = MvcApplication.PublicNetwork.GetTransactionDashboard(id);
+            if (model == null) return HttpNotFound("Transação não encontrada na rede sincronizada.");
+            return View(model);
+        }
+
         public ActionResult Token()
         {
             return View();
