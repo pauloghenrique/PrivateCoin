@@ -2,7 +2,11 @@
 
 A tela `/tokens/criar` cadastra tokens nativos de quantidade fixa na **blockchain
 POVIX existente**, com as regras `TokenCreate` do `PrivateCoin.Core`. A página
-inicial redireciona para esse cadastro. Não há emissão de POVIX, mineração nem
+inicial (`/`) exibe o mercado com os ativos confirmados do catálogo da rede,
+busca por nome/símbolo/ID e filtro por pool disponível. A consulta não exige
+carteira; os links abrem a negociação existente. Contagens usam dados reais,
+sem preços ou volumes simulados. O botão Atualizar refaz a consulta e informa
+falhas sem descartar o último catálogo. Não há emissão de POVIX, mineração nem
 criação de uma rede separada pelo DEX.
 
 Cada usuário importa e desbloqueia a própria carteira no navegador. A senha e
