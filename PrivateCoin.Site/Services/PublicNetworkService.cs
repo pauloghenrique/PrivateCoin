@@ -53,6 +53,21 @@ namespace PrivateCoin.Site.Services
             }
         }
 
+        public HomeViewModel GetTransactionDetails(string id)
+        {
+            lock (sync)
+            {
+                var entry = new BlockchainQueryApi(blockchain).GetLedger(0, int.MaxValue)
+                    .FirstOrDefault(item => string.Equals(item.TransactionId, id, StringComparison.Ordinal));
+                if (entry == null) return null;
+                return new HomeViewModel
+                {
+                    Ledger = new[] { entry },
+                    Tokens = blockchain.GetTokens().ToDictionary(token => token.Id, StringComparer.Ordinal)
+                };
+            }
+        }
+
         private static string HashPublicKey(string publicKey)
         {
             using (var sha = System.Security.Cryptography.SHA256.Create())
