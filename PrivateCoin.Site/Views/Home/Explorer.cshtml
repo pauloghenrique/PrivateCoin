@@ -19,10 +19,56 @@
     </section>
     <p>Trabalho acumulado: @Model.Summary.ChainWork. Confirmações aumentam com novos blocos; uma reorganização pode reduzi-las.</p>
     <section class="panel" aria-labelledby="ledger-title"><div class="section-heading"><div><p class="eyebrow">Transparência</p><h2 id="ledger-title">Livro-caixa</h2></div><span>100 movimentações mais recentes</span></div>
-        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Bloco</th><th>Confirmações</th><th>Data (UTC)</th><th>Tipo</th><th>Token</th><th>Transação</th><th>Valor</th><th>Taxa</th><th>Emissão</th></tr></thead><tbody>@foreach (var entry in Model.Ledger) { <tr><td><strong>#@entry.BlockHeight</strong></td><td>@entry.Confirmations</td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td><span class="entry-type">@HomeViewModel.EntryTypeName(entry)</span></td><td>@Model.LedgerTokenName(entry)</td><td><code title="@entry.TransactionId">@HomeViewModel.ShortId(entry.TransactionId)&hellip;</code></td><td>@Model.FormatLedgerAmount(entry)</td><td>@HomeViewModel.FormatTokens(entry.Fee)</td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td></tr> }</tbody></table></div> }
+        @if (Model.Ledger.Count == 0) { <div class="empty-state">Aguardando a sincronização de movimentações com a rede pública.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Bloco</th><th>Confirmações</th><th>Data (UTC)</th><th>Tipo</th><th>Transação</th><th>Emissão</th></tr></thead><tbody>@foreach (var entry in Model.Ledger) { <tr><td><strong>#@entry.BlockHeight</strong></td><td>@entry.Confirmations</td><td>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td><span class="entry-type">@HomeViewModel.EntryTypeName(entry)</span></td><td class="transaction-cell">
+                <details class="transaction-details">
+                    <summary aria-label="Detalhar transação @entry.TransactionId"><code>@entry.TransactionId</code></summary>
+                    <div class="transaction-detail-body">
+                        <h3>Detalhamento da transação</h3>
+                        <dl>
+                            <dt>Hash da transação</dt><dd><code>@entry.TransactionId</code></dd>
+                            <dt>Status</dt><dd>Incluída no bloco #@entry.BlockHeight · @entry.Confirmations confirmação(ões)</dd>
+                            <dt>Hash do bloco</dt><dd><code>@entry.BlockHash</code></dd>
+                            <dt>Data (UTC)</dt><dd>@(new DateTime(entry.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</dd>
+                            <dt>Tipo</dt><dd>@HomeViewModel.EntryTypeName(entry)</dd>
+                            <dt>Token</dt><dd>@Model.LedgerTokenName(entry)</dd>
+                            <dt>Valor</dt><dd>@Model.FormatLedgerAmount(entry)</dd>
+                            <dt>Taxa</dt><dd>@HomeViewModel.FormatTokens(entry.Fee)</dd>
+                            <dt>Emissão</dt><dd>@HomeViewModel.FormatTokens(entry.IssuedAmount)</dd>
+                        </dl>
+                        <h4>Saídas</h4>
+                        @foreach (var output in entry.Outputs)
+                        {
+                            <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
+                        }
+                    </div>
+                </details>
+            </td><td>@HomeViewModel.FormatTokens(entry.IssuedAmount)</td></tr> }</tbody></table></div> }
     </section>
     <section class="panel" aria-labelledby="queue-title"><div class="section-heading"><div><p class="eyebrow">Mempool</p><h2 id="queue-title">Fila de validação</h2></div><span>ordenada pela maior taxa</span></div>
-        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th><th>Taxa</th></tr></thead><tbody>@for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td><code>@HomeViewModel.ShortId(transaction.Id)&hellip;</code></td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td><td>@HomeViewModel.FormatTokens(transaction.Fee)</td></tr> }</tbody></table></div> }
+        @if (Model.ValidationQueue.Count == 0) { <div class="empty-state">Não há transações aguardando validação.</div> } else { <div class="table-responsive"><table class="table ledger-table"><thead><tr><th>Posição</th><th>Transação</th><th>Horário (UTC)</th></tr></thead><tbody>@for (var index = 0; index < Model.ValidationQueue.Count; index++) { var transaction = Model.ValidationQueue[index]; <tr><td>#@(index + 1)</td><td class="transaction-cell">
+                <details class="transaction-details">
+                    <summary aria-label="Detalhar transação @transaction.Id"><code>@transaction.Id</code></summary>
+                    <div class="transaction-detail-body">
+                        <h3>Detalhamento da transação</h3>
+                        <dl>
+                            <dt>Hash da transação</dt><dd><code>@transaction.Id</code></dd>
+                            <dt>Status</dt><dd>Aguardando validação</dd>
+                            <dt>Horário (UTC)</dt><dd>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</dd>
+                            <dt>Taxa</dt><dd>@HomeViewModel.FormatTokens(transaction.Fee)</dd>
+                        </dl>
+                        <h4>Entradas</h4>
+                        @foreach (var input in transaction.Inputs)
+                        {
+                            <p><code>@input.TransactionId</code> · saída #@input.OutputIndex</p>
+                        }
+                        <h4>Saídas</h4>
+                        @foreach (var output in transaction.Outputs)
+                        {
+                            <p><code>@output.OneTimeAddress</code><br />@output.Amount unidade(s) atômica(s) · @(output.AssetId ?? "POVIX")</p>
+                        }
+                    </div>
+                </details>
+            </td><td>@(new DateTime(transaction.TimestampUtcTicks, DateTimeKind.Utc).ToString("dd/MM/yyyy HH:mm:ss"))</td></tr> }</tbody></table></div> }
     </section>
     <p class="updated">Atualizado em @Model.UpdatedAtUtc.ToString("dd/MM/yyyy HH:mm:ss") UTC · <a href="@Url.Action("Explorer")">Atualizar agora</a></p>
 </main>

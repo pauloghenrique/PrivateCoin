@@ -270,3 +270,14 @@ body { background: var(--cream); }
 @media (max-width: 520px) {
     .wp-hero h1 { font-size: 3rem; }.wp-hero-actions { align-items: stretch; flex-direction: column; }.wp-flow { grid-template-columns: 1fr; }.wp-split-card { padding: 1.2rem; }.wp-split-bars { grid-template-columns: 1fr; }.wp-split-bars > div { min-height: 130px; }.wp-token-breakdown,.wp-status-grid { grid-template-columns: 1fr; }.wp-emission-chart { height: 300px; padding: 1rem .7rem .8rem; }.wp-chart-bars { gap: .55rem; padding-left: .6rem; padding-right: .6rem; }.wp-notice { grid-template-columns: 1fr; }.wp-security-table td,.wp-security-table th { padding: .8rem .6rem; }.wp-closing { padding: 1.5rem; }
 }
+
+/* Full transaction hashes remain readable on narrow screens. */
+.ledger-table .transaction-cell { min-width: 240px; max-width: 640px; white-space: normal; }
+.transaction-details summary { cursor: pointer; color: var(--accent, #46dec5); }
+.transaction-details code { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.transaction-details summary:hover code { text-decoration: underline; }
+.transaction-details summary:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.transaction-detail-body { margin-top: 1rem; padding: 1rem; border: 1px solid currentColor; border-radius: .5rem; }
+.transaction-detail-body h3 { font-size: 1.1rem; }
+.transaction-detail-body h4 { font-size: 1rem; }
+.transaction-detail-body dd, .transaction-detail-body p { overflow-wrap: anywhere; }
