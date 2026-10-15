@@ -185,6 +185,7 @@
     <Content Include="Views\Home\Contact.cshtml" />
     <Content Include="Views\Home\Index.cshtml" />
     <Content Include="Views\Home\Explorer.cshtml" />
+    <Content Include="Views\Home\Transaction.cshtml" />
     <Content Include="Views\Home\Token.cshtml" />
     <Content Include="Views\Home\Swap.cshtml" />
     <Content Include="Views\Home\SwapDemo.cshtml" />
