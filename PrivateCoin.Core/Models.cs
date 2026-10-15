@@ -18,7 +18,9 @@ namespace PrivateCoin.Core
         WalletDistribution = 6,
         LiquidityPool = 7,
         LiquiditySwap = 8,
-        LiquidityClose = 9
+        LiquidityClose = 9,
+        LiquidityAdd = 10,
+        LiquidityRemove = 11
     }
 
     [DataContract]
@@ -26,6 +28,23 @@ namespace PrivateCoin.Core
     {
         [DataMember(Order = 1)] public int InputSide { get; set; }
         [DataMember(Order = 2)] public long Amount { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PoolParticipation
+    {
+        [DataMember(Order = 1)] public Dictionary<string, long> Shares { get; set; } = new Dictionary<string, long>();
+        public PoolParticipation Copy() => new PoolParticipation { Shares = new Dictionary<string, long>(Shares, StringComparer.Ordinal) };
+        public long Total => Shares.Values.Aggregate(0L, (sum, value) => checked(sum + value));
+        public string Canonical() => string.Join(",", Shares.OrderBy(item => item.Key, StringComparer.Ordinal)
+            .Select(item => item.Key + ":" + item.Value.ToString(CultureInfo.InvariantCulture)));
+    }
+
+    [DataContract]
+    public sealed class LiquidityChangeTerms
+    {
+        [DataMember(Order = 1)] public string Address { get; set; }
+        [DataMember(Order = 2)] public long Shares { get; set; }
     }
 
     [DataContract]
@@ -137,6 +156,9 @@ namespace PrivateCoin.Core
         [DataMember(Order = 12, EmitDefaultValue = false)] public TransactionApproval TransactionApproval { get; set; }
         [DataMember(Order = 13, EmitDefaultValue = false)] public LiquiditySwapTerms LiquiditySwap { get; set; }
 
+        [DataMember(Order = 14, EmitDefaultValue = false)] public PoolParticipation PoolParticipation { get; set; }
+        [DataMember(Order = 15, EmitDefaultValue = false)] public LiquidityChangeTerms LiquidityChange { get; set; }
+
         internal string SigningPayload()
         {
             var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture));
@@ -166,6 +188,9 @@ namespace PrivateCoin.Core
             if (LiquiditySwap != null)
                 value.Append("|pool-swap-v1|").Append(LiquiditySwap.InputSide.ToString(CultureInfo.InvariantCulture))
                     .Append('|').Append(LiquiditySwap.Amount.ToString(CultureInfo.InvariantCulture));
+            if (PoolParticipation != null) value.Append("|pool-participation-v1|").Append(PoolParticipation.Canonical());
+            if (LiquidityChange != null) value.Append("|pool-change-v1|").Append(LiquidityChange.Address)
+                .Append('|').Append(LiquidityChange.Shares.ToString(CultureInfo.InvariantCulture));
             return value.ToString();
         }
 
@@ -230,7 +255,9 @@ namespace PrivateCoin.Core
         public int OutputIndex { get; internal set; }
         public TransactionOutput Output { get; internal set; }
         public TransactionKind TransactionKind { get; internal set; }
-        public bool IsPoolReserve => TransactionKind == TransactionKind.LiquidityPool || TransactionKind == TransactionKind.LiquiditySwap;
+        public PoolParticipation PoolParticipation { get; internal set; }
+        public bool IsPoolReserve => TransactionKind == TransactionKind.LiquidityPool || TransactionKind == TransactionKind.LiquiditySwap ||
+            TransactionKind == TransactionKind.LiquidityAdd || TransactionKind == TransactionKind.LiquidityRemove;
         public string ValidatorPublicKey { get; internal set; }
         public string ValidatorRewardAddress { get; internal set; }
         public IReadOnlyCollection<string> ValidatorOwnedAddresses { get; internal set; }

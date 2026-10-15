@@ -41,11 +41,53 @@ namespace Povix.Dex.Services
                 string key = publicKeys.FirstOrDefault(value => AddressFor(value) == address);
                 if (key == null) throw new TokenOperationException("wallet_invalid", "O endereço da pool deve pertencer à carteira aberta.");
                 var tx = TokenExchange.PrepareLiquidity(blockchain, pending, publicKeys, AssetId(a), AssetId(b), amountA, amountB,
-                    address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
+                    address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys(), model.AllowUserLiquidity);
                 var draft = new PreparedExchange { Transaction = tx, Operation = "pool", Owner = owner, ProviderKey = key,
                     Address = address, AssetA = a, AssetB = b, ReserveA = amountA, ReserveB = amountB, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 return AddExchangeDraft(draft);
             }
+        }
+
+        public object PrepareLiquidityChange(LiquidityChangeViewModel model, string[] publicKeys, string address, string owner)
+        {
+            lock (sync)
+            {
+                RequireReady(); ReserveDraftSlot(owner);
+                var pool = Snapshot(model.PoolId);
+                if (pool == null || !pool.Available) throw new TokenOperationException("pool_unavailable", "Aguarde reservas confirmadas e disponíveis.");
+                if (pool.Transaction.PoolParticipation == null) throw new TokenOperationException("liquidity_disabled", "A criação desta pool não permite liquidez de usuários.");
+                if (model.Operation == "remove" && address == AddressFor(pool.ProviderKey) && pool.ClosureRenounced)
+                    throw new TokenOperationException("pool_renounced", "O criador renunciou ao token e não pode retirar suas reservas neste DEX.");
+                long shares;
+                if ((model.Operation != "add" && model.Operation != "remove") || !long.TryParse(model.Shares, NumberStyles.None, CultureInfo.InvariantCulture, out shares) || shares <= 0)
+                    throw new TokenOperationException("fields_invalid", "Informe uma participação válida.");
+                if (!publicKeys.Any(key => AddressFor(key) == address)) throw new TokenOperationException("wallet_invalid", "Selecione a carteira dona da participação.");
+                var tx = TokenExchange.PrepareLiquidityChange(blockchain, pending, publicKeys, pool.ReserveA, pool.ReserveB, pool.ProviderKey,
+                    address, shares, model.Operation == "add", GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
+                return AddExchangeDraft(new PreparedExchange { Transaction = tx, Operation = model.Operation, Owner = owner,
+                    ProviderKey = pool.ProviderKey, PoolId = pool.Id, ReserveId = pool.Transaction.Id, Address = address,
+                    AssetA = pool.AssetA, AssetB = pool.AssetB, ReserveA = pool.ReserveA.Output.Amount,
+                    ReserveB = pool.ReserveB.Output.Amount, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
+            }
+        }
+        public async Task<string> SubmitLiquidityChangeAsync(string draftId, string[] signatures, string owner)
+        {
+            Transaction tx;
+            lock (sync)
+            {
+                var prior = submitted.FirstOrDefault(item => item.DraftId == draftId && (item.Exchange?.Operation == "add" || item.Exchange?.Operation == "remove"));
+                if (prior != null) return PriorExchange(draftId, prior.Exchange.Operation, signatures).Transaction.Id;
+                RequireReady();
+                PreparedExchange draft;
+                if (!exchangeDrafts.TryGetValue(draftId ?? "", out draft) || (draft.Operation != "add" && draft.Operation != "remove"))
+                    throw new TokenOperationException("draft_missing", "Prepare novamente a alteração de liquidez.");
+                draft = ExchangeDraft(draftId, owner, draft.Operation); RequireCurrentReserves(draft);
+                if (draft.Operation == "remove" && draft.Address == AddressFor(draft.ProviderKey) && Snapshot(draft.PoolId).ClosureRenounced)
+                    throw new TokenOperationException("pool_renounced", "O criador renunciou ao token e não pode retirar suas reservas neste DEX.");
+                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.UserInputCount);
+                tx = AcceptExchange(draftId, draft, signatures);
+            }
+            await Relay(tx).ConfigureAwait(false); return tx.Id;
         }
 
         public object PrepareSwap(SwapViewModel model, string[] publicKeys, string address, string owner)
@@ -177,7 +219,8 @@ namespace Povix.Dex.Services
                         var asset = output.AssetId == null ? NativeAsset() : output.AssetId == record.Exchange.AssetA.Id ? record.Exchange.AssetA : record.Exchange.AssetB;
                         return new ExchangeOutputViewModel { Amount = output.Amount, Symbol = asset.Symbol, Decimals = asset.Decimals, Address = output.OneTimeAddress,
                             Purpose = index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
-                                tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LiquiditySwap ? "Reserva bloqueada da pool" : "Reserva da pool antiga (sem bloqueio)" :
+                                tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ? "Reserva bloqueada da pool" : "Reserva da pool antiga (sem bloqueio)" :
+                                record.Exchange.Operation == "remove" && index < 4 ? "Liquidez retirada pela carteira" :
                                 record.Exchange.Operation == "swap" && index == 2 ? "Recebimento da troca" : "Troco da carteira" };
                     }).ToArray() };
             }
@@ -200,7 +243,7 @@ namespace Povix.Dex.Services
         private SubmittedToken PriorExchange(string id, string operation, string[] signatures)
         {
             var prior = submitted.FirstOrDefault(item => item.DraftId == id && item.Exchange?.Operation == operation);
-            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take(operation == "swap" ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
+            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take((operation == "swap" || operation == "add" || operation == "remove") ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
                     .Select(input => input.Signature).SequenceEqual(signatures)))
                 throw new TokenOperationException("signatures_invalid", "As assinaturas não correspondem ao envio já aceito.");
             return prior;
@@ -249,6 +292,8 @@ namespace Povix.Dex.Services
 
         private static void RequirePoolClosureAllowed(PoolSnapshot pool)
         {
+            if (pool?.Transaction.PoolParticipation != null && pool.Transaction.PoolParticipation.Shares.Keys.Any(holder => holder != AddressFor(pool.ProviderKey)))
+                throw new TokenOperationException("pool_has_providers", "Outros provedores precisam retirar suas participações antes do encerramento.");
             if (pool?.ClosureRenounced == true)
                 throw new TokenOperationException("pool_renounced", "O criador renunciou ao token. As reservas continuam destinadas às trocas e esta pool não pode ser encerrada neste DEX.");
         }
@@ -267,6 +312,7 @@ namespace Povix.Dex.Services
                 {
                     var next = confirmed.Values.FirstOrDefault(tx =>
                         (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose ||
+                            tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ||
                             submitted.Any(item => item.Transaction.Id == tx.Id && (item.Exchange?.Operation == "lock" || item.Exchange?.Operation == "swap") && item.Exchange.PoolId == id)) &&
                         tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex == 0) &&
                         tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex == 1));
@@ -283,7 +329,8 @@ namespace Povix.Dex.Services
             bool reservesReady = rootConfirmed && outputs.Length == 2 && blocking == null && !closed;
             bool closureRenounced = CreatorRenounced(root.Exchange.AssetA.Id, root.Exchange.ProviderKey) ||
                 CreatorRenounced(root.Exchange.AssetB.Id, root.Exchange.ProviderKey);
-            bool canManage = reservesReady && (!locked || !closureRenounced);
+            bool otherProviders = current.PoolParticipation != null && current.PoolParticipation.Shares.Keys.Any(holder => holder != address);
+            bool canManage = reservesReady && (!locked || !closureRenounced && !otherProviders);
             bool available = reservesReady && locked;
             string status, reason, message;
             if (!rootConfirmed) {
@@ -333,6 +380,8 @@ namespace Povix.Dex.Services
                 .SelectMany(id => new[] { id + ":0", id + ":1" }).Concat(locked.Select(output => output.TransactionId + ":" + output.OutputIndex)), StringComparer.Ordinal);
         }
         private static object PoolResponse(PoolSnapshot pool) => new {
+            allowUserLiquidity = pool.Transaction.PoolParticipation != null,
+            participation = ParticipationResponse(pool.Transaction.PoolParticipation),
             poolId = pool.Id, providerAddress = AddressFor(pool.ProviderKey), assetA = AssetResponse(pool.AssetA), assetB = AssetResponse(pool.AssetB),
             reserveTransactionId = pool.Transaction.Id, reserveAAtomic = Atomic(pool.Transaction.Outputs[0].Amount), reserveBAtomic = Atomic(pool.Transaction.Outputs[1].Amount),
             status = pool.Status, available = pool.Available, locked = pool.Locked, canManage = pool.CanManage, statusReason = pool.StatusReason, statusMessage = pool.StatusMessage,
@@ -340,6 +389,9 @@ namespace Povix.Dex.Services
             managementMessage = pool.ClosureRenounced ? "Renúncia do criador: encerramento bloqueado neste DEX. As reservas permanecem destinadas às trocas." : "",
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
+            allowUserLiquidity = draft.Transaction.PoolParticipation != null,
+            participation = ParticipationResponse(draft.Transaction.PoolParticipation),
+            sharesAtomic = draft.Transaction.LiquidityChange == null ? "0" : Atomic(draft.Transaction.LiquidityChange.Shares),
             draftId = id, operation = draft.Operation, transactionKind = (int)draft.Transaction.Kind, poolId = draft.PoolId, reserveTransactionId = draft.ReserveId,
             assetA = AssetResponse(draft.AssetA), assetB = AssetResponse(draft.AssetB), providerAddress = AddressFor(draft.ProviderKey),
             reserveAAtomic = Atomic(draft.ReserveA), reserveBAtomic = Atomic(draft.ReserveB), inputSide = draft.InputSide, amountAtomic = Atomic(draft.Amount),
@@ -352,6 +404,9 @@ namespace Povix.Dex.Services
             signingPayload = Convert.ToBase64String(draft.Transaction.SigningPayload), timestampUtcTicks = Atomic(draft.Transaction.TimestampUtcTicks),
             networkId = Blockchain.NetworkId, consensusVersion = Blockchain.ConsensusVersion, expiresUtc = draft.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture),
             poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
+        private static object ParticipationResponse(PoolParticipation state) => state == null ? null : new {
+            totalSharesAtomic = Atomic(state.Total),
+            holders = state.Shares.OrderBy(item => item.Key, StringComparer.Ordinal).Select(item => new { address = item.Key, sharesAtomic = Atomic(item.Value) }).ToArray() };
         private TokenDefinition Asset(string id)
         { if (id == "povix") return NativeAsset(); var token = blockchain.GetTokens().FirstOrDefault(item => item.Id == id);
             if (token == null) throw new TokenOperationException("token_unconfirmed", "O token precisa estar confirmado na blockchain."); return token; }

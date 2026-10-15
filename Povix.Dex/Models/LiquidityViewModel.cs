@@ -16,10 +16,17 @@ namespace Povix.Dex.Models
     }
     public sealed class CreatePoolViewModel : ExchangeFeeModel
     {
+        public bool AllowUserLiquidity { get; set; }
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetA { get; set; }
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetB { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountA { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountB { get; set; }
+    }
+    public sealed class LiquidityChangeViewModel : ExchangeFeeModel
+    {
+        [Required, RegularExpression("[0-9a-f]{64}")] public string PoolId { get; set; }
+        [Required, RegularExpression("(add|remove)")] public string Operation { get; set; }
+        [Required, RegularExpression("[1-9][0-9]{0,18}")] public string Shares { get; set; }
     }
     public sealed class SwapViewModel : ExchangeFeeModel
     {

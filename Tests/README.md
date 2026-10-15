@@ -26,7 +26,7 @@ Após compilar `Povix.Dex` e `PrivateCoin.Core` em Release e restaurar NuGet:
 npm install --prefix work/liquidity-tools --cache work/npm-cache --no-audit --no-fund jsdom@26
 mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
   -r:Povix.Dex/bin/System.Web.Mvc.dll \
-  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
+  -r:System.Runtime.Serialization -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
   -r:System.ComponentModel.DataAnnotations -main:PovixDexLiquidityMain \
   -out:work/PovixDexLiquidityRegression.exe \
   Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs \
@@ -502,3 +502,18 @@ Execute `node Tests/PovixDexWalletSessionRegression.js` e
 Verifica conexão DPAPI sem senha informada, seleção preservada na navegação,
 assinatura após restauração, novas chaves, backup cifrado exportado, isolamento
 de abas, desconexão e descarte de sessões inválidas.
+
+## Permissão e participação na liquidez (v19)
+
+Use a mesma compilação da regressão de liquidez, acrescente
+`Tests/PovixDexPublicLiquidityRegression.cs`, selecione
+`-main:PovixDexPublicLiquidityMain` e execute com um diretório vazio.
+A suíte verifica criação habilitada, aporte proporcional, retirada integral da
+participação de outro usuário, assinaturas Web Crypto pelos formulários reais,
+sessão, envio idempotente, propagação P2P, bloqueio de retirada por não titulares,
+rejeição de desvios e alteração de participações mesmo com assinaturas válidas,
+preservação das participações nas trocas, bloqueio de encerramento com outros
+provedores e restauração da blockchain e do cache DEX. A suíte existente também
+verifica que a permissão permanece desabilitada por padrão e rejeita aportes.
+Os clones de blocos usam DataContractJsonSerializer para preservar o manifesto
+genesis imutável.

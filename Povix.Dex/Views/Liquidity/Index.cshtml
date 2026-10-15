@@ -2,6 +2,7 @@
 @{ ViewBag.Title = "Pools e troca de tokens"; }
 <main id="liquidity-app" data-network-id="@Model.NetworkId" data-pool-id="@ViewBag.SelectedPoolId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
       data-market-url="@Url.Action("Market", new { poolId = "__id__" })" data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
+      data-prepare-liquidity-url="@Url.Action("PrepareLiquidityChange")" data-submit-liquidity-url="@Url.Action("SubmitLiquidityChange")"
       data-prepare-reserves-url="@Url.Action("PrepareReserveOperation")" data-submit-reserves-url="@Url.Action("SubmitReserveOperation")"
       data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")"
       data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
@@ -24,9 +25,23 @@
                     <label for="pool-amount-a">Quantidade do primeiro ativo</label><input id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     <label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
                     <label for="pool-amount-b">Quantidade do segundo ativo</label><input id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
+                    <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
                 </fieldset>
                 <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço A / B: selecione dois ativos distintos e informe as reservas.</p>
                 <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
+            </form>
+            <form id="user-liquidity-form" class="card token-form">
+                <h2>Adicionar ou remover liquidez</h2><p>Disponível nas pools que permitem liquidez de usuários. As quantidades seguem a proporção das reservas; a taxa da rede é paga em POVIX livres.</p>
+                <fieldset id="user-liquidity-fields" disabled>
+                    <label for="user-liquidity-pool">Pool</label><select id="user-liquidity-pool" required></select>
+                    <label for="user-liquidity-operation">Operação</label><select id="user-liquidity-operation"><option value="add">Adicionar liquidez</option><option value="remove">Remover minha liquidez</option></select>
+                    <label id="user-liquidity-amount-label" for="user-liquidity-amount">Quantidade do primeiro ativo</label>
+                    <input id="user-liquidity-amount" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <p id="user-liquidity-estimate" role="status" aria-live="polite">Selecione uma pool e informe a quantidade.</p>
+                    <small>Na remoção, informe uma porcentagem de sua participação (até 100%). O criador mantém uma participação até encerrar a pool, após a saída dos demais provedores.</small>
+                </fieldset>
+                <button id="prepare-user-liquidity" class="button button-primary" type="submit" disabled>Revisar liquidez →</button>
             </form>
             <form id="swap-form" class="card token-form">
                 <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>Assine a troca com sua carteira. Não é necessária a aprovação do criador da pool. As reservas precisam estar confirmadas.</p></div></div>

@@ -76,7 +76,8 @@
         if (entries.some(item => (item.id || item.poolId) === previous)) element.value = previous;
     }
     function update() {
-        const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate, editing = !busy && !draft;
+        updateUserLiquidity();
+        const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate && assets.length > 0, editing = !busy && !draft;
         window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
@@ -146,14 +147,20 @@
             addReview('Quantidade recebida pelo comprador', atomicText(result.receiveAtomic, output.decimals) + ' ' + output.symbol);
             addReview('Mínimo a receber', atomicText(result.minimumReceiveAtomic, output.decimals) + ' ' + output.symbol);
         }
+        if (result.operation === 'pool') addReview('Liquidez de usuários', result.allowUserLiquidity ? 'Habilitada: adicionar e remover a própria participação' : 'Desabilitada');
+        if (['add', 'remove'].includes(result.operation)) {
+            byId('review-title').textContent = result.operation === 'add' ? 'Adicionar liquidez' : 'Remover minha liquidez';
+            byId('review-description').textContent = 'Confira os dois ativos. A participação será atualizada após a confirmação em bloco.';
+        }
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
-            addReview(index < 2 ? (result.operation === 'close' ? 'Devolução ' : 'Reserva bloqueada ') + token.symbol : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
+            addReview(index < 2 ? (result.operation === 'close' ? 'Devolução ' : 'Reserva bloqueada ') + token.symbol : result.operation === 'remove' && index < 4 ? 'Liquidez recebida' : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
                 atomicText(output.amountAtomic, token.decimals) + ' ' + token.symbol);
             addReview('Endereço', output.address);
         });
         byId('sign-exchange').textContent = result.operation === 'lock' ? 'Assinar bloqueio das reservas' : result.operation === 'close' ? 'Assinar encerramento da pool' :
+            result.operation === 'add' ? 'Assinar e adicionar liquidez' : result.operation === 'remove' ? 'Assinar e remover liquidez' :
             result.operation === 'pool' ? 'Assinar e criar pool' : 'Assinar e executar troca';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -164,7 +171,7 @@
         }
     }
     const wantedFromPool = pool => ({ poolId: pool.poolId, reserveTransactionId: pool.reserveTransactionId, providerAddress: pool.providerAddress,
-        assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
+        participation: pool.participation, assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
     async function manageReserves(pool) {
         if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate || !pool.canManage) return;
         busy = true; message(''); update();
@@ -189,13 +196,62 @@
             const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map([['povix', BigInt(feeAtomic)]]);
             for (const [id, value] of [[a.id, reserveAAtomic], [b.id, reserveBAtomic]]) funds.set(id, (funds.get(id) || 0n) + BigInt(value));
             ensureFunds(funds);
-            const wanted = { operation: 'pool', assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
+            const allowUserLiquidity = Boolean(byId('pool-user-liquidity')?.checked);
+            const wanted = { operation: 'pool', allowUserLiquidity, assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.preparePoolUrl, { AssetA: a.id, AssetB: b.id, AmountA: byId('pool-amount-a').value,
-                AmountB: byId('pool-amount-b').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
+                AmountB: byId('pool-amount-b').value, AllowUserLiquidity: allowUserLiquidity, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
     });
+    function liquidityRequest() {
+        const pool = pools.find(item => item.poolId === byId('user-liquidity-pool').value);
+        if (!pool || !pool.allowUserLiquidity || !pool.available) throw new Error('Selecione uma pool habilitada com reservas disponíveis.');
+        const operation = byId('user-liquidity-operation').value, add = operation === 'add';
+        const address = wallet.addresses()[0], total = BigInt(pool.participation.totalSharesAtomic);
+        const owned = BigInt(pool.participation.holders.find(holder => holder.address === address)?.sharesAtomic || '0');
+        const value = byId('user-liquidity-amount').value;
+        const quantity = BigInt(wallet.parseSupply(value, add ? pool.assetA.decimals : 2));
+        if (!add && quantity > 10000n) throw new Error('Informe até 100% da sua participação.');
+        const shares = add ? quantity * total / BigInt(pool.reserveAAtomic) : owned * quantity / 10000n;
+        if (shares <= 0n) throw new Error(add ? 'Quantidade muito pequena.' : 'Esta carteira não tem participação suficiente.');
+        if (!add && (shares >= total || address === pool.providerAddress && shares === owned)) throw new Error('O criador deve manter uma participação até o encerramento da pool. Retire uma porcentagem menor ou encerre quando os demais provedores saírem.');
+        const amountA = (BigInt(pool.reserveAAtomic) * shares + (add ? total - 1n : 0n)) / total;
+        const amountB = (BigInt(pool.reserveBAtomic) * shares + (add ? total - 1n : 0n)) / total;
+        if (amountA <= 0n || amountB <= 0n) throw new Error('Quantidade muito pequena para os dois ativos.');
+        return { pool, operation, address, shares, amountA, amountB };
+    }
+    function updateUserLiquidity() {
+        if (!byId('user-liquidity-form')) return;
+        const ready = !busy && !draft && wallet.isUnlocked() && network?.CanCreate;
+        byId('user-liquidity-fields').disabled = !ready;
+        byId('prepare-user-liquidity').disabled = !ready;
+        byId('user-liquidity-amount-label').textContent = byId('user-liquidity-operation').value === 'add' ? 'Quantidade máxima do primeiro ativo' : 'Porcentagem da minha participação';
+        try {
+            const request = liquidityRequest(), pool = request.pool;
+            byId('user-liquidity-estimate').textContent = (request.operation === 'add' ? 'Você adicionará: ' : 'Você receberá: ') +
+                atomicText(request.amountA, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' + ' + atomicText(request.amountB, pool.assetB.decimals) + ' ' + pool.assetB.symbol;
+        } catch (error) { byId('user-liquidity-estimate').textContent = error.message; byId('prepare-user-liquidity').disabled = true; }
+    }
+    if (byId('user-liquidity-form')) {
+        byId('user-liquidity-form').addEventListener('input', updateUserLiquidity);
+        byId('user-liquidity-form').addEventListener('change', updateUserLiquidity);
+        byId('user-liquidity-form').addEventListener('submit', async event => {
+            event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate) return;
+            busy = true; message(''); update(); updateUserLiquidity();
+            try {
+                const request = liquidityRequest(), feeAtomic = fee();
+                const funds = new Map([['povix', BigInt(feeAtomic)]]);
+                if (request.operation === 'add') for (const [id, value] of [[request.pool.assetA.id, request.amountA], [request.pool.assetB.id, request.amountB]]) funds.set(id, (funds.get(id) || 0n) + value);
+                ensureFunds(funds);
+                const wanted = { ...wantedFromPool(request.pool), operation: request.operation, sharesAtomic: String(request.shares), feeAtomic, changeAddress: request.address };
+                const result = await post(app.dataset.prepareLiquidityUrl, { PoolId: request.pool.poolId, Operation: request.operation, Shares: String(request.shares),
+                    FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress: request.address });
+                await review(result, wanted);
+            } catch (error) { reset(); message(error.message); }
+            finally { busy = false; update(); updateUserLiquidity(); }
+        });
+    }
     byId('swap-form').addEventListener('submit', async event => {
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
         const selectedSide = swapSide();
@@ -275,8 +331,8 @@
         try {
             await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(0, draft.operation === 'swap' ? draft.userInputCount : undefined).map(item => item.address) });
-            const result = await post(draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
+                inputAddresses: draft.inputs.slice(0, ['swap', 'add', 'remove'].includes(draft.operation) ? draft.userInputCount : undefined).map(item => item.address) });
+            const result = await post(['add', 'remove'].includes(draft.operation) ? app.dataset.submitLiquidityUrl : draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
                 draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                 { draftId: draft.draftId, signatures });
             const receiptUrl = receipt(result.transactionId);
@@ -310,7 +366,7 @@
             pools.forEach(pool => {
                 const entry = document.createElement('a'); entry.href = receipt(pool.poolId);
                 entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
-                const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Pool ' + pool.poolId;
+                const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada') + ' · Pool ' + pool.poolId;
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 const price = document.createElement('small');
                 try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
@@ -329,6 +385,8 @@
                     button.addEventListener('click', () => manageReserves(pool)); byId('pool-list').appendChild(button);
                 }
             });
+            if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
+            updateUserLiquidity();
             if (wallet.isUnlocked()) {
                 const native = asset('povix'); byId('wallet-balance').textContent = native ? atomicText(native.balanceAtomic, 8) + ' POVIX livres' : 'Indisponível';
             }
@@ -337,7 +395,7 @@
     }
     document.addEventListener('povix-wallet-change', async () => {
         try {
-            epoch++; reset(); assets = [];
+            epoch++; assets = []; reset();
             await refresh(); update();
         } catch (error) { message(error.message); }
     });

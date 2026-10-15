@@ -82,7 +82,10 @@ internal static partial class PovixDexRegression
                             !service.GetExchangeReceipt(poolId).PoolAvailable, "approved pool explains its wait for a block and cannot release reserves early");
                         batches.Confirm(chain, new[] { poolTransaction }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(poolId).Status == "confirmed", "pool opens only after its real confirmation block");
-                        var oldVersionPool = Json.Deserialize<Block[]>(Json.Serialize(chain.Blocks));
+                        Check(!(bool)ExchangePool(service, poolId)["allowUserLiquidity"], "user liquidity remains disabled by default");
+                        RejectExchange(() => service.PrepareLiquidityChange(new LiquidityChangeViewModel { PoolId = poolId, Operation = "add", Shares = "1", FeeAtomic = 2 },
+                            PublicKeys(buyer), buyerAddress, "disabled-liquidity"), "liquidity_disabled");
+                        var oldVersionPool = CloneExchangeData(chain.Blocks.ToArray());
                         oldVersionPool.Last().ConsensusVersion = 16;
                         LegacyConsensusFixture.Resign(oldVersionPool.Last(), validators); LegacyConsensusFixture.Mine(oldVersionPool.Last());
                         bool oldPoolRejected = false;
@@ -388,9 +391,9 @@ internal static partial class PovixDexRegression
         var pool = liquidity.Complete(liquidity.Sources.Select(source => SignBytes(provider, source.Output.OneTimeAddress, liquidity.SigningPayload)));
         var poolBlock = batches.Confirm(legacy, new[] { pool }, validators);
         poolBlock.ConsensusVersion = 17; LegacyConsensusFixture.Resign(poolBlock, validators); LegacyConsensusFixture.Mine(poolBlock);
-        var history = Json.Deserialize<Block[]>(Json.Serialize(legacy.Blocks));
+        var history = CloneExchangeData(legacy.Blocks.ToArray());
         legacy = new Blockchain(history);
-        Check(legacy.IsValid(), "historical v17 pools restore under v18 consensus");
+        Check(legacy.IsValid(), "historical v17 pools restore under current consensus");
         var reserves = legacy.GetUnspentOutputs(new[] { address }).Where(source => source.TransactionId == pool.Id).OrderBy(source => source.OutputIndex).Take(2).ToArray();
         var prepared = TokenExchange.PrepareSwap(legacy, empty, PublicKeys(buyer), reserves[0], reserves[1], PublicKeys(provider)[0], 0, 1000000, 1, buyerAddress, 2);
         var buyerSignatures = prepared.Sources.Take(prepared.UserInputCount).Select(source => SignBytes(buyer, source.Output.OneTimeAddress, prepared.SigningPayload)).ToArray();
@@ -418,8 +421,8 @@ internal static partial class PovixDexRegression
         try { legacy.ValidatePendingTransactions(new[] { malicious }); } catch (InvalidOperationException) { missingFunding = true; }
         Check(missingFunding, "automatic swaps still reject unsigned buyer funding");
         var automatic = batches.Confirm(legacy, new[] { unsigned }, validators);
-        Check(automatic.ConsensusVersion == 18 && legacy.IsValid(), "a v17 pool accepts buyer-only swaps after v18 activation");
-        var invalidBlock = Json.Deserialize<Block>(Json.Serialize(automatic));
+        Check(automatic.ConsensusVersion == Blockchain.ConsensusVersion && legacy.IsValid(), "a v17 pool accepts buyer-only swaps under current consensus");
+        var invalidBlock = CloneExchangeData(automatic);
         invalidBlock.ConsensusVersion = 17;
         LegacyConsensusFixture.Resign(invalidBlock, validators); LegacyConsensusFixture.Mine(invalidBlock);
         bool rejected = false;
@@ -509,6 +512,13 @@ internal static partial class PovixDexRegression
             balances.All(item => chain.GetTokenBalance(addresses, item.Key) == item.Value), "same-wallet swaps conserve all tokens and deduct only the network fee from the total wallet balance");
         Check((string)ExchangePool(service, model.PoolId)["reserveTransactionId"] == id && (bool)ExchangePool(service, model.PoolId)["available"], "pool tracks confirmed reserves after a same-wallet swap");
         return tx;
+    }
+    private static T CloneExchangeData<T>(T value)
+    {
+        var serializer = new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(T));
+        using (var stream = new MemoryStream()) {
+            serializer.WriteObject(stream, value); stream.Position = 0; return (T)serializer.ReadObject(stream);
+        }
     }
     private static Dictionary<string, object> ExchangePool(TokenNetworkService service, string id) => ((object[])ExchangeData(service.GetExchangeCatalogue(new string[0]))["pools"])
         .Cast<Dictionary<string, object>>().Single(item => (string)item["poolId"] == id);
