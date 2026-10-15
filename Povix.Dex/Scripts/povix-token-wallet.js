@@ -241,6 +241,7 @@
         const canonical = map => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([address, shares]) => address + ':' + shares).join(',');
         let expectedShares = null;
         if (draft.operation === 'pool') {
+            if (!['fees', 'loyalty'].includes(draft.rewardMode || 'fees') || (draft.rewardMode || 'fees') !== (expected.rewardMode || 'fees')) fail();
             if (Boolean(draft.allowUserLiquidity) !== Boolean(expected.allowUserLiquidity)) fail();
             if (expected.allowUserLiquidity) expectedShares = new Map([[draft.providerAddress, a]]);
         } else if (expected.participation) expectedShares = participation(expected.participation);

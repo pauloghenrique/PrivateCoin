@@ -25,6 +25,16 @@
                     <label for="pool-amount-a">Quantidade do primeiro ativo</label><input id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     <label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
                     <label for="pool-amount-b">Quantidade do segundo ativo</label><input id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <label for="pool-reward-mode">Opção de recompensa</label>
+                    <select id="pool-reward-mode" aria-describedby="pool-reward-description" required>
+                        <option value="fees" selected>Participação nas taxas</option>
+                        <option value="loyalty">Bônus por permanência</option>
+                    </select>
+                    <div id="pool-reward-description" class="notice" role="status" aria-live="polite">
+                        <strong id="pool-reward-title">Participação nas taxas</strong>
+                        <p id="pool-reward-summary">Destinar aos provedores uma parcela das taxas geradas pelas negociações.</p>
+                        <small id="pool-reward-detail">Recompensa acompanha o uso do pool. Retorno varia conforme o volume.</small>
+                    </div>
                     <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
                     <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
                 </fieldset>

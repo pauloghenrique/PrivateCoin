@@ -45,11 +45,13 @@ internal static partial class PovixDexRegression
                     {
                         peer.ConnectAsync("127.0.0.1", port).GetAwaiter().GetResult(); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetNetwork().CanCreate, "public liquidity synchronizes");
-                        var pool = ExchangeData(service.PreparePool(new CreatePoolViewModel { AssetA = "povix", AssetB = token.Token.Id, AmountA = "1", AmountB = "100", AllowUserLiquidity = true, FeeAtomic = 2 }, PublicKeys(provider), address, "owner"));
+                        RejectExchange(() => service.PreparePool(new CreatePoolViewModel { RewardMode = "invalid" }, PublicKeys(provider), address, "invalid-reward"), "reward_mode_invalid");
+                        var pool = ExchangeData(service.PreparePool(new CreatePoolViewModel { AssetA = "povix", AssetB = token.Token.Id, AmountA = "1", AmountB = "100", AllowUserLiquidity = true, RewardMode = "loyalty", FeeAtomic = 2 }, PublicKeys(provider), address, "owner"));
                         var signatures = BrowserExchange(directory, node, service, pool, provider, false);
                         string poolId = service.SubmitPoolAsync((string)pool["draftId"], signatures, "owner").GetAwaiter().GetResult();
                         ConfirmPublic(service, peer, received, chain, batches, validators, poolId);
                         Check((bool)ExchangePool(service, poolId)["allowUserLiquidity"], "pool creation persists enabled user liquidity");
+                        Check((string)ExchangePool(service, poolId)["rewardMode"] == "loyalty" && service.GetExchangeReceipt(poolId).RewardMode == "loyalty", "reward selection is recorded in catalogue and receipt");
                         var request = new LiquidityChangeViewModel { PoolId = poolId, Operation = "add", Shares = "10000000", FeeAtomic = 2 };
                         var add = ExchangeData(service.PrepareLiquidityChange(request, PublicKeys(buyer), buyerAddress, "buyer"));
                         signatures = BrowserExchange(directory, node, service, add, buyer, false);
@@ -88,6 +90,7 @@ internal static partial class PovixDexRegression
                         var restored = new Blockchain(CloneExchangeData(chain.Blocks.ToArray()));
                         Check(restored.IsValid() && restored.GetUnspentOutputs(new[] { address }).First(item => item.TransactionId == removeId).PoolParticipation.Shares[address] == 100000000, "participation survives blockchain serialization and replay");
                         service.Dispose(); service = OpenOfflineService(directory, port);
+                        Check((string)ExchangePool(service, poolId)["rewardMode"] == "loyalty", "reward selection survives reserve changes and DEX restart");
                         Check((bool)ExchangePool(service, poolId)["allowUserLiquidity"] && (bool)ExchangePool(service, poolId)["canManage"], "DEX restart preserves permission and permits closure after other holders exit");
                     }
                     finally { service.Dispose(); }

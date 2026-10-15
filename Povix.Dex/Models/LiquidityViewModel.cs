@@ -17,6 +17,7 @@ namespace Povix.Dex.Models
     public sealed class CreatePoolViewModel : ExchangeFeeModel
     {
         public bool AllowUserLiquidity { get; set; }
+        [Required, RegularExpression("(fees|loyalty)")] public string RewardMode { get; set; } = "fees";
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetA { get; set; }
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetB { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountA { get; set; }
@@ -42,6 +43,7 @@ namespace Povix.Dex.Models
         public string TransactionId { get; set; }
         public string PoolId { get; set; }
         public string Operation { get; set; }
+        public string RewardMode { get; set; }
         public string Status { get; set; }
         public bool PoolAvailable { get; set; }
         public string PoolStatusMessage { get; set; }

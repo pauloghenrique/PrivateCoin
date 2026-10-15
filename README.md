@@ -493,3 +493,11 @@ as reservas continuam fora do saldo livre. A taxa da rede exige POVIX livres.
 A v19 preserva a leitura dos blocos v18 e caches anteriores. Nós e clientes devem
 ser atualizados juntos para validar novas operações; a identidade de rede segue
 a regra existente de hash dos fontes do Core.
+
+Na criação da pool, a opção de recompensa permite escolher **Participação nas
+taxas** (padrão) ou **Bônus por permanência**. A escolha é registrada nos metadados
+do DEX e exibida na revisão, no catálogo e no comprovante. Pools antigas assumem
+Participação nas taxas. O modo Bônus por permanência registra a preferência;
+prazo mínimo, fórmula e fonte dos recursos ainda precisam ser definidos para
+ativar pagamentos. A escolha por si só não altera as taxas e a distribuição
+proporcional de reservas implementadas no Core.

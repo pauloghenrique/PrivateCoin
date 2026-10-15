@@ -26,7 +26,7 @@ const d = fixture.draft;
     const recordText = JSON.stringify(fixture.wallet);
     await wallet.importFile({ size: Buffer.byteLength(recordText), arrayBuffer: async () => new TextEncoder().encode(recordText).buffer }, 'dex-test-password-only');
     const previousPool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
-    const expected = { allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
+    const expected = { rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
@@ -40,6 +40,7 @@ const d = fixture.draft;
         draft => { draft.assetA.id = draft.assetB.id; },
         draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
         await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId));
+    if (d.operation === 'pool') await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.rewardMode = d.rewardMode === 'loyalty' ? 'fees' : 'loyalty'; }), expected, fixture.networkId));
     if (d.allowUserLiquidity) {
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.participation.holders[0].sharesAtomic = '1'; }), expected, fixture.networkId));
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.allowUserLiquidity = false; }), expected, fixture.networkId));
@@ -73,7 +74,7 @@ const d = fixture.draft;
             }
         }
         else if (url === '/prepareLiquidityUrl') { preparations++; result = d; assert.equal(body.get('Shares'), d.sharesAtomic); assert.equal(body.get('Operation'), d.operation); }
-        else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
+        else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); if (d.operation === 'pool') assert.equal(body.get('RewardMode'), d.rewardMode || 'fees'); }
         else if (url === '/prepareReservesUrl') {
             preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
             assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
@@ -126,6 +127,10 @@ const d = fixture.draft;
     }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
     if (d.operation === 'pool') {
+        byId('pool-reward-mode').value = d.rewardMode || 'fees';
+        byId('pool-form').dispatchEvent(new w.Event('change'));
+        assert.equal(byId('pool-reward-title').textContent, d.rewardMode === 'loyalty' ? 'Bônus por permanência' : 'Participação nas taxas');
+        if (d.rewardMode === 'loyalty') assert(byId('pool-reward-detail').textContent.includes('ainda não gera pagamentos'));
         byId('pool-user-liquidity').checked = Boolean(d.allowUserLiquidity);
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);
