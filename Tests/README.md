@@ -476,3 +476,21 @@ Verifica os valores e nomes dos dois lados da troca, POVIX em qualquer lado
 da pool, tokens com casas decimais distintas e metadados ausentes. Usa entradas
 de livro caixa construídas localmente com reservas e troco deliberadamente
 diferentes das quantidades negociadas, sem rede ou carteira de produção.
+
+## Página de detalhes da transação (Razor)
+
+Após compilar `PrivateCoin.Site`, execute na raiz do repositório:
+
+```sh
+mkdir -p work
+mcs -r:PrivateCoin.Site/bin/System.Web.Mvc.dll \
+  -r:PrivateCoin.Site/bin/System.Web.Razor.dll \
+  -r:PrivateCoin.Site/bin/System.Web.WebPages.Razor.dll -r:System.Web \
+  -out:work/PrivateCoinSiteTransactionViewRegression.exe \
+  Tests/PrivateCoinSiteTransactionViewRegression.cs
+MONO_PATH=PrivateCoin.Site/bin mono work/PrivateCoinSiteTransactionViewRegression.exe
+```
+
+Valida a página com o parser Razor usado pelo MVC. Detecta erros nos loops
+aninhados que a compilação padrão do projeto não verifica e que causavam
+"An error occurred while processing your request." ao abrir os detalhes.
