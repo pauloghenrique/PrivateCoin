@@ -26,7 +26,7 @@ const d = fixture.draft;
     const recordText = JSON.stringify(fixture.wallet);
     await wallet.importFile({ size: Buffer.byteLength(recordText), arrayBuffer: async () => new TextEncoder().encode(recordText).buffer }, 'dex-test-password-only');
     const previousPool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
-    const expected = { rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
+    const expected = { loyaltyPolicy: d.loyaltyPolicy, rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
@@ -41,6 +41,7 @@ const d = fixture.draft;
         draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
         await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId));
     if (d.operation === 'pool') await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.rewardMode = d.rewardMode === 'loyalty' ? 'fees' : 'loyalty'; }), expected, fixture.networkId));
+    if (d.operation === 'pool' && d.loyaltyPolicy) for (const mutation of [policy => { policy.feeBasisPoints++; }, policy => { policy.minimumReserveAtomic = '1'; }, policy => { policy.earlyExit = policy.earlyExit === 'locked' ? 'forfeit' : 'locked'; }]) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => mutation(draft.loyaltyPolicy)), expected, fixture.networkId));
     if (d.allowUserLiquidity) {
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.participation.holders[0].sharesAtomic = '1'; }), expected, fixture.networkId));
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.allowUserLiquidity = false; }), expected, fixture.networkId));
@@ -130,7 +131,13 @@ const d = fixture.draft;
         byId('pool-reward-mode').value = d.rewardMode || 'fees';
         byId('pool-form').dispatchEvent(new w.Event('change'));
         assert.equal(byId('pool-reward-title').textContent, d.rewardMode === 'loyalty' ? 'Bônus por permanência' : 'Participação nas taxas');
-        if (d.rewardMode === 'loyalty') assert(byId('pool-reward-detail').textContent.includes('ainda não gera pagamentos'));
+        if (d.rewardMode === 'loyalty') {
+            assert(byId('pool-reward-detail').textContent.includes('ainda não gera pagamentos'));
+            assert.equal(byId('pool-loyalty-policy').hidden, false);
+            byId('pool-loyalty-fee').value = wallet.formatAtomic(d.loyaltyPolicy.feeBasisPoints, 2);
+            byId('pool-loyalty-minimum').value = wallet.formatAtomic(d.loyaltyPolicy.minimumReserveAtomic, 8);
+            byId('pool-loyalty-exit').value = d.loyaltyPolicy.earlyExit;
+        } else assert.equal(byId('pool-loyalty-policy').hidden, true);
         byId('pool-user-liquidity').checked = Boolean(d.allowUserLiquidity);
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);

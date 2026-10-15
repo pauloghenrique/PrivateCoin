@@ -35,6 +35,18 @@
                         <p id="pool-reward-summary">Destinar aos provedores uma parcela das taxas geradas pelas negociações.</p>
                         <small id="pool-reward-detail">Recompensa acompanha o uso do pool. Retorno varia conforme o volume.</small>
                     </div>
+                    <fieldset id="pool-loyalty-policy" hidden disabled>
+                        <legend>Regras do bônus definidas pelo criador</legend>
+                        <label for="pool-loyalty-fee">Parcela das taxas destinada ao bônus (%)</label>
+                        <input id="pool-loyalty-fee" inputmode="decimal" maxlength="6" pattern="[0-9]+([.,][0-9]{1,2})?" />
+                        <small>De 0,01% a 100% das taxas geradas pelas negociações. Esta parcela não altera a taxa de negociação da pool.</small>
+                        <label for="pool-loyalty-minimum">Reserva mínima planejada para bônus (POVIX)</label>
+                        <input id="pool-loyalty-minimum" inputmode="decimal" maxlength="30" pattern="[0-9]+([.,][0-9]{1,8})?" />
+                        <label for="pool-loyalty-exit">Retirada antes do prazo escolhido</label>
+                        <select id="pool-loyalty-exit"><option value="forfeit">Permitir retirada do aporte com perda do bônus</option><option value="locked">Bloquear retirada até o fim do prazo</option></select>
+                        <p>O provedor escolherá o prazo em dias, meses ou anos. O bônus será proporcional à participação e receberá a parcela das taxas definida acima.</p>
+                        <small>Cadastro das regras: a reserva ainda não é debitada ou separada e não há pagamento de bônus nem bloqueio por prazo ativo.</small>
+                    </fieldset>
                     <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
                     <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
                 </fieldset>

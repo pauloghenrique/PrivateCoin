@@ -38,13 +38,22 @@ namespace Povix.Dex.Services
                 RequireReady(); ReserveDraftSlot(owner);
                 if (model.RewardMode != "fees" && model.RewardMode != "loyalty")
                     throw new TokenOperationException("reward_mode_invalid", "Escolha uma opção de recompensa válida.");
+                PoolLoyaltyPolicy loyaltyPolicy = null;
+                if (model.RewardMode == "loyalty") {
+                    long percent, minimum;
+                    if (!CreateTokenViewModel.TryParseSupply(model.LoyaltyFeePercent, 2, out percent) || percent > 10000 ||
+                        !CreateTokenViewModel.TryParseSupply(model.LoyaltyMinimumReserve, 8, out minimum) ||
+                        (model.LoyaltyEarlyExit != "forfeit" && model.LoyaltyEarlyExit != "locked"))
+                        throw new TokenOperationException("loyalty_policy_invalid", "Defina de 0,01% a 100% das taxas, uma reserva mínima positiva em POVIX e uma regra de saída antecipada.");
+                    loyaltyPolicy = new PoolLoyaltyPolicy { FeeBasisPoints = (int)percent, MinimumReserveAtomic = minimum, EarlyExit = model.LoyaltyEarlyExit };
+                }
                 var a = Asset(model.AssetA); var b = Asset(model.AssetB);
                 long amountA = ParseAmount(model.AmountA, a.Decimals), amountB = ParseAmount(model.AmountB, b.Decimals);
                 string key = publicKeys.FirstOrDefault(value => AddressFor(value) == address);
                 if (key == null) throw new TokenOperationException("wallet_invalid", "O endereço da pool deve pertencer à carteira aberta.");
                 var tx = TokenExchange.PrepareLiquidity(blockchain, pending, publicKeys, AssetId(a), AssetId(b), amountA, amountB,
                     address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys(), model.AllowUserLiquidity);
-                var draft = new PreparedExchange { Transaction = tx, Operation = "pool", RewardMode = model.RewardMode, Owner = owner, ProviderKey = key,
+                var draft = new PreparedExchange { Transaction = tx, Operation = "pool", RewardMode = model.RewardMode, LoyaltyPolicy = loyaltyPolicy, Owner = owner, ProviderKey = key,
                     Address = address, AssetA = a, AssetB = b, ReserveA = amountA, ReserveB = amountB, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 return AddExchangeDraft(draft);
             }
@@ -213,7 +222,7 @@ namespace Povix.Dex.Services
                 bool validated = block != null || queued != null && blockchain.HasValidTransactionApproval(queued, pending);
                 var pool = Snapshot(record.Exchange.PoolId);
                 return new ExchangeReceiptViewModel { TransactionId = id, PoolId = record.Exchange.PoolId, Operation = record.Exchange.Operation,
-                    RewardMode = pool?.RewardMode ?? "fees",
+                    RewardMode = pool?.RewardMode ?? "fees", LoyaltyPolicy = pool?.LoyaltyPolicy,
                     Status = block != null ? "confirmed" : queued == null ? "rejected" : validated ? "validated" : "pending",
                     Fee = tx.Fee, BlockHeight = block?.Height, BlockHash = block?.Hash, Confirmations = block == null ? 0 : blockchain.Blocks.Last().Height - block.Height + 1,
                     PeerCount = node.ConnectedPeerCount, ValidationCount = validated ? 1 : 0,
@@ -238,7 +247,7 @@ namespace Povix.Dex.Services
             { throw new TokenOperationException("funding_unavailable", "As entradas foram gastas ou reservadas, ou a transação foi rejeitada. Atualize e prepare novamente."); }
             var nextPending = pending.Concat(new[] { tx }).ToList();
             var nextSubmitted = submitted.Concat(new[] { new SubmittedToken { DraftId = id, Transaction = tx,
-                Exchange = new ExchangeOperation { Operation = draft.Operation, RewardMode = draft.RewardMode, PoolId = draft.PoolId ?? tx.Id,
+                Exchange = new ExchangeOperation { Operation = draft.Operation, RewardMode = draft.RewardMode, LoyaltyPolicy = draft.LoyaltyPolicy, PoolId = draft.PoolId ?? tx.Id,
                     PreviousReserveId = draft.ReserveId, ProviderKey = draft.ProviderKey, AssetA = draft.AssetA, AssetB = draft.AssetB } } }).ToList();
             Save(blockchain, nextPending, nextSubmitted);
             pending = nextPending; submitted = nextSubmitted; exchangeDrafts.Remove(id); return tx;
@@ -366,7 +375,7 @@ namespace Povix.Dex.Services
                 status = "available"; reason = "confirmed_reserves";
                 message = "Reservas bloqueadas na blockchain e disponíveis para troca. Transferências comuns não podem movimentá-las.";
             }
-            return new PoolSnapshot { Id = id, RewardMode = root.Exchange.RewardMode ?? "fees", Transaction = current, ProviderKey = root.Exchange.ProviderKey,
+            return new PoolSnapshot { Id = id, RewardMode = root.Exchange.RewardMode ?? "fees", LoyaltyPolicy = root.Exchange.LoyaltyPolicy, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
                 AssetA = root.Exchange.AssetA, AssetB = root.Exchange.AssetB, Available = available, Locked = locked, CanManage = canManage,
                 ClosureRenounced = closureRenounced,
                 Status = status, StatusReason = reason, StatusMessage = message, BlockingTransactionId = blocking?.Id,
@@ -383,7 +392,7 @@ namespace Povix.Dex.Services
                 .SelectMany(id => new[] { id + ":0", id + ":1" }).Concat(locked.Select(output => output.TransactionId + ":" + output.OutputIndex)), StringComparer.Ordinal);
         }
         private static object PoolResponse(PoolSnapshot pool) => new {
-            rewardMode = pool.RewardMode,
+            rewardMode = pool.RewardMode, loyaltyPolicy = LoyaltyPolicyResponse(pool.LoyaltyPolicy),
             allowUserLiquidity = pool.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(pool.Transaction.PoolParticipation),
             poolId = pool.Id, providerAddress = AddressFor(pool.ProviderKey), assetA = AssetResponse(pool.AssetA), assetB = AssetResponse(pool.AssetB),
@@ -393,7 +402,7 @@ namespace Povix.Dex.Services
             managementMessage = pool.ClosureRenounced ? "Renúncia do criador: encerramento bloqueado neste DEX. As reservas permanecem destinadas às trocas." : "",
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
-            rewardMode = draft.RewardMode ?? "fees",
+            rewardMode = draft.RewardMode ?? "fees", loyaltyPolicy = LoyaltyPolicyResponse(draft.LoyaltyPolicy),
             allowUserLiquidity = draft.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(draft.Transaction.PoolParticipation),
             sharesAtomic = draft.Transaction.LiquidityChange == null ? "0" : Atomic(draft.Transaction.LiquidityChange.Shares),
@@ -409,6 +418,9 @@ namespace Povix.Dex.Services
             signingPayload = Convert.ToBase64String(draft.Transaction.SigningPayload), timestampUtcTicks = Atomic(draft.Transaction.TimestampUtcTicks),
             networkId = Blockchain.NetworkId, consensusVersion = Blockchain.ConsensusVersion, expiresUtc = draft.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture),
             poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
+        private static object LoyaltyPolicyResponse(PoolLoyaltyPolicy policy) => policy == null ? null : new {
+            feeBasisPoints = policy.FeeBasisPoints, minimumReserveAtomic = Atomic(policy.MinimumReserveAtomic), earlyExit = policy.EarlyExit,
+            status = "configured", periodUnits = new[] { "days", "months", "years" } };
         private static object ParticipationResponse(PoolParticipation state) => state == null ? null : new {
             totalSharesAtomic = Atomic(state.Total),
             holders = state.Shares.OrderBy(item => item.Key, StringComparer.Ordinal).Select(item => new { address = item.Key, sharesAtomic = Atomic(item.Value) }).ToArray() };
@@ -428,6 +440,7 @@ namespace Povix.Dex.Services
             public UnsignedTokenExchange Transaction;
             public string Operation, Owner, ProviderKey, PoolId, ReserveId, Address, RewardMode;
             public TokenDefinition AssetA, AssetB;
+            public PoolLoyaltyPolicy LoyaltyPolicy;
             public long ReserveA, ReserveB, Amount, MinimumReceive;
             public int InputSide;
             public DateTime ExpiresUtc;
@@ -437,6 +450,7 @@ namespace Povix.Dex.Services
             public string Id, ProviderKey, Status, StatusReason, StatusMessage, BlockingTransactionId, RewardMode;
             public Transaction Transaction;
             public TokenDefinition AssetA, AssetB;
+            public PoolLoyaltyPolicy LoyaltyPolicy;
             public UnspentOutput ReserveA, ReserveB;
             public bool Available, Locked, CanManage, ClosureRenounced;
         }
@@ -445,6 +459,7 @@ namespace Povix.Dex.Services
         {
             [DataMember] public string Operation { get; set; }
             [DataMember(EmitDefaultValue = false)] public string RewardMode { get; set; }
+            [DataMember(EmitDefaultValue = false)] public PoolLoyaltyPolicy LoyaltyPolicy { get; set; }
             [DataMember] public string PoolId { get; set; }
             [DataMember] public string PreviousReserveId { get; set; }
             [DataMember] public string ProviderKey { get; set; }

@@ -497,7 +497,15 @@ a regra existente de hash dos fontes do Core.
 Na criação da pool, a opção de recompensa permite escolher **Participação nas
 taxas** (padrão) ou **Bônus por permanência**. A escolha é registrada nos metadados
 do DEX e exibida na revisão, no catálogo e no comprovante. Pools antigas assumem
-Participação nas taxas. O modo Bônus por permanência registra a preferência;
-prazo mínimo, fórmula e fonte dos recursos ainda precisam ser definidos para
-ativar pagamentos. A escolha por si só não altera as taxas e a distribuição
-proporcional de reservas implementadas no Core.
+Participação nas taxas. O modo Bônus por permanência registra a configuração
+definida pelo criador. O pagamento ainda não está ativo: as regras cadastradas
+precisam ser executadas pelo mecanismo de posições e reservas do Core. A escolha
+por si só não altera as taxas e a distribuição proporcional das reservas.
+
+O criador também cadastra a parcela das taxas destinada ao bônus (0,01% a 100%,
+com duas casas decimais), a reserva mínima planejada em POVIX e a regra de saída
+antecipada: retirada com perda do bônus ou bloqueio até o fim do prazo. Essas
+regras são metadados persistentes de configuração; ainda não financiam uma reserva,
+separam taxas, bloqueiam retiradas por tempo ou pagam bônus. O fluxo atual de
+liquidez não muda. A escolha do prazo em dias, meses ou anos e a execução
+financeira exigem implementação no mecanismo de posições e de reservas do Core.

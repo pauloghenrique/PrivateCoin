@@ -7,7 +7,12 @@
     <p id="receipt-pool-state" class="notice token-receiving-addresses" role="status">@Model.PoolStatusMessage</p>
     <section class="card receipt-card"><span id="receipt-status" class="status-pill">@Model.Status</span>
         <div class="receipt-stats"><div><span>Taxa da rede em POVIX</span><strong>@TokenNetworkViewModel.FormatPovix(Model.Fee)</strong></div><div><span>Confirmações em bloco</span><strong id="receipt-confirmations">@Model.Confirmations</strong></div></div>
-        <dl class="receipt-data"><dt>Opção de recompensa</dt><dd>@(Model.RewardMode == "loyalty" ? "Bônus por permanência — regras pendentes, sem pagamento de bônus ativo" : "Participação nas taxas")</dd><dt>Pool</dt><dd>@Model.PoolId</dd><dt>Transação</dt><dd>@Model.TransactionId</dd><dt>Aprovações</dt><dd id="receipt-validations">@Model.ValidationCount</dd><dt>Bloco</dt><dd id="receipt-block">@(Model.BlockHeight.HasValue ? Model.BlockHeight.Value.ToString() : "Aguardando confirmação")</dd><dt>Hash do bloco</dt><dd id="receipt-hash">@(Model.BlockHash ?? "—")</dd>
+        <dl class="receipt-data"><dt>Opção de recompensa</dt><dd>@(Model.RewardMode == "loyalty" ? "Bônus por permanência — configuração, sem pagamento de bônus ativo" : "Participação nas taxas")</dd>@if (Model.LoyaltyPolicy != null) {
+            <dt>Parcela das taxas para bônus</dt><dd>@TokenNetworkViewModel.FormatToken(Model.LoyaltyPolicy.FeeBasisPoints, 2)%</dd>
+            <dt>Reserva mínima planejada (não debitada)</dt><dd>@TokenNetworkViewModel.FormatPovix(Model.LoyaltyPolicy.MinimumReserveAtomic) POVIX</dd>
+            <dt>Saída antecipada planejada</dt><dd>@(Model.LoyaltyPolicy.EarlyExit == "locked" ? "Bloquear retirada até o fim do prazo" : "Permitir retirada do aporte com perda do bônus")</dd>
+        }
+        <dt>Pool</dt><dd>@Model.PoolId</dd><dt>Transação</dt><dd>@Model.TransactionId</dd><dt>Aprovações</dt><dd id="receipt-validations">@Model.ValidationCount</dd><dt>Bloco</dt><dd id="receipt-block">@(Model.BlockHeight.HasValue ? Model.BlockHeight.Value.ToString() : "Aguardando confirmação")</dd><dt>Hash do bloco</dt><dd id="receipt-hash">@(Model.BlockHash ?? "—")</dd>
         @foreach (var output in Model.Outputs) { <dt>@output.Purpose</dt><dd>@TokenNetworkViewModel.FormatToken(output.Amount, output.Decimals) @output.Symbol</dd><dt>Endereço</dt><dd>@output.Address</dd> }
         </dl><p id="receipt-connectivity" class="muted-text">@Model.PeerCount pares conectados · Atualização a cada 10 segundos</p>
     </section>

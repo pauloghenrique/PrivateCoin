@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Runtime.Serialization;
 using PrivateCoin.Core;
 
 namespace Povix.Dex.Models
@@ -18,10 +19,20 @@ namespace Povix.Dex.Models
     {
         public bool AllowUserLiquidity { get; set; }
         [Required, RegularExpression("(fees|loyalty)")] public string RewardMode { get; set; } = "fees";
+        public string LoyaltyFeePercent { get; set; }
+        public string LoyaltyMinimumReserve { get; set; }
+        public string LoyaltyEarlyExit { get; set; }
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetA { get; set; }
         [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetB { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountA { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountB { get; set; }
+    }
+    [DataContract]
+    public sealed class PoolLoyaltyPolicy
+    {
+        [DataMember] public int FeeBasisPoints { get; set; }
+        [DataMember] public long MinimumReserveAtomic { get; set; }
+        [DataMember] public string EarlyExit { get; set; }
     }
     public sealed class LiquidityChangeViewModel : ExchangeFeeModel
     {
@@ -44,6 +55,7 @@ namespace Povix.Dex.Models
         public string PoolId { get; set; }
         public string Operation { get; set; }
         public string RewardMode { get; set; }
+        public PoolLoyaltyPolicy LoyaltyPolicy { get; set; }
         public string Status { get; set; }
         public bool PoolAvailable { get; set; }
         public string PoolStatusMessage { get; set; }

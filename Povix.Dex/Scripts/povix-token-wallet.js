@@ -242,6 +242,13 @@
         let expectedShares = null;
         if (draft.operation === 'pool') {
             if (!['fees', 'loyalty'].includes(draft.rewardMode || 'fees') || (draft.rewardMode || 'fees') !== (expected.rewardMode || 'fees')) fail();
+            const policy = draft.loyaltyPolicy, wantedPolicy = expected.loyaltyPolicy;
+            if (draft.rewardMode === 'loyalty') {
+                if (!policy || !wantedPolicy || !Number.isInteger(policy.feeBasisPoints) || policy.feeBasisPoints < 1 || policy.feeBasisPoints > 10000 ||
+                    !atomic(policy.minimumReserveAtomic) || BigInt(policy.minimumReserveAtomic) <= 0n || !['forfeit', 'locked'].includes(policy.earlyExit) ||
+                    policy.feeBasisPoints !== wantedPolicy.feeBasisPoints || policy.minimumReserveAtomic !== wantedPolicy.minimumReserveAtomic || policy.earlyExit !== wantedPolicy.earlyExit ||
+                    policy.status !== 'configured') fail();
+            } else if (policy) fail();
             if (Boolean(draft.allowUserLiquidity) !== Boolean(expected.allowUserLiquidity)) fail();
             if (expected.allowUserLiquidity) expectedShares = new Map([[draft.providerAddress, a]]);
         } else if (expected.participation) expectedShares = participation(expected.participation);
