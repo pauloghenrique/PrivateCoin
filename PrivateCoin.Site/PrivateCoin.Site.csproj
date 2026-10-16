@@ -149,6 +149,10 @@
     <Content Include="favicon.ico" />
     <Content Include="Global.asax" />
     <Content Include="Content\Site.css" />
+    <Content Include="Content\PovixSwap.css" />
+    <Content Include="Scripts\povix-swap-core.js" />
+    <Content Include="Scripts\povix-swap.js" />
+    <Content Include="Scripts\povix-swap-live.js" />
     <Content Include="Scripts\bootstrap.bundle.js" />
     <Content Include="Scripts\bootstrap.bundle.min.js" />
     <Content Include="Scripts\bootstrap.esm.js" />
@@ -183,6 +187,8 @@
     <Content Include="Views\Home\Explorer.cshtml" />
     <Content Include="Views\Home\Transaction.cshtml" />
     <Content Include="Views\Home\Token.cshtml" />
+    <Content Include="Views\Home\Swap.cshtml" />
+    <Content Include="Views\Home\SwapDemo.cshtml" />
     <Content Include="Views\Home\WhitePaper.cshtml" />
   </ItemGroup>
   <ItemGroup>
