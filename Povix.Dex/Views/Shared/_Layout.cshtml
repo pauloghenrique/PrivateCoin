@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@ViewBag.Title · Povix.Dex</title>
+    <title>@ViewBag.Title · Povi.Dex</title>
     <meta name="description" content="Crie tokens e pools de liquidez e troque ativos na blockchain POVIX com assinatura local da sua carteira." />
     <link rel="stylesheet" href="@Url.Content("~/Content/Site.css")" />
 </head>
@@ -11,7 +11,7 @@
     @if (ViewBag.PageClass == "market-page")
     {
         <nav class="market-rail" aria-label="Navegação principal">
-            <a class="market-rail-brand" href="@Url.Action("Index", "Liquidity")" aria-label="Povix.Dex">P</a>
+            <a class="market-rail-brand" href="@Url.Action("Index", "Liquidity")" aria-label="Povi.Dex">P</a>
             <a href="@Url.Action("Create", "Tokens")" aria-label="Criar token" title="Criar token"><span aria-hidden="true">◇</span></a>
             <a href="@Url.Action("Index", "TokenTransfers")" aria-label="Movimentar tokens" title="Movimentar tokens"><span aria-hidden="true">⇄</span></a>
             <a class="market-rail-active" href="@Url.Action("Index", "Liquidity")" aria-current="page" aria-label="Pools e trocas" title="Pools e trocas"><span aria-hidden="true">▥</span></a>
@@ -20,7 +20,7 @@
         </nav>
     }
     <header class="site-header">
-        <a class="brand" href="@Url.Action("Index", "Home")" aria-label="Povix.Dex início"><span class="brand-mark">P</span><span>povix<span class="brand-dex">.dex</span></span></a>
+        <a class="brand" href="@Url.Action("Index", "Home")" aria-label="Povi.Dex início"><span class="brand-mark">P</span><span>Povi<span class="brand-dex">.Dex</span></span></a>
         <nav aria-label="Navegação principal"><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Home" ? "nav-active" : "")" href="@Url.Action("Index", "Home")">Mercado</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Tokens" ? "nav-active" : "")" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenTransfers" ? "nav-active" : "")" href="@Url.Action("Index", "TokenTransfers")">Movimentar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "TokenProfiles" ? "nav-active" : "")" href="@Url.Action("Index", "TokenProfiles")">Editar tokens</a><a class="@(ViewContext.RouteData.Values["controller"].ToString() == "Liquidity" ? "nav-active" : "")" href="@Url.Action("Index", "Liquidity")">Pools e trocas</a><a href="#wallet-menu" data-wallet-open><span data-wallet-label>Conectar carteira</span></a><span class="network-label"><i></i> Blockchain POVIX</span></nav>
     </header>
     <dialog id="wallet-menu" aria-label="Conexão da carteira"><button type="button" id="wallet-close" class="text-button">Fechar</button>@Html.Partial("_Wallet")<p id="wallet-message" role="status"></p></dialog>
