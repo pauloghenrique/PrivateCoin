@@ -23,7 +23,7 @@ class Element {
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-pool-market.js', 'utf8'), { document, window: { addEventListener: () => {} }, location: { href: 'https://example.test/' }, URL, AbortController, setTimeout: callback => { timers.set(++sequence, callback); return sequence; }, clearTimeout: key => timers.delete(key), fetch: async url => { calls++; assert.equal(new URL(url).searchParams.get('interval'), element('market-interval').value); return { ok: !failing, status: 503, json: async () => data }; } });
     const settle = () => new Promise(resolve => setImmediate(resolve)); await settle();
     assert.equal(element('market-pair').textContent, 'POVIX / TKN');
-    assert.equal(element('market-price').textContent, '0,01 POVIX por TKN');
+    assert.equal(element('market-price').textContent, '1 POVIX = 0,01 TKN');
     assert.equal(element('market-reserve-b').textContent, '100,00 TKN');
     assert.equal(element('market-token-info').children.length, 2);
     assert.equal(element('market-label-a').textContent, 'Reserva de POVIX');
