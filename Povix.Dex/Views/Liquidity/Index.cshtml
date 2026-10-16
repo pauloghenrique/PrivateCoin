@@ -50,7 +50,7 @@
                     <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
                     <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
                 </fieldset>
-                <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço A / B: selecione dois ativos distintos e informe as reservas.</p>
+                <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço: selecione dois ativos distintos e informe as reservas.</p>
                 <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
             </form>
             <form id="user-liquidity-form" class="card token-form">
@@ -69,7 +69,7 @@
                 <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>Assine a troca com sua carteira. Não é necessária a aprovação do criador da pool. As reservas precisam estar confirmadas.</p></div></div>
                 <fieldset id="swap-fields" disabled>
                     <label for="swap-pool">Pool para troca</label><select id="swap-pool" required></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
-                    <p id="swap-price" class="liquidity-price" role="status" aria-live="polite">Preço A / B: selecione uma pool.</p><small>Preço pelas reservas, antes da taxa da pool e do impacto da quantidade trocada.</small>
+                    <p id="swap-price" class="liquidity-price" role="status" aria-live="polite">Preço: selecione uma pool.</p><small>Preço pelas reservas, antes da taxa da pool e do impacto da quantidade trocada.</small>
                     <label for="swap-side">Ativo que você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
                     <label for="swap-amount">Quantidade a trocar</label><input id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
                     <p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>

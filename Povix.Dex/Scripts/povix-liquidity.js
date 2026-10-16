@@ -36,12 +36,12 @@
             try {
                 const a = asset(byId('pool-asset-a').value), b = asset(byId('pool-asset-b').value);
                 initial.textContent = priceText(a, b, wallet.parseSupply(byId('pool-amount-a').value, a.decimals), wallet.parseSupply(byId('pool-amount-b').value, b.decimals));
-            } catch (_) { initial.textContent = 'Preço A / B: selecione dois ativos distintos e informe as reservas.'; }
+            } catch (_) { initial.textContent = 'Preço: selecione dois ativos distintos e informe as reservas.'; }
         }
         const current = byId('swap-price');
         if (current) {
             try { current.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
-            catch (_) { current.textContent = 'Preço A / B: indisponível. Selecione uma pool com reservas positivas.'; }
+            catch (_) { current.textContent = 'Preço: indisponível. Selecione uma pool com reservas positivas.'; }
         }
     }
     function fee() {
@@ -398,7 +398,7 @@
                 const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
                 const price = document.createElement('small');
                 try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
-                catch (_) { price.textContent = 'Preço A / B: indisponível.'; }
+                catch (_) { price.textContent = 'Preço: indisponível.'; }
                 entry.append(detail, price, state); byId('pool-list').appendChild(entry);
                 if (pool.managementMessage) {
                     const management = document.createElement('small'); management.textContent = pool.managementMessage;
