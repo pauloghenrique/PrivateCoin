@@ -7,7 +7,7 @@
     const form = byId('token-form');
     const csrf = form.querySelector('[name="__RequestVerificationToken"]').value;
     let network = null, draft = null, expected = null, changeAddress = null;
-    let busy = false, refreshing = false, backupDownloaded = false, balance = null;
+    let busy = false, refreshing = false, balance = null;
     let signedSignatures = null;
     let walletDestination = null;
 
@@ -47,9 +47,9 @@
         byId('prepare-token').disabled = busy || Boolean(draft) || !unlocked || !ready || !enough;
         byId('own-address').disabled = busy || Boolean(draft) || !unlocked;
         byId('token-fields').disabled = busy || Boolean(draft);
-        byId('sign-token').disabled = busy || !draft || !unlocked || !ready || !backupDownloaded || !byId('backup-confirmed').checked;
+        byId('sign-token').disabled = busy || !draft || !unlocked || !ready;
         byId('edit-token').disabled = busy;
-        byId('download-backup').disabled = busy;
+
         byId('create-hint').textContent = busy ? 'Processando no navegador…' : draft ? 'Revise o resumo e assine ao lado.' :
             !unlocked ? 'Desbloqueie sua carteira para continuar.' : !ready ? 'Aguarde a conexão e a sincronização com a rede.' :
                 !enough ? 'A carteira precisa de POVIX confirmado para pagar a taxa.' : 'A próxima etapa permite revisar antes de assinar.';
@@ -78,8 +78,7 @@
         byId('precision-example').textContent = 'Menor unidade: ' + wallet.formatAtomic('1', decimals);
     }
     function resetDraft() {
-        draft = null; expected = null; backupDownloaded = false; signedSignatures = null;
-        byId('backup-confirmed').checked = false;
+        draft = null; expected = null; signedSignatures = null;
         byId('sign-actions').hidden = true;
         byId('prepare-token').textContent = 'Revisar criação →';
         updateControls(); updateReview();
@@ -165,21 +164,15 @@
             await wallet.verifyDraft(result, expected, app.dataset.networkId, changeAddress);
             draft = Object.freeze(result);
             byId('sign-actions').hidden = false;
-            byId('backup-confirmed').checked = false; backupDownloaded = false;
             byId('prepare-token').textContent = 'Criação preparada';
             updateReview();
             byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
         } catch (error) { resetDraft(); message(error.message); }
         finally { busy = false; updateControls(); }
     });
-    byId('download-backup').addEventListener('click', async () => {
-        try { await wallet.backup(); backupDownloaded = true; updateControls(); }
-        catch (error) { message(error.message); }
-    });
-    byId('backup-confirmed').addEventListener('change', updateControls);
     byId('edit-token').addEventListener('click', () => { resetDraft(); message(''); });
     byId('sign-token').addEventListener('click', async () => {
-        if (busy || !draft || !backupDownloaded || !byId('backup-confirmed').checked) return;
+        if (busy || !draft || !wallet.isUnlocked() || !network?.CanCreate) return;
         busy = true; message(''); updateControls(); byId('sign-token').textContent = 'Assinando e enviando…';
         try {
             if (!signedSignatures) {
@@ -194,7 +187,7 @@
         } catch (error) {
             if (error.rejected) resetDraft();
             message(error.message + (error.rejected ? '' : ' Se o envio foi interrompido, repita o mesmo envio para recuperar o comprovante.'));
-        } finally { busy = false; byId('sign-token').textContent = 'Assinar e enviar à rede'; updateControls(); }
+        } finally { busy = false; byId('sign-token').textContent = 'Confirmar transação'; updateControls(); }
     });
     refreshNetwork();
     setInterval(refreshNetwork, 10000);

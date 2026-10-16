@@ -148,14 +148,9 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
         { signingPayload: Buffer.from('forged').toString('base64') }, { draftId: '0'.repeat(32) }, { expiresUtc: '2000-01-01T00:00:00Z' }
     ]) await assert.rejects(wallet.verifyTransferDraft({ ...fixture.draft, ...changed }, fixture.expected, fixture.networkId, fixture.changeAddress));
     console.log('PASS transfer review rejects forged destination, token, creator, amounts, fee, both change outputs, payloads, replay and expiry');
-    await node('sign-transfer').listeners.click(); assert.equal(submissions.length, 0);
-    node('backup-confirmed').checked = true;
-    await node('sign-transfer').listeners.click(); assert.equal(submissions.length, 0, 'backup download is required');
-    const schedule = global.setTimeout;
-    global.setTimeout = callback => { callback(); return 0; };
-    try { node('download-backup').listeners.click(); } finally { global.setTimeout = schedule; }
-    assert.equal(backupDownloads, 1);
+    assert.equal(node('sign-transfer').disabled, false, 'connected wallet can confirm without a backup');
     await node('sign-transfer').listeners.click();
+    assert.equal(backupDownloads, 0, 'confirmation must not download a file');
     assert.equal(submissions.length, 1); assert.equal(node('sign-actions').hidden, false, 'temporary failure keeps the same draft');
     assert.equal(wallet.isUnlocked(), true); assert(node('app-message').textContent.includes('network_unavailable'));
     await node('sign-transfer').listeners.click();
@@ -164,5 +159,5 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/po
     assert(submissions[1].signatures.every(signature => Buffer.from(signature, 'base64').length === 256));
     assert.equal(Buffer.from(submissions[1].creatorSignature, 'base64').length, 256);
     fs.writeFileSync(path.join(directory, 'transfer-browser-result.json'), JSON.stringify(submissions[1]));
-    console.log('PASS real transfer UI: explicit wallet selection, original change keys, backup gating, local signatures, creator proof and idempotent retry');
+    console.log('PASS real transfer UI: explicit wallet selection, original change keys, direct confirmation, local signatures, creator proof and idempotent retry');
 })().catch(error => { console.error(error); process.exitCode = 1; });
