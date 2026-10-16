@@ -130,8 +130,9 @@ Um destino informado explicitamente é preservado. Se pertencer a outra
 carteira, a revisão avisa que a movimentação pelo DEX exige também a chave
 desse destino, além da autorização do criador.
 
-O backup atualizado preserva todas as carteiras da coleção; a revisão pede
-seu download. Use-o para restaurar a carteira no DEX em outro navegador.
+A exportação opcional no menu da carteira preserva todas as carteiras da coleção.
+A revisão não exige baixar nem selecionar um arquivo: clique em **Confirmar transação**
+para verificar, assinar localmente e enviar usando a carteira já conectada. Use-o para restaurar a carteira no DEX em outro navegador.
 Não apague o armazenamento local antes de guardá-lo. Evite usar a mesma
 carteira simultaneamente em instalações diferentes: uma transação concorrente
 pode consumir seu UTXO.
@@ -210,8 +211,8 @@ o backup atualizado que contém essa chave.
 
 A revisão mostra quantidade, taxa em POVIX, troco do token, troco em POVIX e
 seus endereços. Ambos os trocos voltam ao primeiro endereço já existente da
-carteira aberta; a preparação não gera chaves novas. Baixe o backup, confira
-os dados e confirme antes de assinar. O navegador reconstrói o payload
+carteira aberta; a preparação não gera chaves novas. Confira
+os dados e clique em **Confirmar transação**. O navegador reconstrói o payload
 nativo `TokenTransfer` e assina cada entrada localmente. Também assina uma
 autorização separada, vinculada à rede, ao token, ao identificador da
 preparação e ao payload completo. O servidor valida essa autorização com a
@@ -275,7 +276,7 @@ a alteração, e restaurar um backup antigo pode restaurar permissões antigas.
 Abra **Pools e trocas** no menu (`/liquidez`). A página usa a mesma carteira
 local das telas de tokens. Escolha dois ativos distintos e as quantidades
 iniciais, revise as reservas, os trocos, os endereços e a taxa em POVIX,
-guarde seu backup e assine a criação. São aceitos dois tokens nativos
+clique no botão de confirmação para assinar e enviar a criação. São aceitos dois tokens nativos
 confirmados ou um token nativo com POVIX. ETH, BTC e tokens de outras redes
 não são ativos dessa blockchain.
 
@@ -315,7 +316,7 @@ habilitada automaticamente quando a confirmação chega, sem reabrir a carteira
 já selecionada nessa tela.
 
 Para liberar os valores, abra a carteira provedora e use **Revisar encerramento
-da pool** na lista. Confira as quantidades e os endereços, guarde o backup e
+da pool** na lista. Confira as quantidades e os endereços, confirme a operação e
 assine. `LiquidityClose` (tipo 9) exige as assinaturas das duas reservas e
 retorna ambos os valores intactos ao provedor, sem novo bloqueio. A taxa é
 paga separadamente em POVIX livre. Até a confirmação, a pool fica ocupada;

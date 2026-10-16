@@ -5,7 +5,7 @@
     const wallet = window.PovixTokenWallet, byId = id => document.getElementById(id), form = byId('transfer-form');
     const csrf = form.querySelector('[name="__RequestVerificationToken"]').value;
     let network = null, tokens = [], balance = null, draft = null, expected = null, signed = null;
-    let busy = false, refreshing = false, backupDownloaded = false, walletEpoch = 0;
+    let busy = false, refreshing = false, walletEpoch = 0;
     function message(text) { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; }
     async function post(url, values) {
         const body = new URLSearchParams({ __RequestVerificationToken: csrf });
@@ -67,8 +67,8 @@
         byId('transfer-fields').disabled = busy || Boolean(draft) || !unlocked || !tokens.length;
         // A click can explain field/balance problems; preparation still checks every requirement.
         byId('prepare-transfer').disabled = busy || Boolean(draft) || !unlocked || !ready;
-        byId('sign-transfer').disabled = busy || !draft || !unlocked || !ready || !backupDownloaded || !byId('backup-confirmed').checked;
-        byId('edit-transfer').disabled = busy; byId('download-backup').disabled = busy;
+        byId('sign-transfer').disabled = busy || !draft || !unlocked || !ready;
+        byId('edit-transfer').disabled = busy;
         byId('transfer-hint').textContent = busy ? 'Processando no seu dispositivo…' : draft ? 'Confira o resumo e assine.' : reviewIssue() || 'Revise a movimentação antes de assinar.';
         byId('review-name').textContent = draft ? draft.name : token ? token.name : 'Seu token';
         byId('review-symbol').textContent = draft ? draft.symbol : token ? token.symbol : 'SÍMBOLO';
@@ -100,8 +100,7 @@
         byId('amount-help').textContent = token ? token.decimals + ' casas decimais. Use vírgula ou ponto, sem separador de milhar.' : 'A precisão segue o token selecionado.';
     }
     function resetDraft() {
-        draft = null; expected = null; signed = null; backupDownloaded = false;
-        byId('backup-confirmed').checked = false; byId('sign-actions').hidden = true; update();
+        draft = null; expected = null; signed = null; byId('sign-actions').hidden = true; update();
     }
     async function history() {
         const token = selected(), epoch = walletEpoch;
@@ -204,11 +203,9 @@
         } catch (error) { resetDraft(); message(error.message); }
         finally { busy = false; update(); }
     });
-    byId('download-backup').addEventListener('click', async () => { try { await wallet.backup(); backupDownloaded = true; update(); } catch (error) { message(error.message); } });
-    byId('backup-confirmed').addEventListener('change', update);
     byId('edit-transfer').addEventListener('click', () => { resetDraft(); message(''); });
     byId('sign-transfer').addEventListener('click', async () => {
-        if (busy || !draft || !backupDownloaded || !byId('backup-confirmed').checked) return;
+        if (busy || !draft || !wallet.isUnlocked() || !network?.CanCreate) return;
         busy = true; message(''); update();
         try {
             if (!signed) {

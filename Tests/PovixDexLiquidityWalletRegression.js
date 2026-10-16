@@ -169,16 +169,16 @@ const d = fixture.draft;
         assert(byId('swap-estimate').textContent.includes(wallet.formatAtomic(d.receiveAtomic, output.decimals)));
         byId('swap-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
     }
-    await wait(() => !byId('sign-actions').hidden && !byId('download-backup').disabled);
+    await wait(() => !byId('sign-actions').hidden && !byId('sign-exchange').disabled);
     if (d.operation === 'swap') {
         assert.equal(byId('review-title').textContent, 'Executar troca');
         assert(byId('review-description').textContent.includes('carteira selecionada'));
-        assert.equal(byId('sign-exchange').textContent, 'Assinar e executar troca');
+        assert.equal(byId('sign-exchange').textContent, 'Confirmar troca');
         assert(wallet.isUnlocked(), 'the selected wallet stays open throughout the swap review');
     }
     assert(byId('exchange-review').textContent.includes(d.outputs[0].address));
-    assert.equal(byId('sign-exchange').disabled, true, 'backup and review confirmation are required');
-    byId('download-backup').click(); byId('backup-confirmed').checked = true; byId('backup-confirmed').dispatchEvent(new w.Event('change'));
+    assert.equal(byId('sign-exchange').disabled, false, 'connected wallet confirms without a backup');
+    assert.equal(byId('download-backup'), null); assert.equal(byId('backup-confirmed'), null);
     await wait(() => !byId('sign-exchange').disabled); byId('sign-exchange').click();
     if (integrated) {
         await wait(() => byId('app-message').textContent.includes('Repita o mesmo envio') && !byId('sign-exchange').disabled);
