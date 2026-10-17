@@ -377,6 +377,23 @@
         finally { busy = false; update(); if (integrated) refresh(); }
     });
     byId('edit-exchange').addEventListener('click', reset);
+    function filterPoolList() {
+        if (!byId('pool-search')) return;
+        const query = byId('pool-search').value.trim().toLocaleLowerCase('pt-BR');
+        const status = byId('pool-status-filter').value;
+        const rows = Array.from(byId('pool-list').children);
+        let count = 0;
+        rows.forEach(row => {
+            row.hidden = !row.dataset.search.includes(query) || status !== 'all' && row.dataset.group !== status;
+            if (!row.hidden) count++;
+        });
+        byId('pool-result-count').textContent = count + ' de ' + rows.length + (rows.length === 1 ? ' pool' : ' pools');
+        byId('pool-filter-empty').hidden = rows.length === 0 || count > 0;
+    }
+    if (byId('pool-search')) {
+        byId('pool-search').addEventListener('input', filterPoolList);
+        byId('pool-status-filter').addEventListener('change', filterPoolList);
+    }
     async function refresh() {
         if (refreshing || busy) return; refreshing = true; const currentEpoch = epoch;
         try {
@@ -397,27 +414,56 @@
             byId('pool-list').replaceChildren(); byId('pools-empty').hidden = visiblePools.length > 0;
             if (managing) byId('pools-empty').textContent = wallet.isUnlocked() ? 'Nenhuma pool criada por esta carteira.' : 'Conecte sua carteira para consultar suas pools.';
             visiblePools.forEach(pool => {
-                const entry = document.createElement('a'); entry.href = receipt(pool.poolId);
-                entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
-                const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Recompensa: ' + (pool.rewardMode === 'loyalty' ? 'Bônus por permanência (configuração, sem pagamento ativo)' : 'Participação nas taxas') + ' · Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada') + ' · Pool ' + pool.poolId;
-                const state = document.createElement('small'); state.textContent = pool.statusMessage || '';
-                const price = document.createElement('small');
+                const node = (tag, className, text) => {
+                    const element = document.createElement(tag); element.className = className;
+                    if (text != null) element.textContent = text;
+                    return element;
+                };
+                const entry = node('article', 'pool-item');
+                entry.dataset.search = [pool.assetA.symbol, pool.assetB.symbol, pool.assetA.name || '', pool.assetB.name || '', pool.poolId].join(' ').toLocaleLowerCase('pt-BR');
+                entry.dataset.group = ['available', 'closed'].includes(pool.status) ? pool.status : ['pending', 'validated'].includes(pool.status) ? 'waiting' : 'other';
+                const heading = node('div', 'pool-item-heading');
+                const icons = node('div', 'pool-item-icons'); icons.setAttribute('aria-hidden', 'true');
+                icons.append(node('span', '', pool.assetA.symbol.slice(0, 2)), node('span', '', pool.assetB.symbol.slice(0, 2)));
+                const pair = node('div', 'pool-item-pair');
+                pair.append(node('h3', '', pool.assetA.symbol + ' / ' + pool.assetB.symbol),
+                    node('span', 'pool-item-names', (pool.assetA.name || pool.assetA.symbol) + ' / ' + (pool.assetB.name || pool.assetB.symbol)));
+                pair.append(node('span', 'pool-item-id', '#' + pool.poolId.slice(0, 6) + '…' + pool.poolId.slice(-4)));
+                const status = node('span', 'pool-item-status', poolStates[pool.status] || 'Indisponível');
+                status.dataset.state = pool.status;
+                heading.append(icons, pair);
+                const reserves = node('dl', 'pool-item-reserves');
+                for (const [token, amount] of [[pool.assetA, pool.reserveAAtomic], [pool.assetB, pool.reserveBAtomic]]) {
+                    const reserve = node('div', '');
+                    reserve.append(node('dt', '', 'Reserva de ' + token.symbol),
+                        node('dd', '', atomicText(amount, token.decimals) + ' ' + token.symbol));
+                    reserves.append(reserve);
+                }
+                const price = node('p', 'pool-item-price');
                 try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
                 catch (_) { price.textContent = 'Preço: indisponível.'; }
-                entry.append(detail, price, state); byId('pool-list').appendChild(entry);
-                if (pool.managementMessage) {
-                    const management = document.createElement('small'); management.textContent = pool.managementMessage;
-                    byId('pool-list').appendChild(management);
-                }
-                const marketLink = document.createElement('a');
+                const details = node('details', 'pool-item-details');
+                details.append(node('summary', '', 'Detalhes da pool'),
+                    node('p', '', 'Recompensa: ' + (pool.rewardMode === 'loyalty' ? 'Bônus por permanência (configuração, sem pagamento ativo)' : 'Participação nas taxas')),
+                    node('p', '', 'Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada')),
+                    node('p', 'pool-item-full-id', 'Identificador: ' + pool.poolId));
+                const actions = node('div', 'pool-item-actions');
+                const marketLink = node('a', 'button button-secondary', 'Abrir mercado ↗');
                 marketLink.href = app.dataset.marketUrl.replace('__id__', encodeURIComponent(pool.poolId));
-                marketLink.textContent = 'Ver candles e livro caixa →'; byId('pool-list').appendChild(marketLink);
+                const receiptLink = node('a', 'text-button', 'Comprovante'); receiptLink.href = receipt(pool.poolId);
+                actions.append(marketLink, receiptLink);
                 if (pool.canManage && wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) {
-                    const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
-                    button.textContent = pool.locked ? 'Encerrar pool' : 'Bloquear reservas desta pool';
-                    button.addEventListener('click', () => manageReserves(pool)); byId('pool-list').appendChild(button);
+                    const button = node('button', 'button pool-item-close', pool.locked ? 'Encerrar pool' : 'Bloquear reservas');
+                    button.type = 'button';
+                    button.addEventListener('click', () => manageReserves(pool)); actions.append(button);
                 }
+                const policy = node('div', 'pool-card-policy', pool.allowUserLiquidity ? 'Liquidez aberta a outros usuários' : 'Liquidez exclusiva do criador');
+                if (pool.statusMessage) details.append(node('p', 'pool-item-message', pool.statusMessage));
+                if (pool.managementMessage) details.append(node('p', 'pool-item-message', pool.managementMessage));
+                const top = node('div', 'pool-card-top'); top.append(heading, status);
+                entry.append(top, reserves, price, policy, details, actions); byId('pool-list').appendChild(entry);
             });
+            filterPoolList();
             if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
             updateUserLiquidity();
             if (wallet.isUnlocked()) {
@@ -430,6 +476,7 @@
         try {
             epoch++; assets = []; pools = [];
             if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = 'Consultando pools da carteira…'; }
+            filterPoolList();
             reset();
             await refresh(); update();
         } catch (error) { message(error.message); }
