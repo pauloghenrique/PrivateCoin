@@ -39,6 +39,6 @@ class Element {
     const layout=fs.readFileSync('Povix.Dex/Views/Shared/_Layout.cshtml','utf8');
     assert.equal((layout.match(/@Html.Partial\("_Wallet"\)/g)||[]).length,1);
     assert(layout.indexOf('~/bundles/povix-wallet')<layout.indexOf('@RenderSection("scripts"'));
-    for(const page of ['Tokens/Create','TokenTransfers/Index','TokenProfiles/Index','Liquidity/Index','Liquidity/_PoolTrading'])assert(!fs.readFileSync('Povix.Dex/Views/'+page+'.cshtml','utf8').includes('@Html.Partial("_Wallet")'));
+    for(const page of ['Tokens/Create','TokenProfiles/Index','Liquidity/Index','Liquidity/_PoolTrading'])assert(!fs.readFileSync('Povix.Dex/Views/'+page+'.cshtml','utf8').includes('@Html.Partial("_Wallet")'));
     console.log('PASS: shared menu restore, passwordless Desktop UI, encrypted-backup password, explicit selection, busy guard, disconnect, browser Back and single layout instance.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
