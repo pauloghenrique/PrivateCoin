@@ -39,6 +39,8 @@
         const token = selected();
         byId('management-policy').textContent = token ? 'Oferta atual: ' + wallet.formatAtomic(token.supplyAtomic, token.decimals) + ' ' + token.symbol +
             ' · Emissão acumulada: ' + wallet.formatAtomic(token.issuedAtomic, token.decimals) + ' · Limite: ' + wallet.formatAtomic(token.maximumSupplyAtomic, token.decimals) +
+            ' · Total queimado: ' + wallet.formatAtomic(token.burnedAtomic || '0', token.decimals) +
+            ' · Queima por transferência direta: ' + (token.automaticBurnBasisPoints ? wallet.formatAtomic(String(token.automaticBurnBasisPoints), 2) + '%' : BigInt(token.automaticBurnFixedAtomic || '0') > 0n ? wallet.formatAtomic(token.automaticBurnFixedAtomic, token.decimals) + ' tokens' : 'desabilitada') +
             ' · ' + (token.paused ? 'Pausado' : 'Ativo') + ' · ' + token.requiredSignatures + ' de ' + token.administrators.length + ' assinaturas administrativas · Administradores: ' + token.administrators.join(', ') : '';
         controls();
     }

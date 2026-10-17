@@ -12,6 +12,32 @@ criação de uma rede separada pelo DEX.
 
 ## Políticas de tokens de usuários — implementação v20 em rascunho
 
+### Queima automática nas transferências diretas
+
+Na criação, escolha **Desabilitada**, **Taxa percentual** ou **Taxa fixa em tokens**.
+A regra é permanente, assinada na política do token e independente da permissão
+de queima manual. Percentuais vão de 0,01% a 100%, com duas casas; o cálculo usa
+unidades atômicas e arredonda para baixo. A taxa fixa respeita a precisão do token.
+O remetente paga o valor recebido pelo destinatário **mais** a queima: enviar 100
+com 1% consome 101 tokens, entrega 100 e destrói 1. Não há carteira de coleta.
+Valores pequenos cujo percentual é inferior a uma unidade atômica queimam zero.
+O valor fixo é cobrado mesmo em envios pequenos; saldo insuficiente para envio e
+queima impede a preparação. A revisão do Desktop mostra o débito e a queima.
+
+Somente `TokenTransfer` é tributada. Criação, emissão adicional, queima manual e
+operações de liquidez (incluindo swaps) não sofrem essa cobrança. Taxas de pool e
+taxa de rede em POVIX continuam separadas. O Core exige termos de transferência
+assinados, valor exato da queima e troco em endereços dos signatários; não aceita
+omitir a taxa nem redirecionar troco para um terceiro. A oferta só diminui após
+confirmação em bloco e é reconstruída no reinício e na reorganização da cadeia.
+O teto de emissão acumulada não é reaberto pela queima automática.
+
+A API de preparação retorna `automaticBurnEnabled` e `automaticBurnAtomic`.
+Clientes Web Crypto devem conferir a cotação e fornecer `AutomaticBurnAtomic`
+à verificação local antes de assinar. A antiga tela de transferências do DEX
+permanece removida; esta alteração adiciona a configuração na criação, a regra
+no Core e a revisão no Desktop.
+
 Os campos de criação incluem descrição, URL HTTPS de logo, site e rede social,
 oferta fixa ou emissão adicional com teto, queima pelo titular, pausa administrativa,
 até 16 endereços administradores com limiar de assinaturas e distribuição inicial

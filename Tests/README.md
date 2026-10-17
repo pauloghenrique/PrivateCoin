@@ -2,6 +2,12 @@
 
 ## Políticas de tokens e administração (v20 em rascunho)
 
+A regressão também cobre queima automática percentual e fixa, débito adicional,
+precisão e limites numéricos, saldo insuficiente para a taxa, rejeição de omissão,
+subpagamento, sobrepagamento e desvio do troco, compatibilidade com o Desktop e
+reconstrução da oferta. A integração usa taxa de 1%, confere os campos de criação
+e assina uma transferência que entrega 100, queima 1 e confirma a oferta reduzida.
+
 Após compilar o Core e o DEX em Release e restaurar NuGet:
 
 ```sh

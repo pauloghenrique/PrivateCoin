@@ -727,7 +727,7 @@ namespace PrivateCoin.Core
                 validation.Proof.Signature = validator.CreateVote(CreateTransactionApprovalPayload(transaction, validation));
                 var approved = new Transaction { Id = transaction.Id, TimestampUtcTicks = transaction.TimestampUtcTicks,
                     Inputs = transaction.Inputs, Outputs = transaction.Outputs, Fee = transaction.Fee, Kind = transaction.Kind,
-                    Token = transaction.Token, TokenCommand = transaction.TokenCommand, TokenAuthorizations = transaction.TokenAuthorizations, TransactionApproval = validation };
+                    Token = transaction.Token, TokenTransferTerms = transaction.TokenTransferTerms, TokenCommand = transaction.TokenCommand, TokenAuthorizations = transaction.TokenAuthorizations, TransactionApproval = validation };
                 var candidate = pending.Where(tx => tx.Id != transaction.Id).Concat(new[] { approved }).ToList();
                 if (!IsValidTransactionApproval(approved, BuildPendingUtxo(BuildUtxo(), candidate, blocks, transaction.Id), blocks)) return null;
                 return validation;
@@ -833,7 +833,7 @@ namespace PrivateCoin.Core
         {
             Transaction reward = block.Transactions[0];
             if (block.ConsensusVersion >= ApprovalVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
-                reward.TokenCommand != null || reward.TokenAuthorizations != null || reward.Outputs.Any(output => output.UnlockHeight != 0) ||
+                reward.TokenTransferTerms != null || reward.TokenCommand != null || reward.TokenAuthorizations != null || reward.Outputs.Any(output => output.UnlockHeight != 0) ||
                 reward.TransactionApproval != null || reward.WalletDistributionId != null || reward.ValidatorPublicKey != null ||
                 reward.ValidatorRewardAddress != null || reward.ValidatorOwnedAddresses != null))
                 throw new InvalidOperationException("Invalid scheduled block reward.");
@@ -1031,7 +1031,8 @@ namespace PrivateCoin.Core
                 if (tokenInputs.Keys.Concat(tokenOutputs.Keys).Any(id => id != asset) || checked(before + delta) != after)
                     throw new InvalidOperationException("Token command does not conserve the declared amount.");
             }
-            if ((transaction.Kind == TransactionKind.TokenTransfer || poolOperation) &&
+            if (transaction.Kind == TransactionKind.TokenTransfer) TokenGovernance.ValidateTransferConservation(transaction, utxo, tokenInputs, tokenOutputs);
+            if (poolOperation &&
                 (tokenInputs.Count == 0 || tokenInputs.Count != tokenOutputs.Count ||
                  tokenInputs.Any(pair => !tokenOutputs.ContainsKey(pair.Key) || tokenOutputs[pair.Key] != pair.Value)))
                 throw new InvalidOperationException("Token transfers must conserve each asset independently.");

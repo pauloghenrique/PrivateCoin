@@ -252,6 +252,15 @@ namespace PrivateCoin.Core
         public Transaction CreateTokenTransferTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
             string tokenId, string destinationOneTimeAddress, long amount, long fee)
         {
+            if (chain != null && chain.GetTokenRuntime(tokenId)?.Token.Policy?.HasAutomaticBurn == true)
+            {
+                string change = chain.GetSpendableOutputs(keys.Keys, pendingTransactions).Select(output => output.Output.OneTimeAddress).FirstOrDefault();
+                if (change == null) throw new InvalidOperationException("Wallet has no receiving key.");
+                var draft = TokenTransfer.Prepare(chain, pendingTransactions, keys.Values.Select(key => key.ToXmlString(false)),
+                    tokenId, destinationOneTimeAddress, amount, change, fee);
+                return draft.Complete(draft.InputAddresses.Select(address => Convert.ToBase64String(keys[address].SignData(
+                    draft.SigningPayload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm)))));
+            }
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));

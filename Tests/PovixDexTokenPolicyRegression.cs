@@ -31,12 +31,12 @@ internal static partial class PovixDexRegression
                     peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult(); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                     Wait(() => service.GetNetwork().CanCreate, "policy DEX synchronizes");
                     var model = new CreateTokenViewModel { Name = "Opções", Symbol = "OPT", Supply = "90", Decimals = 0, DestinationAddress = owner,
-                        UsePolicy = true, Mintable = true, MaximumSupply = "200", Burnable = true, Pausable = true,
+                        UsePolicy = true, AutoBurnMode = "percent", AutoBurnValue = "1", Mintable = true, MaximumSupply = "200", Burnable = true, Pausable = true,
                         AdministratorAddresses = owner + "\n" + coadmin, RequiredSignatures = 2, Description = "Descrição <texto> | : ◇", Website = "https://example.com/",
                         LogoUrl = "https://example.com/logo.png", SocialUrl = "https://example.com/social", VestingStartHeight = chain.Blocks.Count + 5, VestingIntervalBlocks = 2, VestingTranches = 3 };
                     var creation = service.Prepare(model, PublicKeys(issuer), owner, "policy-session");
                     var d = Json.Deserialize<Dictionary<string, object>>(Json.Serialize(creation));
-                    var expected = new { Name = model.Name, Symbol = model.Symbol, Supply = model.Supply, Decimals = "0", DestinationAddress = owner, FeeAtomic = d["feeAtomic"],
+                    var expected = new { AutoBurnBasisPoints = "100", AutoBurnFixedAtomic = "0", Name = model.Name, Symbol = model.Symbol, Supply = model.Supply, Decimals = "0", DestinationAddress = owner, FeeAtomic = d["feeAtomic"],
                         PolicyValues = new[] { "1", "200", "1", "1", owner + "," + coadmin, "2", model.Description, model.LogoUrl, model.Website, model.SocialUrl,
                             model.VestingStartHeight.ToString(), "2", "3", "public" } };
                     File.WriteAllText(Path.Combine(directory, "policy-fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = creation, expected,
@@ -52,10 +52,10 @@ internal static partial class PovixDexRegression
                     var catalogue = Json.Deserialize<object[]>(Json.Serialize(service.GetManagementTokens()));
                     var token = (Dictionary<string, object>)catalogue.Single();
                     Check((string)token["supplyAtomic"] == "90" && (int)token["requiredSignatures"] == 2, "confirmed policy available for management");
-                    var management = service.PrepareManagement(tokenId, "mint", "10", owner, 2, PublicKeys(issuer), owner, "policy-session");
+                    var management = service.PrepareManagement(tokenId, "mint", "110", owner, 2, PublicKeys(issuer), owner, "policy-session");
                     d = Json.Deserialize<Dictionary<string, object>>(Json.Serialize(management));
                     File.WriteAllText(Path.Combine(directory, "policy-fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = management,
-                        expected = new { token, operation = "mint", amountAtomic = "10", destination = owner, changeAddress = owner, feeAtomic = d["feeAtomic"] },
+                        expected = new { token, operation = "mint", amountAtomic = "110", destination = owner, changeAddress = owner, feeAtomic = d["feeAtomic"] },
                         networkId = Blockchain.NetworkId, changeAddress = owner, mode = "manage", networkHeight = chain.Blocks.Last().Height }));
                     RunPolicyBrowser(node, directory);
                     result = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(directory, "policy-result.json")));
@@ -74,10 +74,24 @@ internal static partial class PovixDexRegression
                     Wait(() => service.GetNetwork().Height == chain.Blocks.Last().Height, "mint block adopted by DEX");
                     var status = Json.Deserialize<Dictionary<string, object>>(Json.Serialize(service.GetManagementStatus(mintId)));
                     Check((string)status["status"] == "confirmed" && (int)status["confirmations"] > 0, "management receipt confirms only after block");
+                    var movement = service.PrepareTransfer(new TokenTransferViewModel { TokenId = tokenId, Amount = "100", DestinationAddress = coadmin, FeePriority = 2 }, PublicKeys(issuer), owner, "policy-session");
+                    var movementDraft = Json.Deserialize<Dictionary<string, object>>(Json.Serialize(movement));
+                    Check((string)movementDraft["automaticBurnAtomic"] == "1", "DEX quotes automatic burn separately from native fee");
+                    File.WriteAllText(Path.Combine(directory, "policy-fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = movement,
+                        expected = new { TokenId = tokenId, Name = model.Name, Symbol = model.Symbol, Decimals = 0, Amount = "100", DestinationAddress = coadmin,
+                            CreatorAddress = movementDraft["creatorAddress"], FeeAtomic = movementDraft["feeAtomic"], AutomaticBurnAtomic = "1" },
+                        networkId = Blockchain.NetworkId, changeAddress = owner, mode = "transfer", networkHeight = chain.Blocks.Last().Height }));
+                    RunPolicyBrowser(node, directory);
+                    result = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(Path.Combine(directory, "policy-result.json")));
+                    signatures = ((System.Collections.IEnumerable)result["signatures"]).Cast<string>().ToArray();
+                    string transferId = service.SubmitTransferAsync((string)movementDraft["draftId"], signatures, (string)result["creatorSignature"], "policy-session").GetAwaiter().GetResult();
+                    Wait(() => received?.Id == transferId, "automatically taxed transfer propagates through P2P");
+                    batches.Confirm(chain, new[] { received }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
+                    Wait(() => service.GetNetwork().Height == chain.Blocks.Last().Height, "automatically burned supply updates after confirmation");
                     service.Dispose(); service = OpenOfflineService(directory, dexPort);
                     token = (Dictionary<string, object>)Json.Deserialize<object[]>(Json.Serialize(service.GetManagementTokens())).Single();
                     status = Json.Deserialize<Dictionary<string, object>>(Json.Serialize(service.GetManagementStatus(mintId)));
-                    Check((string)token["supplyAtomic"] == "100" && (string)status["status"] == "confirmed", "restart restores token supply and confirmed management receipt");
+                    Check((string)token["supplyAtomic"] == "199" && (string)status["status"] == "confirmed", "restart restores token supply and confirmed management receipt");
                 }
                 finally { service.Dispose(); }
             }

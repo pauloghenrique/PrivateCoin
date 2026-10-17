@@ -41,6 +41,8 @@ namespace Povix.Dex.Services
                 var available = outputs.Where(item => item.Output.UnlockHeight <= blockchain.Blocks.Count && !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
                 return creations.Select(tx => new {
+                        automaticBurnBasisPoints = tx.Token.Policy?.AutoBurnBasisPoints ?? 0,
+                        automaticBurnFixedAtomic = (tx.Token.Policy?.AutoBurnFixedAtomic ?? 0).ToString(CultureInfo.InvariantCulture),
                         tokenId = tx.Token.Id, name = tx.Token.Name, symbol = tx.Token.Symbol, decimals = tx.Token.Decimals,
                         supplyAtomic = blockchain.GetTokenRuntime(tx.Token.Id).Supply.ToString(CultureInfo.InvariantCulture), creationTransactionId = tx.Id,
                         creatorAddress = AddressFor(tx.Inputs[0].PublicKey),
@@ -84,7 +86,9 @@ namespace Povix.Dex.Services
                 return new { draftId, signingPayload = payload, inputAddresses = transfer.InputAddresses,
                     inputs = transfer.Inputs.Select((input, index) => new { transactionId = input.TransactionId, outputIndex = input.OutputIndex, address = transfer.InputAddresses[index] }).ToArray(),
                     tokenId = transfer.TokenId, name = creation.Token.Name, symbol = creation.Token.Symbol, decimals = creation.Token.Decimals,
-                    amountAtomic = transfer.Amount.ToString(CultureInfo.InvariantCulture), destinationAddress = transfer.DestinationAddress,
+                    amountAtomic = transfer.Amount.ToString(CultureInfo.InvariantCulture),
+                    automaticBurnAtomic = transfer.AutomaticBurnAmount.ToString(CultureInfo.InvariantCulture),
+                    automaticBurnEnabled = blockchain.GetTokenRuntime(model.TokenId)?.Token.Policy?.HasAutomaticBurn == true, destinationAddress = transfer.DestinationAddress,
                     feeAtomic = transfer.Fee.ToString(CultureInfo.InvariantCulture), changeAddress = transfer.ChangeAddress,
                     tokenChangeAtomic = transfer.TokenChangeAmount.ToString(CultureInfo.InvariantCulture), povixChangeAtomic = transfer.PovixChangeAmount.ToString(CultureInfo.InvariantCulture),
                     timestampUtcTicks = transfer.TimestampUtcTicks.ToString(CultureInfo.InvariantCulture), networkId = Blockchain.NetworkId, consensusVersion = Blockchain.ConsensusVersion,

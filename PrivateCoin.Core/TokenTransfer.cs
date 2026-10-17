@@ -27,14 +27,20 @@ namespace PrivateCoin.Core
             var keys = publicKeys.Distinct(StringComparer.Ordinal).ToDictionary(Crypto.Sha256, key => key, StringComparer.Ordinal);
             if (!keys.ContainsKey(changeAddress)) throw new ArgumentException("Change must belong to the signing wallet.");
             var excluded = new HashSet<string>(excludedInputs ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
-            var funding = Select(chain.GetSpendableOutputs(keys.Keys, queue).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)), fee, "Insufficient POVIX for the transaction fee.");
-            var tokens = Select(chain.GetSpendableTokenOutputs(keys.Keys, queue, tokenId).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)), amount, "Insufficient token balance.");
+            var funding = Select(chain.GetSpendableOutputs(keys.Keys, queue).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)).OrderByDescending(item => item.Output.OneTimeAddress == changeAddress), fee, "Insufficient POVIX for the transaction fee.");
+            var policy = chain.GetTokenRuntime(tokenId)?.Token.Policy;
+            long burn = policy?.CalculateTransferBurn(amount) ?? 0;
+            long debit = checked(amount + burn);
+            var tokens = Select(chain.GetSpendableTokenOutputs(keys.Keys, queue, tokenId).Where(item => !excluded.Contains(item.TransactionId + ":" + item.OutputIndex)), debit, "Insufficient token balance.");
             var selected = funding.Concat(tokens).ToArray();
-            var tx = new Transaction { Kind = TransactionKind.TokenTransfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee };
+            var tx = new Transaction { Kind = TransactionKind.TokenTransfer, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee,
+                TokenTransferTerms = policy?.HasAutomaticBurn == true ? new TokenTransferTerms { TokenId = tokenId, Amount = amount, BurnAmount = burn } : null };
             tx.Inputs.AddRange(selected.Select(output => new TransactionInput { TransactionId = output.TransactionId,
                 OutputIndex = output.OutputIndex, PublicKey = keys[output.Output.OneTimeAddress] }));
             tx.Outputs.Add(new TransactionOutput { Amount = amount, OneTimeAddress = destinationAddress, AssetId = tokenId });
-            long tokenChange = checked(tokens.Sum(output => output.Output.Amount) - amount);
+            long tokenChange = checked(tokens.Sum(output => output.Output.Amount) - debit);
+            if (tokenChange > 0 && policy?.HasAutomaticBurn == true && !selected.Any(output => output.Output.OneTimeAddress == changeAddress))
+                throw new InvalidOperationException("Automatic burn requires token change under a signing input address. Choose a funded wallet address.");
             long povixChange = checked(funding.Sum(output => output.Output.Amount) - fee);
             if (tokenChange > 0) tx.Outputs.Add(new TransactionOutput { Amount = tokenChange, OneTimeAddress = changeAddress, AssetId = tokenId });
             if (povixChange > 0) tx.Outputs.Add(new TransactionOutput { Amount = povixChange, OneTimeAddress = changeAddress });
@@ -62,6 +68,7 @@ namespace PrivateCoin.Core
         public string TokenId { get; }
         public string DestinationAddress => transaction.Outputs[0].OneTimeAddress;
         public long Amount => transaction.Outputs[0].Amount;
+        public long AutomaticBurnAmount => transaction.TokenTransferTerms?.BurnAmount ?? 0;
         public long Fee => transaction.Fee;
         public string ChangeAddress { get; }
         public long TokenChangeAmount { get; }
@@ -81,7 +88,7 @@ namespace PrivateCoin.Core
             if (signatures == null) throw new ArgumentNullException(nameof(signatures));
             string[] values = signatures.ToArray();
             if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every input.");
-            var copy = new Transaction { Kind = transaction.Kind, TimestampUtcTicks = transaction.TimestampUtcTicks, Fee = transaction.Fee,
+            var copy = new Transaction { Kind = transaction.Kind, TimestampUtcTicks = transaction.TimestampUtcTicks, Fee = transaction.Fee, TokenTransferTerms = transaction.TokenTransferTerms == null ? null : new TokenTransferTerms { TokenId = transaction.TokenTransferTerms.TokenId, Amount = transaction.TokenTransferTerms.Amount, BurnAmount = transaction.TokenTransferTerms.BurnAmount },
                 Inputs = transaction.Inputs.Select((input, index) => new TransactionInput { TransactionId = input.TransactionId,
                     OutputIndex = input.OutputIndex, PublicKey = input.PublicKey, Signature = values[index] }).ToList(),
                 Outputs = transaction.Outputs.Select(output => new TransactionOutput { Amount = output.Amount,
