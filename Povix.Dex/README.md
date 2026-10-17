@@ -1,13 +1,54 @@
 # Tokens, pools de liquidez e trocas no Povix.Dex
 
-A tela `/tokens/criar` cadastra tokens nativos de quantidade fixa na **blockchain
-POVIX existente**, com as regras `TokenCreate` do `PrivateCoin.Core`. A página
+A tela `/tokens/criar`, também acessível por `/liquidez/criar?tipo=token`, cadastra
+tokens de usuários com suas próprias políticas no `PrivateCoin.Core`. O separador
+**Criar pool** mantém a operação de liquidez em `/liquidez/criar`. A página
 inicial (`/`) exibe o mercado com os ativos confirmados do catálogo da rede,
 busca por nome/símbolo/ID e filtro por pool disponível. A consulta não exige
 carteira; os links abrem a negociação existente. Contagens usam dados reais,
 sem preços ou volumes simulados. O botão Atualizar refaz a consulta e informa
 falhas sem descartar o último catálogo. Não há emissão de POVIX, mineração nem
 criação de uma rede separada pelo DEX.
+
+## Políticas de tokens de usuários — implementação v20 em rascunho
+
+Os campos de criação incluem descrição, URL HTTPS de logo, site e rede social,
+oferta fixa ou emissão adicional com teto, queima pelo titular, pausa administrativa,
+até 16 endereços administradores com limiar de assinaturas e distribuição inicial
+em até 48 parcelas por altura de bloco. As regras e a apresentação original são
+registradas no token e comprometidas pela assinatura. As URLs são dados públicos;
+o servidor não baixa o logo nem visita esses links.
+
+Em **Administrar token** (`/Tokens/Manage`), emissão, queima, pausa e retomada
+passam por revisão e assinatura local. Emissão e pausa exigem o limiar de
+administradores; queima exige a posse das entradas gastas. O teto limita a emissão
+acumulada: queimar não abre espaço para emitir novamente. Pausa bloqueia emissão,
+queima, transferências e operações de pools envolvendo esse token. Parcelas ainda
+bloqueadas não podem financiar operações; a liberação usa altura de bloco e não
+o relógio informado pelo remetente. A política se aplica à distribuição inicial;
+emissões adicionais não herdam esse cronograma.
+
+As transações `TokenManage` incluem revisão do estado e assinaturas administrativas
+no identificador. Oferta, emissão acumulada, pausa e revisão são reconstruídas a
+partir da cadeia, inclusive depois de reorganizações. Uma preparação é vinculada
+à sessão, expira em 15 minutos e aceita nova tentativa idempotente. Aprovação de
+validador e confirmação em bloco permanecem etapas diferentes.
+
+**Limites pendentes:** o navegador reúne assinaturas de chaves presentes na
+carteira selecionada; ainda não há troca de propostas entre carteiras independentes.
+Privacidade confidencial de valores e endereços **não está implementada**. A opção
+é desabilitada no formulário e rejeitada pelo Core; dados públicos não são
+apresentados como confidenciais. É necessário integrar um protocolo de provas
+criptográficas antes de habilitá-la.
+
+**Compatibilidade de rede:** esta implementação não é uma atualização pronta para
+uma rede em produção. `GenesisRules` compromete os fontes do Core no gênese;
+alterá-los, junto com o consenso v20, muda `GenesisHash`, `RulesHash` e `NetworkId`.
+Não foi implementada uma migração que preserve a identidade e os dados da rede
+existente. Não substituir caches ou carteiras para contornar essa incompatibilidade.
+O PR permanece em rascunho. As constantes de oferta, distribuição, recompensas e
+taxas do ativo nativo POVIX não foram alteradas; emissão e queima configuráveis
+referem-se somente aos tokens de usuários.
 
 Cada usuário importa e desbloqueia a própria carteira no navegador. A senha e
 as chaves privadas não são enviadas ao servidor. O Core prepara a transação com
@@ -25,8 +66,8 @@ bloco ao reunir 20 operações aprovadas ou após 10 segundos de espera.
 1. Execute o projeto ASP.NET MVC 5 em IIS/IIS Express com .NET Framework 4.8 e
    HTTPS. Restaure os pacotes NuGet de `packages.config` antes de compilar.
 2. Configure `PeerSeeds` em `Web.config` com pares **reais** da rede existente,
-   separados por vírgula, ou use `POVIX_PEERS`. Os pares devem usar o consenso 18
-   e o gênese fixado no Core. Não são fornecidos endpoints fictícios.
+   separados por vírgula, ou use `POVIX_PEERS`. Para esta versão em rascunho, os pares devem usar o consenso 20
+   e o mesmo gênese compilado no Core; veja o bloqueio de migração acima. Não são fornecidos endpoints fictícios.
 3. `DexListenPort` usa 4780 por padrão. Use uma porta livre; o Desktop e o
    explorer podem continuar em suas portas próprias. A criação aguarda ao menos
    um par conectado e uma cadeia recebida e validada.

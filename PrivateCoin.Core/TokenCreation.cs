@@ -16,6 +16,11 @@ namespace PrivateCoin.Core
         public static UnsignedTokenCreation Prepare(Blockchain chain, IEnumerable<Transaction> pending,
             IEnumerable<string> publicKeys, string name, string symbol, int decimals, long supply,
             string destinationAddress, string changeAddress, long fee, IEnumerable<string> excludedInputs)
+        { return Prepare(chain, pending, publicKeys, name, symbol, decimals, supply, destinationAddress, changeAddress, fee, excludedInputs, null); }
+
+        public static UnsignedTokenCreation Prepare(Blockchain chain, IEnumerable<Transaction> pending,
+            IEnumerable<string> publicKeys, string name, string symbol, int decimals, long supply,
+            string destinationAddress, string changeAddress, long fee, IEnumerable<string> excludedInputs, TokenPolicy policy)
         {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pending == null) throw new ArgumentNullException(nameof(pending));
@@ -24,7 +29,7 @@ namespace PrivateCoin.Core
                 throw new ArgumentOutOfRangeException(nameof(fee));
             if (!IsAddress(destinationAddress) || !IsAddress(changeAddress))
                 throw new ArgumentException("A valid destination and change address are required.");
-            var token = new TokenDefinition { Name = name, Symbol = symbol, Decimals = decimals, Supply = supply };
+            var token = new TokenDefinition { Name = name, Symbol = symbol, Decimals = decimals, Supply = supply, Policy = policy?.Copy() };
             token.Validate();
             var keys = publicKeys.Distinct(StringComparer.Ordinal).ToDictionary(Crypto.Sha256, key => key, StringComparer.Ordinal);
             if (!keys.ContainsKey(changeAddress)) throw new ArgumentException("Change must belong to the signing wallet.");
@@ -44,7 +49,12 @@ namespace PrivateCoin.Core
                 transaction.Inputs.Add(new TransactionInput { TransactionId = output.TransactionId,
                     OutputIndex = output.OutputIndex, PublicKey = keys[output.Output.OneTimeAddress] });
             token.Id = TokenDefinition.IdFor(transaction.Inputs[0]);
-            transaction.Outputs.Add(new TransactionOutput { Amount = supply, AssetId = token.Id, OneTimeAddress = destinationAddress });
+            int tranches = policy == null || policy.VestingTranches == 0 ? 1 : policy.VestingTranches;
+            if (policy != null && policy.VestingTranches > 0 && policy.VestingStartHeight <= chain.Blocks.Count)
+                throw new InvalidOperationException("Vesting must start at a future block.");
+            for (int i = 0; i < tranches; i++) transaction.Outputs.Add(new TransactionOutput {
+                Amount = supply / tranches + (i < supply % tranches ? 1 : 0), AssetId = token.Id, OneTimeAddress = destinationAddress,
+                UnlockHeight = policy == null || policy.VestingTranches == 0 ? 0 : checked(policy.VestingStartHeight + i * policy.VestingIntervalBlocks) });
             if (total > fee) transaction.Outputs.Add(new TransactionOutput { Amount = total - fee, OneTimeAddress = changeAddress });
             return new UnsignedTokenCreation(transaction, selected.Select(output => output.Output.OneTimeAddress).ToArray());
         }
@@ -59,11 +69,11 @@ namespace PrivateCoin.Core
         public IReadOnlyList<string> InputAddresses { get; }
         public byte[] SigningPayload => Encoding.UTF8.GetBytes(transaction.SigningPayload());
         public TokenDefinition Token => new TokenDefinition { Id = transaction.Token.Id, Name = transaction.Token.Name,
-            Symbol = transaction.Token.Symbol, Decimals = transaction.Token.Decimals, Supply = transaction.Token.Supply };
+            Symbol = transaction.Token.Symbol, Decimals = transaction.Token.Decimals, Supply = transaction.Token.Supply, Policy = transaction.Token.Policy?.Copy() };
         public long Fee => transaction.Fee;
         public string DestinationAddress => transaction.Outputs[0].OneTimeAddress;
-        public string ChangeAddress => transaction.Outputs.Count > 1 ? transaction.Outputs[1].OneTimeAddress : null;
-        public long ChangeAmount => transaction.Outputs.Count > 1 ? transaction.Outputs[1].Amount : 0;
+        public string ChangeAddress => transaction.Outputs.LastOrDefault(output => output.AssetId == null)?.OneTimeAddress;
+        public long ChangeAmount => transaction.Outputs.Where(output => output.AssetId == null).Sum(output => output.Amount);
         public long TimestampUtcTicks => transaction.TimestampUtcTicks;
         public IReadOnlyList<TransactionInput> Inputs => transaction.Inputs.Select(input => new TransactionInput {
             TransactionId = input.TransactionId, OutputIndex = input.OutputIndex, PublicKey = input.PublicKey }).ToArray();
@@ -86,7 +96,7 @@ namespace PrivateCoin.Core
                 Inputs = transaction.Inputs.Select((input, index) => new TransactionInput { TransactionId = input.TransactionId,
                     OutputIndex = input.OutputIndex, PublicKey = input.PublicKey, Signature = values[index] }).ToList(),
                 Outputs = transaction.Outputs.Select(output => new TransactionOutput { Amount = output.Amount,
-                    AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress }).ToList() };
+                    AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress, UnlockHeight = output.UnlockHeight }).ToList() };
             copy.Id = copy.CalculateId();
             return copy;
         }

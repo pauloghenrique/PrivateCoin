@@ -134,6 +134,7 @@
     <Compile Include="Models\TokenTransferViewModel.cs" />
     <Compile Include="Services\TokenTransferService.cs" />
     <Compile Include="Models\CreateTokenViewModel.cs" />
+    <Compile Include="Services\TokenManagementService.cs" />
     <Compile Include="Services\AtomicFile.cs" />
     <Compile Include="Services\TokenNetworkService.cs" />
     <Compile Include="Global.asax.cs">
@@ -166,6 +167,8 @@
     <Content Include="Scripts\povix-token-profile.js" />
     <Content Include="Views\TokenProfiles\Index.cshtml" />
     <Content Include="Scripts\povix-token-create.js" />
+    <Content Include="Scripts\povix-token-management.js" />
+    <Content Include="Views\Tokens\Manage.cshtml" />
     <Content Include="Scripts\povix-token-status.js" />
     <Content Include="Views\Tokens\Create.cshtml" />
     <Content Include="Views\Tokens\Details.cshtml" />

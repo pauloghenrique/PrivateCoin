@@ -168,6 +168,7 @@
         finally { refreshing = false; update(); }
     }
     document.addEventListener('povix-wallet-change', async () => {
+        message('');
         try {
             walletEpoch++; balance = null; tokens = []; resetDraft();
             byId('TokenId').replaceChildren(new Option('Conecte a carteira no menu', ''));

@@ -210,7 +210,9 @@ internal static partial class PovixDexRegression
                         var savedCache = ExchangeData(Json.DeserializeObject(File.ReadAllText(Path.Combine(directory, "dex-network.json"))));
                         savedCache["ConsensusVersion"] = 17;
                         File.WriteAllText(Path.Combine(directory, "dex-network.json"), Json.Serialize(savedCache));
-                        service.Dispose(); service = OpenOfflineService(directory, dexPort);
+                        service.Dispose();
+                        Wait(() => peer.ConnectedPeerCount == 0, "peer observes closed sockets before DEX restart");
+                        service = OpenOfflineService(directory, dexPort);
                         Check(service.GetExchangeReceipt(swapId).Status == "confirmed" && (string)ExchangePool(service, poolId)["reserveTransactionId"] == ownNativeSwap.Id &&
                             service.SubmitPoolAsync((string)draft["draftId"], poolSignatures, "provider").GetAwaiter().GetResult() == poolId,
                             "pools, reserve lineage, confirmed receipts and accepted retries survive restart");
@@ -278,7 +280,9 @@ internal static partial class PovixDexRegression
                         Check(!(bool)ExchangePool(service, otherProviderPool)["closureRenounced"] && (bool)ExchangePool(service, otherProviderPool)["canManage"],
                             "the creator's renunciation does not revoke another provider's pool ownership");
                         service.PrepareReserveOperation(otherProviderPool, "close", PublicKeys(buyer), 2, 2, "other-provider-close");
-                        service.Dispose(); service = OpenOfflineService(directory, dexPort);
+                        service.Dispose();
+                        Wait(() => peer.ConnectedPeerCount == 0, "peer observes closed sockets before DEX restart");
+                        service = OpenOfflineService(directory, dexPort);
                         Check((bool)ExchangePool(service, reversedPool)["closureRenounced"] && (bool)ExchangePool(service, reversedPool)["available"] &&
                             !(bool)ExchangePool(service, reversedPool)["canManage"], "renounced pool protection and trading availability survive restart");
                         peer.ConnectAsync("127.0.0.1", dexPort).GetAwaiter().GetResult(); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();

@@ -18,9 +18,11 @@ namespace Povix.Dex.Controllers
             return View(MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel()); }
 
         [HttpGet]
-        public ActionResult Create()
+        public ActionResult Create(string tipo = null)
         {
             NoCache();
+            if (tipo == "token") return View("~/Views/Tokens/Create.cshtml", new CreateTokenViewModel {
+                Network = MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel() });
             ViewBag.CreatePool = true;
             ViewBag.SelectedPoolId = "";
             return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());

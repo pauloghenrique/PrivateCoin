@@ -129,7 +129,7 @@ namespace Povix.Dex.Services
                     throw new ArgumentException("Quantidade inválida.");
                 long fee = GetSelectedFee(model.FeePriority, model.FeeAtomic);
                 var creation = TokenCreation.Prepare(blockchain, pending, publicKeys, model.Name, model.Symbol,
-                    model.Decimals, amount, model.DestinationAddress, changeAddress, fee, PoolInputKeys());
+                    model.Decimals, amount, model.DestinationAddress, changeAddress, fee, PoolInputKeys(), model.BuildPolicy(changeAddress));
                 string draftId = Guid.NewGuid().ToString("N");
                 var draft = new PreparedToken { Creation = creation, Owner = owner, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 drafts.Add(draftId, draft);
@@ -139,6 +139,7 @@ namespace Povix.Dex.Services
                     inputs = creation.Inputs.Select((input, index) => new { transactionId = input.TransactionId,
                         outputIndex = input.OutputIndex, address = creation.InputAddresses[index] }).ToArray(),
                     name = creation.Token.Name, symbol = creation.Token.Symbol, decimals = creation.Token.Decimals,
+                    policyCanonical = creation.Token.Policy == null ? null : creation.Token.Policy.Canonical(),
                     supplyAtomic = amount.ToString(CultureInfo.InvariantCulture), destinationAddress = creation.DestinationAddress,
                     changeAddress = creation.ChangeAddress, changeAtomic = creation.ChangeAmount.ToString(CultureInfo.InvariantCulture),
                     feeAtomic = fee.ToString(CultureInfo.InvariantCulture), networkId = Blockchain.NetworkId,
