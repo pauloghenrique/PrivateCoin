@@ -2,7 +2,7 @@
 <main id="token-list-app" data-tokens-url="@Url.Action("WalletTokens", "TokenProfiles")" data-edit-url="@Url.Action("Index", "TokenProfiles")">
     <div class="page-intro token-list-intro">
         <div><span class="eyebrow">SEUS ATIVOS NA REDE POVIX</span><h1>Token</h1><p>Consulte os tokens criados pela carteira conectada e gerencie seus perfis.</p></div>
-        <div class="token-list-actions"><a class="button button-primary" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="button" href="@Url.Action("Index", "TokenProfiles")">Editar token</a></div>
+        <div class="token-list-actions"><button id="token-create" type="button" class="button button-primary" data-url="@Url.Action("Create", "Tokens")" disabled>Criar token</button><button id="token-edit" type="button" class="button" data-url="@Url.Action("Index", "TokenProfiles")" disabled>Editar token</button></div>
     </div>
     <form id="token-list-csrf" hidden>@Html.AntiForgeryToken()</form>
     <div id="token-list-message" class="notice" role="alert" hidden></div>
