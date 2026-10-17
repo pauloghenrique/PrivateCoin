@@ -377,6 +377,23 @@
         finally { busy = false; update(); if (integrated) refresh(); }
     });
     byId('edit-exchange').addEventListener('click', reset);
+    function filterPoolList() {
+        if (!byId('pool-search')) return;
+        const query = byId('pool-search').value.trim().toLocaleLowerCase('pt-BR');
+        const status = byId('pool-status-filter').value;
+        const rows = Array.from(byId('pool-list').children);
+        let count = 0;
+        rows.forEach(row => {
+            row.hidden = !row.dataset.search.includes(query) || status !== 'all' && row.dataset.group !== status;
+            if (!row.hidden) count++;
+        });
+        byId('pool-result-count').textContent = count + ' de ' + rows.length + (rows.length === 1 ? ' pool' : ' pools');
+        byId('pool-filter-empty').hidden = rows.length === 0 || count > 0;
+    }
+    if (byId('pool-search')) {
+        byId('pool-search').addEventListener('input', filterPoolList);
+        byId('pool-status-filter').addEventListener('change', filterPoolList);
+    }
     async function refresh() {
         if (refreshing || busy) return; refreshing = true; const currentEpoch = epoch;
         try {
@@ -403,6 +420,8 @@
                     return element;
                 };
                 const entry = node('article', 'pool-item');
+                entry.dataset.search = [pool.assetA.symbol, pool.assetB.symbol, pool.assetA.name || '', pool.assetB.name || '', pool.poolId].join(' ').toLocaleLowerCase('pt-BR');
+                entry.dataset.group = ['available', 'closed'].includes(pool.status) ? pool.status : ['pending', 'validated'].includes(pool.status) ? 'waiting' : 'other';
                 const heading = node('div', 'pool-item-heading');
                 const pair = node('div', 'pool-item-pair');
                 pair.append(node('h3', '', pool.assetA.symbol + ' / ' + pool.assetB.symbol),
@@ -435,11 +454,12 @@
                     button.type = 'button';
                     button.addEventListener('click', () => manageReserves(pool)); actions.append(button);
                 }
-                entry.append(heading, reserves, price);
-                if (pool.statusMessage) entry.append(node('p', 'pool-item-message', pool.statusMessage));
-                if (pool.managementMessage) entry.append(node('p', 'pool-item-message', pool.managementMessage));
-                entry.append(details, actions); byId('pool-list').appendChild(entry);
+                details.append(price);
+                if (pool.statusMessage) details.append(node('p', 'pool-item-message', pool.statusMessage));
+                if (pool.managementMessage) details.append(node('p', 'pool-item-message', pool.managementMessage));
+                entry.append(heading, reserves, actions, details); byId('pool-list').appendChild(entry);
             });
+            filterPoolList();
             if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
             updateUserLiquidity();
             if (wallet.isUnlocked()) {
@@ -452,6 +472,7 @@
         try {
             epoch++; assets = []; pools = [];
             if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = 'Consultando pools da carteira…'; }
+            filterPoolList();
             reset();
             await refresh(); update();
         } catch (error) { message(error.message); }
