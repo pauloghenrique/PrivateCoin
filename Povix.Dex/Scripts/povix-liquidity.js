@@ -423,16 +423,19 @@
                 entry.dataset.search = [pool.assetA.symbol, pool.assetB.symbol, pool.assetA.name || '', pool.assetB.name || '', pool.poolId].join(' ').toLocaleLowerCase('pt-BR');
                 entry.dataset.group = ['available', 'closed'].includes(pool.status) ? pool.status : ['pending', 'validated'].includes(pool.status) ? 'waiting' : 'other';
                 const heading = node('div', 'pool-item-heading');
+                const icons = node('div', 'pool-item-icons'); icons.setAttribute('aria-hidden', 'true');
+                icons.append(node('span', '', pool.assetA.symbol.slice(0, 2)), node('span', '', pool.assetB.symbol.slice(0, 2)));
                 const pair = node('div', 'pool-item-pair');
                 pair.append(node('h3', '', pool.assetA.symbol + ' / ' + pool.assetB.symbol),
-                    node('span', 'pool-item-id', 'Pool ' + pool.poolId.slice(0, 8) + '…' + pool.poolId.slice(-6)));
+                    node('span', 'pool-item-names', (pool.assetA.name || pool.assetA.symbol) + ' / ' + (pool.assetB.name || pool.assetB.symbol)));
+                pair.append(node('span', 'pool-item-id', '#' + pool.poolId.slice(0, 6) + '…' + pool.poolId.slice(-4)));
                 const status = node('span', 'pool-item-status', poolStates[pool.status] || 'Indisponível');
                 status.dataset.state = pool.status;
-                heading.append(pair, status);
+                heading.append(icons, pair);
                 const reserves = node('dl', 'pool-item-reserves');
                 for (const [token, amount] of [[pool.assetA, pool.reserveAAtomic], [pool.assetB, pool.reserveBAtomic]]) {
                     const reserve = node('div', '');
-                    reserve.append(node('dt', '', 'Reserva de ' + token.symbol),
+                    reserve.append(node('dt', '', token.symbol),
                         node('dd', '', atomicText(amount, token.decimals) + ' ' + token.symbol));
                     reserves.append(reserve);
                 }
@@ -445,7 +448,7 @@
                     node('p', '', 'Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada')),
                     node('p', 'pool-item-full-id', 'Identificador: ' + pool.poolId));
                 const actions = node('div', 'pool-item-actions');
-                const marketLink = node('a', 'button button-secondary', 'Ver mercado →');
+                const marketLink = node('a', 'button button-secondary', 'Abrir mercado ↗');
                 marketLink.href = app.dataset.marketUrl.replace('__id__', encodeURIComponent(pool.poolId));
                 const receiptLink = node('a', 'text-button', 'Comprovante'); receiptLink.href = receipt(pool.poolId);
                 actions.append(marketLink, receiptLink);
@@ -457,7 +460,7 @@
                 details.append(price);
                 if (pool.statusMessage) details.append(node('p', 'pool-item-message', pool.statusMessage));
                 if (pool.managementMessage) details.append(node('p', 'pool-item-message', pool.managementMessage));
-                entry.append(heading, reserves, actions, details); byId('pool-list').appendChild(entry);
+                entry.append(heading, status, reserves, actions, details); byId('pool-list').appendChild(entry);
             });
             filterPoolList();
             if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
