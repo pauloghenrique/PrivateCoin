@@ -14,7 +14,8 @@ module.exports = async function checkChangeUi(wallet, fixture) {
             classList: { toggle() {}, add() {} },
             addEventListener(type, listener) { this.listeners[type] = listener; },
             querySelector(selector) { return { value: selector.includes('FeePriority') ? '2' : 'test-csrf' }; },
-            replaceChildren(...options) { this.options = options; this.value = options[0].value; },
+            replaceChildren(...options) { this.options = options; this.value = options[0]?.value || ''; },
+            append(...children) { this.options.push(...children); },
             add(option) { this.options.push(option); },
             reportValidity() { return true; }, scrollIntoView() {}
         });
@@ -23,10 +24,12 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     node('token-app').dataset = { networkUrl: '/network', balanceUrl: '/balance', prepareUrl: '/prepare', networkId: fixture.networkId };
     for (const key of ['Name', 'Symbol', 'Supply', 'Decimals', 'DestinationAddress']) node(key).value = fixture.expected[key];
     node('DestinationAddress').value = '';
+    node('Mintable').value = 'false'; node('RequiredSignatures').value = '1'; node('Privacy').value = 'public';
+    node('vesting-enabled').value = 'false';
     let pending = false, refresh, preparations = 0;
     const quotedFee = fixture.draft.feeAtomic;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-token-create.js'), 'utf8'), {
-        window: { PovixTokenWallet: wallet }, document: { getElementById: node, querySelectorAll: () => [], addEventListener: (name, fn) => { events[name] = fn; } },
+        window: { PovixTokenWallet: wallet }, document: { createElement: tag => ({ textContent: '', append() {} }), getElementById: node, querySelectorAll: () => [], addEventListener: (name, fn) => { events[name] = fn; } },
         Option: class { constructor(text, value) { this.text = text; this.value = value; } },
         URLSearchParams, setInterval(callback) { refresh = callback; },
         fetch: async (url, options) => {

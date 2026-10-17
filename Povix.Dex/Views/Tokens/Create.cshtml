@@ -1,10 +1,11 @@
 @model Povix.Dex.Models.CreateTokenViewModel
 @using Povix.Dex.Models
 @{ ViewBag.Title = "Criar token"; }
-<main id="token-app" data-network-url="@Url.Action("NetworkStatus")" data-balance-url="@Url.Action("Balance")"
-      data-prepare-url="@Url.Action("Prepare")" data-submit-url="@Url.Action("Submit")" data-network-id="@Model.Network.NetworkId">
+<main id="token-app" data-network-url="@Url.Action("NetworkStatus", "Tokens")" data-balance-url="@Url.Action("Balance", "Tokens")"
+      data-prepare-url="@Url.Action("Prepare", "Tokens")" data-submit-url="@Url.Action("Submit", "Tokens")" data-network-id="@Model.Network.NetworkId">
+    <nav class="creation-tabs" aria-label="Tipo de criação"><a href="@Url.Action("Create", "Liquidity", new { tipo = "token" })" aria-current="page">Criar token</a><a href="@Url.Action("Create", "Liquidity")">Criar pool</a><a href="@Url.Action("Manage", "Tokens")">Administrar token</a></nav>
     <div class="page-intro"><span class="eyebrow">SEU ATIVO, NA REDE POVIX</span><h1>Crie seu token.</h1><p>Defina os detalhes, assine com sua carteira e acompanhe o registro na blockchain.</p></div>
-    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span><span class="network-strip-end">Quantidade fixa · Sem emissão adicional</span></div>
+    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span><span class="network-strip-end">Regras próprias para seu novo token</span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div class="create-grid">
         <div>
@@ -12,15 +13,44 @@
             <form id="token-form" class="card token-form">
                 @Html.AntiForgeryToken()
                 <fieldset id="token-fields">
+                    <input type="hidden" id="UsePolicy" name="UsePolicy" value="true" />
                     <section class="form-section"><div class="section-heading"><span class="step-number">01</span><div><h2>Identidade do token</h2><p>O nome e o símbolo serão públicos na blockchain.</p></div></div>
                         <div class="field-grid"><div><label for="Name">Nome do token</label>@Html.TextBoxFor(m => m.Name, new { placeholder = "Ex.: Aurora", maxlength = "64", required = "required", autocomplete = "off" })</div><div><label for="Symbol">Símbolo</label>@Html.TextBoxFor(m => m.Symbol, new { placeholder = "Ex.: AUR", maxlength = "10", pattern = "[A-Z]{1,10}", required = "required", autocomplete = "off" })<small>De 1 a 10 letras, de A a Z.</small></div></div>
                     </section>
-                    <section class="form-section"><div class="section-heading"><span class="step-number">02</span><div><h2>Quantidade e precisão</h2><p>A quantidade total é definida uma única vez.</p></div></div>
-                        <div class="field-grid"><div><label for="Supply">Quantidade total</label>@Html.TextBoxFor(m => m.Supply, new { placeholder = "Ex.: 1000000", maxlength = "30", required = "required", inputmode = "decimal", pattern = "[0-9]+([.,][0-9]+)?" })<small>Use vírgula ou ponto para decimais, sem separador de milhar.</small></div><div><label for="Decimals">Casas decimais</label>@Html.DropDownListFor(m => m.Decimals, Enumerable.Range(0, 9).Select(n => new SelectListItem { Value = n.ToString(), Text = n + (n == 1 ? " casa decimal" : " casas decimais"), Selected = n == Model.Decimals }))<small id="precision-example">Menor unidade: 0,00000001</small></div></div>
+                    <section class="form-section"><div class="section-heading"><span class="step-number">02</span><div><h2>Quantidade e precisão</h2><p>Defina a quantidade inicial. A emissão adicional depende das permissões abaixo.</p></div></div>
+                        <div class="field-grid"><div><label for="Supply">Quantidade inicial</label>@Html.TextBoxFor(m => m.Supply, new { placeholder = "Ex.: 1000000", maxlength = "30", required = "required", inputmode = "decimal", pattern = "[0-9]+([.,][0-9]+)?" })<small>Use vírgula ou ponto para decimais, sem separador de milhar.</small></div><div><label for="Decimals">Casas decimais</label>@Html.DropDownListFor(m => m.Decimals, Enumerable.Range(0, 9).Select(n => new SelectListItem { Value = n.ToString(), Text = n + (n == 1 ? " casa decimal" : " casas decimais"), Selected = n == Model.Decimals }))<small id="precision-example">Menor unidade: 0,00000001</small></div></div>
                     </section>
                     <section class="form-section"><div class="section-heading"><span class="step-number">03</span><div><h2>Destino dos tokens</h2><p>Toda a quantidade será enviada para este endereço.</p></div></div>
                         <label for="DestinationAddress">Endereço de recebimento POVIX</label>@Html.TextBoxFor(m => m.DestinationAddress, new { placeholder = "Endereço POVIX de 64 caracteres", maxlength = "64", pattern = "[0-9a-f]{64}", required = "required", autocomplete = "off", @class = "address-input" })
                         <div class="field-caption"><small id="destination-help" aria-live="polite">Use um endereço da sua carteira para receber e depois movimentar o token.</small><button id="own-address" class="text-button" type="button" disabled>Usar endereço da minha carteira</button></div>
+                    </section>
+                    <section class="form-section"><h2>Apresentação</h2>
+                        <label for="Description">Descrição</label><textarea id="Description" name="Description" maxlength="1000" rows="3"></textarea>
+                        <label for="LogoUrl">Logo (URL HTTPS)</label><input id="LogoUrl" name="LogoUrl" type="url" maxlength="300" pattern="https://.*" />
+                        <label for="Website">Site oficial</label><input id="Website" name="Website" type="url" maxlength="300" pattern="https://.*" />
+                        <label for="SocialUrl">Redes sociais (URL HTTPS)</label><input id="SocialUrl" name="SocialUrl" type="url" maxlength="300" pattern="https://.*" />
+                        <small>Essas informações serão públicas e registradas com o token.</small>
+                    </section>
+                    <section class="form-section"><h2>Oferta e permissões</h2>
+                        <label for="Mintable">Tipo de oferta</label><select id="Mintable" name="Mintable"><option value="false">Fixa, sem emissão adicional</option><option value="true">Permitir emissão adicional</option></select>
+                        <div id="maximum-supply-field" hidden><label for="MaximumSupply">Limite máximo de emissão</label><input id="MaximumSupply" name="MaximumSupply" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" disabled /><small>Inclui a emissão inicial. A queima não reabre esse limite.</small></div>
+                        <label class="checkbox-label"><input id="Burnable" name="Burnable" type="checkbox" /> Permitir que titulares queimem seus próprios tokens</label>
+                        <label class="checkbox-label"><input id="Pausable" name="Pausable" type="checkbox" /> Permitir pausa e retomada pelos administradores</label>
+                        <small>A pausa também bloqueia transferências em pools e a emissão deste token.</small>
+                        <label for="AdministratorAddresses">Endereços dos administradores</label><textarea id="AdministratorAddresses" name="AdministratorAddresses" maxlength="1100" rows="3" placeholder="Um endereço por linha. Vazio: endereço da carteira conectada."></textarea>
+                        <label for="RequiredSignatures">Assinaturas necessárias</label><input id="RequiredSignatures" name="RequiredSignatures" type="number" min="1" max="16" value="1" required />
+                        <small>Até 16 administradores. A política é permanente. A emissão e a pausa exigem o número de assinaturas escolhido.</small>
+                    </section>
+                    <section class="form-section"><h2>Distribuição e privacidade</h2>
+                        <label for="vesting-enabled">Distribuição inicial</label><select id="vesting-enabled"><option value="false">Disponível após confirmação</option><option value="true">Bloqueio e liberação gradual por blocos</option></select>
+                        <fieldset id="vesting-fields" hidden disabled>
+                            <label for="VestingStartHeight">Bloco da primeira liberação</label><input id="VestingStartHeight" name="VestingStartHeight" type="number" min="1" max="2147483647" required />
+                            <label for="VestingIntervalBlocks">Intervalo entre liberações (blocos)</label><input id="VestingIntervalBlocks" name="VestingIntervalBlocks" type="number" min="1" max="2147483647" value="100" required />
+                            <label for="VestingTranches">Número de parcelas</label><input id="VestingTranches" name="VestingTranches" type="number" min="1" max="48" value="12" required />
+                            <small>A oferta inicial é dividida em parcelas iguais; o resto vai às primeiras parcelas. O prazo depende dos blocos produzidos pela rede.</small>
+                        </fieldset>
+                        <label for="Privacy">Privacidade das transações</label><select id="Privacy" name="Privacy"><option value="public">Pública: valores e endereços visíveis</option><option value="confidential" disabled>Confidencial: valores e endereços ocultos (indisponível)</option></select>
+                        <small>Transações confidenciais ainda exigem a integração de provas criptográficas na rede.</small>
                     </section>
                     <section class="form-section fee-section"><div class="section-heading"><span class="step-number">04</span><div><h2>Taxa da rede</h2><p>A taxa é paga com o saldo disponível em POVIX.</p></div></div>
                         <div class="fee-options">
@@ -37,8 +67,9 @@
             </form>
         </div>
         <aside class="review-column">
-            <section class="card review-card" aria-labelledby="review-title"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Resumo do token</h2><div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu novo token</strong><span id="review-symbol">SÍMBOLO</span></div><span class="small-pill">Quantidade fixa</span></div>
-                <dl class="review-list"><div><dt>Quantidade total</dt><dd id="review-supply">—</dd></div><div><dt>Casas decimais</dt><dd id="review-decimals">8</dd></div><div><dt>Taxa de criação</dt><dd id="review-fee">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[1]) POVIX</dd></div><div><dt>Troco em POVIX</dt><dd id="review-change">Calculado na revisão</dd></div><div class="review-destination"><dt>Endereço de destino</dt><dd id="review-destination">Informe o endereço de recebimento</dd></div></dl>
+            <section class="card review-card" aria-labelledby="review-title"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Resumo do token</h2><div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu novo token</strong><span id="review-symbol">SÍMBOLO</span></div><span id="review-policy-badge" class="small-pill">Oferta fixa</span></div>
+                <dl class="review-list"><div><dt>Quantidade inicial</dt><dd id="review-supply">—</dd></div><div><dt>Casas decimais</dt><dd id="review-decimals">8</dd></div><div><dt>Taxa de criação</dt><dd id="review-fee">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[1]) POVIX</dd></div><div><dt>Troco em POVIX</dt><dd id="review-change">Calculado na revisão</dd></div><div class="review-destination"><dt>Endereço de destino</dt><dd id="review-destination">Informe o endereço de recebimento</dd></div></dl>
+                <dl id="review-policy" class="review-list"></dl>
                 <p id="review-destination-help" class="wallet-local-help" aria-live="polite">Use um endereço da sua carteira para receber e depois movimentar o token.</p>
                 <div class="review-note"><strong>Você controla a assinatura.</strong><p>O servidor recebe dados públicos e assinaturas. A senha e as chaves privadas permanecem no navegador.</p></div>
                 <p class="wallet-local-help">A criação cobra somente a taxa. O troco volta a um endereço já presente na carteira aberta e fica disponível após a confirmação da transação.</p>

@@ -1,0 +1,25 @@
+@model Povix.Dex.Models.TokenNetworkViewModel
+@{ ViewBag.Title = "Administrar token"; }
+<main id="token-management-app" data-network-id="@Model.NetworkId" data-tokens-url="@Url.Action("ManagementTokens")" data-network-url="@Url.Action("NetworkStatus")"
+      data-prepare-url="@Url.Action("PrepareManagement")" data-submit-url="@Url.Action("SubmitManagement")" data-status-url="@Url.Action("ManagementStatus")">
+    <nav class="creation-tabs" aria-label="Tipo de criação"><a href="@Url.Action("Create", "Liquidity", new { tipo = "token" })">Criar token</a><a href="@Url.Action("Create", "Liquidity")">Criar pool</a><a href="@Url.Action("Manage")" aria-current="page">Administrar token</a></nav>
+    <div class="page-intro"><h1>Administrar tokens criados</h1><p>Emita, queime, pause ou retome conforme as permissões permanentes de cada token. Essas operações não alteram a oferta de POVIX.</p></div>
+    <div id="management-message" class="notice" role="alert" hidden></div>
+    <form id="management-form" class="card token-form">
+        @Html.AntiForgeryToken()
+        <fieldset id="management-fields">
+            <label for="management-token">Token</label><select id="management-token" required><option value="">Carregando tokens…</option></select>
+            <p id="management-policy" class="token-receiving-addresses"></p>
+            <label for="management-operation">Operação</label><select id="management-operation"><option value="mint">Emissão adicional</option><option value="burn">Queimar meus tokens</option><option value="pause">Pausar transferências</option><option value="resume">Retomar transferências</option></select>
+            <div id="management-amount-field"><label for="management-amount">Quantidade</label><input id="management-amount" inputmode="decimal" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" required /></div>
+            <div id="management-destination-field"><label for="management-destination">Endereço que receberá a emissão</label><input id="management-destination" maxlength="64" pattern="[0-9a-f]{64}" required /></div>
+            <label for="management-priority">Taxa da rede em POVIX</label><select id="management-priority"><option value="1">Econômica</option><option value="2" selected>Normal</option><option value="4">Prioritária</option></select>
+            <p>A queima exige as chaves dos tokens consumidos. Emissão e pausa exigem as assinaturas dos administradores. Nesta tela, as chaves necessárias devem estar na carteira selecionada; assinaturas de carteiras independentes ainda não podem ser reunidas aqui.</p>
+        </fieldset>
+        <button id="management-prepare" class="button button-primary" type="submit" disabled>Revisar operação →</button>
+    </form>
+    <section id="management-review" class="card token-form" hidden><h2>Confira antes de assinar</h2><dl id="management-summary" class="review-list"></dl><button id="management-sign" class="button button-primary" type="button">Confirmar transação</button><button id="management-edit" class="text-button" type="button">Voltar e editar</button></section>
+    <section id="management-status" class="card token-form" aria-live="polite" hidden></section>
+    <noscript><p>Ative o JavaScript para assinar localmente.</p></noscript>
+</main>
+@section scripts { <script src="@Scripts.Url("~/bundles/povix-token-management")"></script> }

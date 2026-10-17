@@ -20,6 +20,48 @@ namespace Povix.Dex.Controllers
             return View(new CreateTokenViewModel { Network = Network() });
         }
 
+        [HttpGet] public ActionResult Manage() { NoCache(); return View(Network()); }
+        [HttpGet] public ActionResult ManagementTokens()
+        {
+            NoCache();
+            if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503);
+            return Json(MvcApplication.TokenNetwork.GetManagementTokens(), JsonRequestBehavior.AllowGet);
+        }
+        [HttpPost, ValidateAntiForgeryToken]
+        public ActionResult PrepareManagement(string tokenId, string operation, string amount, string destination,
+            int feePriority, string[] publicKeys, string changeAddress)
+        {
+            NoCache();
+            if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503);
+            try
+            {
+                Session["Povix.Dex.TokenDraftSession"] = true;
+                return Json(MvcApplication.TokenNetwork.PrepareManagement(tokenId, operation, amount, destination,
+                    feePriority, DecodePublicKeys(publicKeys), changeAddress, Session.SessionID));
+            }
+            catch (Services.TokenOperationException error) { return Error(error.Message, error.Retryable ? 503 : 400, error.Code); }
+            catch (Exception error) when (Services.TokenNetworkService.IsInvalidData(error))
+            { return Error("Confira o saldo, as permissões, as chaves dos administradores e os dados da operação.", 400, "management_invalid"); }
+        }
+        [HttpPost, ValidateAntiForgeryToken]
+        public async Task<ActionResult> SubmitManagement(string draftId, string[] signatures, string[] administratorSignatures)
+        {
+            NoCache();
+            if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503);
+            try { return Json(new { transactionId = await MvcApplication.TokenNetwork.SubmitManagementAsync(draftId, signatures,
+                administratorSignatures ?? new string[0], Session.SessionID) }); }
+            catch (Services.TokenOperationException error) { return Error(error.Message, error.Retryable ? 503 : 400, error.Code); }
+            catch (Exception error) when (Services.TokenNetworkService.IsInvalidData(error))
+            { return Error("A operação foi rejeitada. Prepare novamente e confira as assinaturas e o estado do token.", 400, "management_invalid"); }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            { return Error("Não foi possível salvar. Tente o mesmo envio novamente.", 503, "persistence_unavailable"); }
+        }
+        [HttpGet] public ActionResult ManagementStatus(string id)
+        {
+            NoCache(); var status = ValidId(id) ? MvcApplication.TokenNetwork?.GetManagementStatus(id) : null;
+            return status == null ? (ActionResult)HttpNotFound() : Json(status, JsonRequestBehavior.AllowGet);
+        }
+
         [HttpGet]
         public ActionResult NetworkStatus()
         {

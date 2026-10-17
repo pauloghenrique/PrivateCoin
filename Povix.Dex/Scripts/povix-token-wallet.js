@@ -155,7 +155,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 19 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 20 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
@@ -175,15 +175,67 @@
         const first = draft.inputs[0];
         if (await sha256('povix-token-v1|' + first.transactionId + '|' + first.outputIndex) !== draft.tokenId)
             throw new Error('Identificador do token inválido.');
-        payload += '|' + draft.supplyAtomic + ':' + draft.destinationAddress;
+        const policy = expected.PolicyValues || null;
+        if ((draft.policyCanonical || null) !== (policy ? policy.map(field).join('') : null)) throw new Error('As regras do token diferem da revisão.');
+        const tranches = policy && Number(policy[12]) > 0 ? Number(policy[12]) : 1;
+        const locks = [];
+        for (let index = 0; index < tranches; index++) {
+            const supply = BigInt(draft.supplyAtomic), count = BigInt(tranches);
+            payload += '|' + (supply / count + (BigInt(index) < supply % count ? 1n : 0n)) + ':' + draft.destinationAddress;
+            locks.push(policy && Number(policy[12]) > 0 ? Number(policy[10]) + index * Number(policy[11]) : 0);
+        }
         const hasChange = BigInt(draft.changeAtomic) > 0n;
         if (hasChange && (!draft.changeAddress || !wallet.keys.has(draft.changeAddress))) throw new Error('O troco deve voltar à sua carteira.');
         if (hasChange) payload += '|' + draft.changeAtomic + ':' + draft.changeAddress;
-        payload += '|fee:' + draft.feeAtomic + '|kind:3|validator:|reward:|owned:|assets-v1|' + field(draft.tokenId);
+        payload += '|fee:' + draft.feeAtomic + '|kind:3|validator:|reward:|owned:|assets-v1|' + field(draft.tokenId).repeat(tranches);
         if (hasChange) payload += field(null);
         payload += field(draft.tokenId) + field(draft.name) + field(draft.symbol) + '|' + draft.decimals + '|' + draft.supplyAtomic;
+        if (policy) payload += '|token-policy-v1|' + draft.policyCanonical;
+        if (locks.some(height => height !== 0)) payload += '|token-locks-v1|' + locks.concat(hasChange ? [0] : []).join(',');
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) throw new Error('O conteúdo para assinatura difere da revisão.');
         if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) throw new Error('A preparação expirou. Prepare novamente.');
+        return true;
+    }
+    async function verifyManagementDraft(draft, expected, networkId) {
+        const current = requireWallet(), token = expected.token;
+        if (draft.networkId !== networkId || draft.consensusVersion !== 20 || draft.tokenId !== token.tokenId ||
+            draft.operation !== expected.operation || draft.amountAtomic !== expected.amountAtomic || draft.feeAtomic !== expected.feeAtomic ||
+            draft.revision !== token.revision || !/^[0-9a-f]{32}$/.test(draft.draftId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
+            !/^[0-9]+$/.test(draft.revision) || !Array.isArray(draft.inputs) || draft.inputs.length < 1 || draft.inputs.length > 1000 ||
+            !Array.isArray(draft.inputAddresses) || draft.inputs.length !== draft.inputAddresses.length ||
+            !Array.isArray(draft.outputs) || draft.outputs.length > 2 || !Array.isArray(draft.administratorAddresses) ||
+            !Array.isArray(draft.administratorPublicKeys) || draft.administratorAddresses.length !== draft.administratorPublicKeys.length ||
+            !Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) throw new Error('A preparação não corresponde à operação solicitada.');
+        let payload = draft.timestampUtcTicks;
+        for (let i = 0; i < draft.inputs.length; i++) {
+            const input = draft.inputs[i];
+            if (!current.keys.has(input.address) || input.address !== draft.inputAddresses[i] || !/^[0-9a-f]{64}$/.test(input.transactionId) ||
+                !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0) throw new Error('Entrada desconhecida na operação.');
+            payload += '|' + input.transactionId + ':' + input.outputIndex;
+        }
+        let assets = 0;
+        for (const output of draft.outputs) {
+            if (!/^[0-9]+$/.test(output.amountAtomic) || BigInt(output.amountAtomic) < 1n || BigInt(output.amountAtomic) > 9223372036854775807n ||
+                !/^[0-9a-f]{64}$/.test(output.address)) throw new Error('Saída inválida na operação.');
+            if (output.assetId != null) {
+                assets++;
+                if (output.assetId !== token.tokenId || !['mint', 'burn'].includes(expected.operation) ||
+                    (expected.operation === 'mint' ? output.address !== expected.destination || output.amountAtomic !== expected.amountAtomic : output.address !== expected.changeAddress)) throw new Error('Saída de token não autorizada.');
+            } else if (output.address !== expected.changeAddress) throw new Error('O troco precisa voltar à sua carteira.');
+            payload += '|' + output.amountAtomic + ':' + output.address;
+        }
+        if (assets > 1 || expected.operation === 'mint' && assets !== 1 || draft.outputs.filter(output => output.assetId == null).length > 1) throw new Error('Quantidade de saídas inválida.');
+        payload += '|fee:' + draft.feeAtomic + '|kind:12|validator:|reward:|owned:';
+        if (assets) payload += '|assets-v1|' + draft.outputs.map(output => field(output.assetId)).join('');
+        payload += '|token-command-v1|' + token.tokenId + ':' + expected.operation + ':' + expected.amountAtomic + ':' + token.revision;
+        const seen = new Set();
+        for (let i = 0; i < draft.administratorAddresses.length; i++) {
+            const address = draft.administratorAddresses[i], publicKey = draft.administratorPublicKeys[i];
+            if (!current.keys.has(address) || !token.administrators.includes(address) || seen.has(address) || await sha256(publicKey) !== address) throw new Error('Administrador inválido na preparação.');
+            seen.add(address); payload += field(publicKey);
+        }
+        if (expected.operation === 'burn' ? seen.size !== 0 : seen.size !== token.requiredSignatures) throw new Error('Número incorreto de assinaturas administrativas.');
+        if (toBase64(encoder.encode(payload)) !== draft.signingPayload) throw new Error('O conteúdo da operação difere da revisão.');
         return true;
     }
     function quoteExchange(reserveIn, reserveOut, amount) {
@@ -197,7 +249,7 @@
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
         const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
-        if (draft.networkId !== networkId || draft.consensusVersion !== 19 || draft.operation !== expected.operation ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 20 || draft.operation !== expected.operation ||
             !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
             draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
             draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
@@ -333,7 +385,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 19 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 20 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||
@@ -467,7 +519,7 @@
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
-        createAddress, verifyDraft, verifyTransferDraft, verifyExchangeDraft, quoteExchange, parseSupply, formatAtomic,
+        createAddress, verifyDraft, verifyManagementDraft, verifyTransferDraft, verifyExchangeDraft, quoteExchange, parseSupply, formatAtomic,
         async authorizeProfile(draft, expected, networkId) {
             const creator = requireWallet().keys.get(expected.creatorAddress);
             if (!creator || draft.networkId !== networkId || draft.creatorAddress !== expected.creatorAddress ||
@@ -510,6 +562,15 @@
             anchor.download = 'povix-dex-carteira-atualizada.povixwallet';
             anchor.click();
             setTimeout(() => URL.revokeObjectURL(url), 10000);
+        },
+        async signManagementAdministrators(draft) {
+            const current = requireWallet(), payload = fromBase64(draft.signingPayload), signatures = [];
+            for (const address of draft.administratorAddresses) {
+                const item = current.keys.get(address);
+                if (!item) throw new Error('Chave administrativa ausente.');
+                signatures.push(toBase64(await crypto.subtle.sign(algorithm.name, item.key, payload)));
+            }
+            return signatures;
         },
         async sign(draft) {
             const wallet = requireWallet(), payload = fromBase64(draft.signingPayload);

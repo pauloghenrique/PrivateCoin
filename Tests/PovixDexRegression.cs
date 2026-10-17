@@ -23,6 +23,7 @@ using PrivateCoin.Core;
 
 internal static partial class PovixDexRegression
 {
+    private static string AtomicForModel(CreateTokenViewModel model) { long value; if (!CreateTokenViewModel.TryParseSupply(model.Supply, model.Decimals, out value)) throw new Exception("Invalid fixture supply"); return value.ToString(System.Globalization.CultureInfo.InvariantCulture); }
     private static TokenNetworkService OpenOfflineService(string directory, int port)
     {
         // Keep restart/migration assertions offline; connect explicitly after inspecting state.
@@ -121,6 +122,7 @@ internal static partial class PovixDexRegression
                     try { service.Prepare(model, PublicKeys(issuer), change, "invalid-fee"); throw new Exception("Invalid quote accepted"); }
                     catch (TokenOperationException error) { Check(error.Code == "fee_invalid", "a zero selected fee is rejected before signing"); }
                     model.FeeAtomic = selectedFee;
+                    model.UsePolicy = true;
                     var sessionItems = new SessionStateItemCollection();
                     var controller = ControllerFor(service, "regression", sessionItems);
                     object prepared = ((JsonResult)controller.Prepare(model, PublicKeys(issuer).Select(key =>
@@ -133,7 +135,8 @@ internal static partial class PovixDexRegression
                     Check((string)draft["changeAddress"] == change && long.Parse((string)draft["changeAtomic"]) == expectedChange,
                         "review returns the full native balance minus only the fee to an original wallet address");
                     File.WriteAllText(Path.Combine(directory, "fixture.json"), Json.Serialize(new { wallet = EncryptedWallet(issuer), draft = prepared,
-                        expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination, FeeAtomic = draft["feeAtomic"] },
+                        expected = new { Name = model.Name, Symbol = model.Symbol, Decimals = "8", Supply = model.Supply, DestinationAddress = destination, FeeAtomic = draft["feeAtomic"],
+                            PolicyValues = new[] { "0", AtomicForModel(model), "0", "0", change, "1", "", "", "", "", "0", "0", "0", "public" } },
                         networkId = Blockchain.NetworkId, changeAddress = change }));
                     var start = new ProcessStartInfo(nodeExecutable) { UseShellExecute = false };
                     start.Arguments = "Tests/PovixDexWalletRegression.js " + directory;

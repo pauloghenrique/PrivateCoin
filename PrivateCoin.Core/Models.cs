@@ -20,7 +20,8 @@ namespace PrivateCoin.Core
         LiquiditySwap = 8,
         LiquidityClose = 9,
         LiquidityAdd = 10,
-        LiquidityRemove = 11
+        LiquidityRemove = 11,
+        TokenManage = 12
     }
 
     [DataContract]
@@ -55,6 +56,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 3)] public string Symbol { get; set; }
         [DataMember(Order = 4)] public int Decimals { get; set; }
         [DataMember(Order = 5)] public long Supply { get; set; }
+        [DataMember(Order = 6, EmitDefaultValue = false)] public TokenPolicy Policy { get; set; }
 
         public const int MaximumNameLength = 64;
         public const int MaximumSymbolLength = 10;
@@ -72,6 +74,7 @@ namespace PrivateCoin.Core
                 string.IsNullOrEmpty(Symbol) || Symbol.Length > MaximumSymbolLength ||
                 Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > MaximumDecimals || Supply <= 0)
                 throw new InvalidOperationException("Invalid token: name up to 64 characters, symbol A-Z up to 10, decimals 0-8, positive atomic supply required.");
+            Policy?.Validate(Supply);
         }
     }
 
@@ -135,6 +138,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 3, EmitDefaultValue = false)] public string AssetId { get; set; }
         // A one-use hash. No persistent wallet address is ever written to the chain.
         [DataMember(Order = 2)] public string OneTimeAddress { get; set; }
+        [DataMember(Order = 4, EmitDefaultValue = false)] public int UnlockHeight { get; set; }
     }
 
     [DataContract]
@@ -158,6 +162,8 @@ namespace PrivateCoin.Core
 
         [DataMember(Order = 14, EmitDefaultValue = false)] public PoolParticipation PoolParticipation { get; set; }
         [DataMember(Order = 15, EmitDefaultValue = false)] public LiquidityChangeTerms LiquidityChange { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public TokenCommand TokenCommand { get; set; }
+        [DataMember(Order = 17, EmitDefaultValue = false)] public List<TokenAuthorization> TokenAuthorizations { get; set; }
 
         internal string SigningPayload()
         {
@@ -191,6 +197,12 @@ namespace PrivateCoin.Core
             if (PoolParticipation != null) value.Append("|pool-participation-v1|").Append(PoolParticipation.Canonical());
             if (LiquidityChange != null) value.Append("|pool-change-v1|").Append(LiquidityChange.Address)
                 .Append('|').Append(LiquidityChange.Shares.ToString(CultureInfo.InvariantCulture));
+            if (Token?.Policy != null) value.Append("|token-policy-v1|").Append(Token.Policy.Canonical());
+            if (TokenCommand != null) value.Append("|token-command-v1|").Append(TokenCommand.Canonical());
+            if (TokenAuthorizations != null)
+                foreach (var proof in TokenAuthorizations) AppendField(value, proof.PublicKey);
+            if (Outputs.Any(output => output.UnlockHeight != 0))
+                value.Append("|token-locks-v1|").Append(string.Join(",", Outputs.Select(output => output.UnlockHeight.ToString(CultureInfo.InvariantCulture))));
             return value.ToString();
         }
 
@@ -208,7 +220,9 @@ namespace PrivateCoin.Core
 
         internal string CalculateId()
         {
-            return Crypto.Sha256(SigningPayload() + "|" + string.Join("|", Inputs.Select(i => i.Signature ?? string.Empty)));
+            string signatures = string.Join("|", Inputs.Select(i => i.Signature ?? string.Empty));
+            if (TokenAuthorizations != null) signatures += "|token-authorizations-v1|" + string.Join("|", TokenAuthorizations.Select(proof => proof.Signature ?? string.Empty));
+            return Crypto.Sha256(SigningPayload() + "|" + signatures);
         }
     }
 
@@ -251,6 +265,7 @@ namespace PrivateCoin.Core
 
     public sealed class UnspentOutput
     {
+        internal TokenRuntime TokenRuntime { get; set; }
         public string TransactionId { get; internal set; }
         public int OutputIndex { get; internal set; }
         public TransactionOutput Output { get; internal set; }

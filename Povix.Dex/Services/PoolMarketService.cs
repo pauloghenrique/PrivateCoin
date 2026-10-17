@@ -83,7 +83,7 @@ namespace Povix.Dex.Services
             bool matching = creation != null && profile != null && profile.CreationId == creation.Id;
             return new { id = token.Id, name = matching ? profile.Name : token.Name, symbol = matching ? profile.Symbol : token.Symbol, decimals = token.Decimals,
                 supplyAtomic = token.Id == "povix" ? null : Atomic(token.Supply), native = token.Id == "povix",
-                description = matching ? profile.Description : null };
+                description = matching ? profile.Description : token.Policy?.Description };
         }
         private static long UnixTime(long ticks) => (ticks - 621355968000000000L) / TimeSpan.TicksPerSecond;
         private static decimal Scale(int decimals) { decimal result = 1; for (int i = 0; i < decimals; i++) result *= 10; return result; }

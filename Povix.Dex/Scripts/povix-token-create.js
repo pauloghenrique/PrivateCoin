@@ -33,7 +33,27 @@
     function fields() {
         return { Name: byId('Name').value, Symbol: byId('Symbol').value, Supply: byId('Supply').value,
             Decimals: byId('Decimals').value, DestinationAddress: byId('DestinationAddress').value,
-            FeePriority: form.querySelector('[name="FeePriority"]:checked').value };
+            FeePriority: form.querySelector('[name="FeePriority"]:checked').value,
+            UsePolicy: true, Mintable: byId('Mintable').value, MaximumSupply: byId('MaximumSupply').value,
+            Burnable: byId('Burnable').checked, Pausable: byId('Pausable').checked,
+            AdministratorAddresses: byId('AdministratorAddresses').value, RequiredSignatures: byId('RequiredSignatures').value,
+            Description: byId('Description').value, LogoUrl: byId('LogoUrl').value, Website: byId('Website').value, SocialUrl: byId('SocialUrl').value,
+            VestingStartHeight: byId('vesting-enabled').value === 'true' ? byId('VestingStartHeight').value : '0',
+            VestingIntervalBlocks: byId('vesting-enabled').value === 'true' ? byId('VestingIntervalBlocks').value : '0',
+            VestingTranches: byId('vesting-enabled').value === 'true' ? byId('VestingTranches').value : '0', Privacy: byId('Privacy').value };
+    }
+    function policyValues(data) {
+        const admins = data.AdministratorAddresses.trim() ? data.AdministratorAddresses.split(/[,;\s]+/).filter(Boolean) : [wallet.addresses()[0]];
+        if (admins.length < 1 || admins.length > 16 || new Set(admins).size !== admins.length || admins.some(address => !/^[0-9a-f]{64}$/.test(address)) ||
+            Number(data.RequiredSignatures) > admins.length) throw new Error('Confira os administradores e o número de assinaturas.');
+        const supply = wallet.parseSupply(data.Supply, Number(data.Decimals));
+        const maximum = data.Mintable === 'true' ? wallet.parseSupply(data.MaximumSupply, Number(data.Decimals)) : supply;
+        if (BigInt(maximum) < BigInt(supply)) throw new Error('O limite máximo deve incluir a quantidade inicial.');
+        if (Number(data.VestingTranches) > 0 && (Number(data.VestingStartHeight) <= Number(network?.Height || 0) + 1 || BigInt(data.VestingTranches) > BigInt(supply) ||
+            Number(data.VestingStartHeight) + (Number(data.VestingTranches) - 1) * Number(data.VestingIntervalBlocks) > 2147483647)) throw new Error('Confira o bloco inicial e as parcelas da liberação.');
+        return [data.Mintable === 'true' ? '1' : '0', maximum, data.Burnable ? '1' : '0', data.Pausable ? '1' : '0', admins.join(','),
+            String(Number(data.RequiredSignatures)), data.Description, data.LogoUrl, data.Website, data.SocialUrl,
+            String(Number(data.VestingStartHeight)), String(Number(data.VestingIntervalBlocks)), String(Number(data.VestingTranches)), data.Privacy];
     }
     function selectedFee() {
         if (!network) return '0';
@@ -75,6 +95,18 @@
         catch (_) { byId('review-supply').textContent = '—'; }
         byId('review-fee').textContent = wallet.formatAtomic(draft ? draft.feeAtomic : selectedFee(), 8) + ' POVIX';
         byId('review-change').textContent = draft ? wallet.formatAtomic(draft.changeAtomic, 8) + ' POVIX' : 'Calculado na revisão';
+        const values = expected?.PolicyValues || null;
+        const source = fields();
+        byId('review-policy-badge').textContent = (values ? values[0] === '1' : source.Mintable === 'true') ? 'Emissão adicional' : 'Oferta fixa';
+        const review = byId('review-policy'); review.replaceChildren();
+        const rows = [
+            ['Descrição', source.Description || 'Não informada'], ['Logo', source.LogoUrl || 'Não informado'], ['Site', source.Website || 'Não informado'], ['Redes sociais', source.SocialUrl || 'Não informadas'],
+            ['Limite de emissão', source.Mintable === 'true' ? source.MaximumSupply : source.Supply],
+            ['Queima pelo titular', source.Burnable ? 'Permitida' : 'Desabilitada'], ['Pausa administrativa', source.Pausable ? 'Permitida' : 'Desabilitada'],
+            ['Administradores', source.AdministratorAddresses || (wallet.isUnlocked() ? wallet.addresses()[0] : 'Carteira conectada')],
+            ['Assinaturas necessárias', source.RequiredSignatures], ['Liberação inicial', Number(source.VestingTranches) > 0 ? source.VestingTranches + ' parcelas a partir do bloco ' + source.VestingStartHeight + ', intervalo ' + source.VestingIntervalBlocks + ' blocos' : 'Após confirmação'],
+            ['Privacidade', 'Valores e endereços públicos'], ['Regras permanentes', 'Oferta máxima, permissões, administradores e distribuição não poderão ser alterados.']];
+        for (const [label, value] of rows) { const row = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value || '—'; row.append(term, detail); review.append(row); }
         byId('precision-example').textContent = 'Menor unidade: ' + wallet.formatAtomic('1', decimals);
     }
     function resetDraft() {
@@ -147,6 +179,13 @@
         catch (error) { message(error.message); }
         updateControls();
     });
+    function conditionalFields() {
+        const mintable = byId('Mintable').value === 'true', vesting = byId('vesting-enabled').value === 'true';
+        byId('maximum-supply-field').hidden = !mintable; byId('MaximumSupply').disabled = !mintable; byId('MaximumSupply').required = mintable;
+        byId('vesting-fields').hidden = !vesting; byId('vesting-fields').disabled = !vesting;
+    }
+    form.addEventListener('change', () => { conditionalFields(); if (!draft) { updateReview(); updateControls(); } });
+    conditionalFields();
     form.addEventListener('input', () => { if (!draft) { updateReview(); updateControls(); } });
     byId('Symbol').addEventListener('input', () => { byId('Symbol').value = byId('Symbol').value.toUpperCase(); updateReview(); });
     form.addEventListener('submit', async event => {
@@ -154,13 +193,15 @@
         if (busy || draft || !form.reportValidity()) return;
         busy = true; message(''); updateControls();
         try {
-            expected = Object.freeze({ ...fields(), FeeAtomic: selectedFee() });
+            const values = fields();
+            expected = Object.freeze({ ...values, FeeAtomic: selectedFee(), PolicyValues: Object.freeze(policyValues(values)) });
             wallet.parseSupply(expected.Supply, Number(expected.Decimals));
             // Keep POVIX change under a key already present in the imported wallet.
             // A new browser-only key would hide the remaining funds from Desktop.
             if (!changeAddress) changeAddress = wallet.addresses()[0];
             if (!changeAddress) throw new Error('A carteira precisa ter um endereço para receber o troco.');
-            const result = await post(app.dataset.prepareUrl, { ...expected, publicKeys: wallet.publicKeys(), changeAddress });
+            const { PolicyValues, ...request } = expected;
+            const result = await post(app.dataset.prepareUrl, { ...request, publicKeys: wallet.publicKeys(), changeAddress });
             await wallet.verifyDraft(result, expected, app.dataset.networkId, changeAddress);
             draft = Object.freeze(result);
             byId('sign-actions').hidden = false;

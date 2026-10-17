@@ -54,8 +54,8 @@ namespace Povix.Dex.Services
                         // A profile is bound to the original creation and its creator, including after a reorganization.
                         if (profile != null && (profile.CreationId != tx.Id || profile.CreatorKey != tx.Inputs[0].PublicKey)) profile = null;
                         return new { tokenId = tx.Token.Id, name = profile?.Name ?? tx.Token.Name,
-                            symbol = profile?.Symbol ?? tx.Token.Symbol, description = profile?.Description ?? "",
-                            website = profile?.Website ?? "", renounced = profile?.Renounced ?? false,
+                            symbol = profile?.Symbol ?? tx.Token.Symbol, description = profile?.Description ?? tx.Token.Policy?.Description ?? "",
+                            website = profile?.Website ?? tx.Token.Policy?.Website ?? "", renounced = profile?.Renounced ?? false,
                             revision = profile?.Revision ?? 0, creatorAddress = AddressFor(tx.Inputs[0].PublicKey),
                             chainName = tx.Token.Name, chainSymbol = tx.Token.Symbol, decimals = tx.Token.Decimals,
                             supplyAtomic = tx.Token.Supply.ToString(System.Globalization.CultureInfo.InvariantCulture) };

@@ -64,6 +64,8 @@
     <Compile Include="UpnpPortMapper.cs" />
     <Compile Include="Wallet.cs" />
     <Compile Include="TokenCreation.cs" />
+    <Compile Include="TokenGovernance.cs" />
+    <Compile Include="TokenManagement.cs" />
     <Compile Include="TokenTransfer.cs" />
     <Compile Include="TokenExchange.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

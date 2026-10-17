@@ -1,5 +1,46 @@
 # Regressão do cadastro e da movimentação de tokens
 
+## Políticas de tokens e administração (v20 em rascunho)
+
+Após compilar o Core e o DEX em Release e restaurar NuGet:
+
+```sh
+mkdir -p work
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -out:work/TokenPolicyRegression.exe \
+  Tests/PrivateCoinTokenPolicyRegression.cs Tests/LegacyConsensusFixture.cs \
+  Tests/ValidationBatchFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/TokenPolicyRegression.exe
+```
+
+Verifica emissão limitada, teto acumulado após queima, duas assinaturas distintas,
+rejeição de duplicadas e assinaturas ausentes, queima pelo titular, pausa inclusive
+em pools, retomada, revisão e replay, reconstrução da cadeia, liberação por blocos,
+rejeição de modo confidencial e impossibilidade de emitir POVIX por uma operação
+de token. Uma criação de carteira auto-validada não pode carregar comandos de token.
+
+Para conferir formulário, Web Crypto, propagação e persistência:
+
+```sh
+npm install --prefix work/liquidity-tools --cache work/npm-cache --no-audit --no-fund jsdom@26
+mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
+  -r:Povix.Dex/bin/System.Web.Mvc.dll -r:System.Runtime.Serialization \
+  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
+  -r:System.ComponentModel.DataAnnotations -main:PovixDexTokenPolicyMain \
+  -out:work/PovixDexTokenPolicy.exe Tests/PovixDexRegression.cs \
+  Tests/PovixDexTransferRegression.cs Tests/PovixDexLiquidityRegression.cs \
+  Tests/PovixDexProfileRegression.cs Tests/PovixDexTokenPolicyRegression.cs \
+  Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=Povix.Dex/bin mono work/PovixDexTokenPolicy.exe \
+  work/token-policy-integration "$(command -v node)"
+```
+
+Use um diretório de execução vazio e acesso a sockets locais. A suíte usa duas
+chaves administrativas, testa campos condicionais e resumo seguro, rejeita
+adulteração antes de assinar, verifica novas tentativas após HTTP 503, propagação
+P2P, idempotência, sessão e recibo após reinício. Não valida privacidade
+confidencial, migração de rede nem aparência visual em IIS.
+
 ## Configurações do Core no genesis
 
 Após compilar `PrivateCoin.Core` em Release, execute:

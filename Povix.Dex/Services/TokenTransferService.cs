@@ -38,11 +38,11 @@ namespace Povix.Dex.Services
                 var poolInputs = PoolInputKeys();
                 var poolAmounts = outputs.Where(item => poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex))
                     .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
-                var available = outputs.Where(item => !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
+                var available = outputs.Where(item => item.Output.UnlockHeight <= blockchain.Blocks.Count && !poolInputs.Contains(item.TransactionId + ":" + item.OutputIndex) && !reserved.Contains(item.TransactionId + ":" + item.OutputIndex.ToString(CultureInfo.InvariantCulture)))
                     .GroupBy(item => item.Output.AssetId, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(item => item.Output.Amount), StringComparer.Ordinal);
                 return creations.Select(tx => new {
                         tokenId = tx.Token.Id, name = tx.Token.Name, symbol = tx.Token.Symbol, decimals = tx.Token.Decimals,
-                        supplyAtomic = tx.Token.Supply.ToString(CultureInfo.InvariantCulture), creationTransactionId = tx.Id,
+                        supplyAtomic = blockchain.GetTokenRuntime(tx.Token.Id).Supply.ToString(CultureInfo.InvariantCulture), creationTransactionId = tx.Id,
                         creatorAddress = AddressFor(tx.Inputs[0].PublicKey),
                         receivingAddresses = tx.Outputs.Where(output => output.AssetId == tx.Token.Id)
                             .Select(output => output.OneTimeAddress).Distinct(StringComparer.Ordinal).Select(address => new {

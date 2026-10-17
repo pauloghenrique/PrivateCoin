@@ -35,6 +35,34 @@ namespace Povix.Dex.Models
         public string DestinationAddress { get; set; }
 
         public int FeePriority { get; set; } = 2;
+        public bool UsePolicy { get; set; }
+        public bool Mintable { get; set; }
+        public string MaximumSupply { get; set; }
+        public bool Burnable { get; set; }
+        public bool Pausable { get; set; }
+        [StringLength(1100)] public string AdministratorAddresses { get; set; }
+        [Range(1, 16)] public int RequiredSignatures { get; set; } = 1;
+        [StringLength(1000)] public string Description { get; set; } = "";
+        [StringLength(300)] public string LogoUrl { get; set; } = "";
+        [StringLength(300)] public string Website { get; set; } = "";
+        [StringLength(300)] public string SocialUrl { get; set; } = "";
+        public int VestingStartHeight { get; set; }
+        public int VestingIntervalBlocks { get; set; }
+        public int VestingTranches { get; set; }
+        public string Privacy { get; set; } = "public";
+        public TokenPolicy BuildPolicy(string creatorAddress)
+        {
+            if (!UsePolicy) return null;
+            long supply, maximum;
+            if (!TryParseSupply(Supply, Decimals, out supply)) throw new ArgumentException("Confira a quantidade inicial.");
+            maximum = supply;
+            if (Mintable && !TryParseSupply(MaximumSupply, Decimals, out maximum)) throw new ArgumentException("Limite máximo inválido.");
+            return new TokenPolicy { Mintable = Mintable, MaximumSupply = maximum, Burnable = Burnable, Pausable = Pausable,
+                Administrators = string.IsNullOrWhiteSpace(AdministratorAddresses) ? new List<string> { creatorAddress } :
+                    AdministratorAddresses.Split(new[] { ',', '\r', '\n', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList(),
+                RequiredSignatures = RequiredSignatures, Description = Description ?? "", LogoUrl = LogoUrl ?? "", Website = Website ?? "", SocialUrl = SocialUrl ?? "",
+                VestingStartHeight = VestingStartHeight, VestingIntervalBlocks = VestingIntervalBlocks, VestingTranches = VestingTranches, Privacy = Privacy };
+        }
         [Range(1, Blockchain.MaximumTransferFee)] public long? FeeAtomic { get; set; }
         public TokenNetworkViewModel Network { get; set; }
 

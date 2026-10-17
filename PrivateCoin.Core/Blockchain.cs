@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 19;
+        public const int ConsensusVersion = 20;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
@@ -93,7 +93,7 @@ namespace PrivateCoin.Core
                 foreach (Transaction transaction in pending)
                 {
                     if (RequiresLockedTokenApproval(transaction)) ValidateTransactionApproval(transaction, replay, blocks);
-                    Apply(transaction, replay, false, RequiresLockedTokenApproval(transaction));
+                    Apply(transaction, replay, false, RequiresLockedTokenApproval(transaction), ConsensusVersion, blocks.Count);
                 }
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
@@ -213,7 +213,7 @@ namespace PrivateCoin.Core
         public static bool RequiresLockedTokenApproval(Transaction transaction)
         {
             return transaction != null && transaction.Inputs.Count > 0 &&
-                (transaction.Kind == TransactionKind.Transfer || transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || TokenExchange.IsPoolOperation(transaction.Kind));
+                (transaction.Kind == TransactionKind.Transfer || transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || transaction.Kind == TransactionKind.TokenManage || TokenExchange.IsPoolOperation(transaction.Kind));
         }
 
         // Pending inputs are reserved, but no output, fee or collateral is confirmed here.
@@ -407,7 +407,7 @@ namespace PrivateCoin.Core
             {
                 var utxo = BuildUtxo();
                 foreach (Transaction transaction in OrderByFeePriority(pendingTransactions))
-                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
+                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks), ConsensusVersion, blocks.Count);
                 return utxo.Values.Where(x => wanted.Contains(x.Output.OneTimeAddress)).ToArray();
             }
         }
@@ -457,9 +457,9 @@ namespace PrivateCoin.Core
             {
                 var utxo = BuildUtxo();
                 foreach (Transaction transaction in OrderByFeePriority(pendingTransactions))
-                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
+                    Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks), ConsensusVersion, blocks.Count);
                 var balances = new Dictionary<string, long>(StringComparer.Ordinal);
-                foreach (UnspentOutput item in utxo.Values.Where(item => item.Output.AssetId == null))
+                foreach (UnspentOutput item in utxo.Values.Where(item => item.TokenRuntime == null && item.Output.AssetId == null))
                 {
                     long balance;
                     balances.TryGetValue(item.Output.OneTimeAddress, out balance);
@@ -533,7 +533,7 @@ namespace PrivateCoin.Core
                 }
                 if ((transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock) && transaction.Fee != 0)
                     throw new InvalidOperationException("Self-validated collateral operations do not charge validator fees.");
-                Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks));
+                Apply(transaction, utxo, false, IsValidTransactionApproval(transaction, utxo, blocks), ConsensusVersion, blocks.Count);
             }
         }
 
@@ -555,7 +555,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != 18 && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != 18 && block.ConsensusVersion != 19 && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -637,7 +637,7 @@ namespace PrivateCoin.Core
                     if (block.ConsensusVersion < SelfValidatedVersion && (operation.Kind == TransactionKind.StakeLock || operation.Kind == TransactionKind.StakeUnlock) && operation.Fee < TransferFeeStep)
                         throw new InvalidOperationException("Historical collateral operations require their original minimum fee.");
                     ValidateWalletIssuance(operation, ref issued);
-                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation), block.ConsensusVersion);
+                    Apply(block.Transactions[transactionIndex], utxo, false, block.ConsensusVersion >= ApprovalVersion && RequiresLockedTokenApproval(operation), block.ConsensusVersion, block.Height);
                 }
             }
             if (issued > MaximumSupply || validatorIssued > ProofOfStake.MaximumSupply) throw new InvalidOperationException("Invalid supply.");
@@ -727,7 +727,7 @@ namespace PrivateCoin.Core
                 validation.Proof.Signature = validator.CreateVote(CreateTransactionApprovalPayload(transaction, validation));
                 var approved = new Transaction { Id = transaction.Id, TimestampUtcTicks = transaction.TimestampUtcTicks,
                     Inputs = transaction.Inputs, Outputs = transaction.Outputs, Fee = transaction.Fee, Kind = transaction.Kind,
-                    Token = transaction.Token, TransactionApproval = validation };
+                    Token = transaction.Token, TokenCommand = transaction.TokenCommand, TokenAuthorizations = transaction.TokenAuthorizations, TransactionApproval = validation };
                 var candidate = pending.Where(tx => tx.Id != transaction.Id).Concat(new[] { approved }).ToList();
                 if (!IsValidTransactionApproval(approved, BuildPendingUtxo(BuildUtxo(), candidate, blocks, transaction.Id), blocks)) return null;
                 return validation;
@@ -833,6 +833,7 @@ namespace PrivateCoin.Core
         {
             Transaction reward = block.Transactions[0];
             if (block.ConsensusVersion >= ApprovalVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
+                reward.TokenCommand != null || reward.TokenAuthorizations != null || reward.Outputs.Any(output => output.UnlockHeight != 0) ||
                 reward.TransactionApproval != null || reward.WalletDistributionId != null || reward.ValidatorPublicKey != null ||
                 reward.ValidatorRewardAddress != null || reward.ValidatorOwnedAddresses != null))
                 throw new InvalidOperationException("Invalid scheduled block reward.");
@@ -855,7 +856,7 @@ namespace PrivateCoin.Core
                         if (proof == null || proof.ProofPayload() != operation.TransactionApproval.Proof.ProofPayload())
                             throw new InvalidOperationException("The fee must belong to the approving locked validator.");
                     }
-                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation), block.ConsensusVersion);
+                    Apply(operation, replay, false, RequiresLockedTokenApproval(operation), block.ConsensusVersion, block.Height);
                 }
                 return;
             }
@@ -927,9 +928,9 @@ namespace PrivateCoin.Core
             return result;
         }
 
-        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false, int consensusVersion = ConsensusVersion)
+        private static void Apply(Transaction transaction, IDictionary<string, UnspentOutput> utxo, bool allowMint, bool includeValidationFee = false, int consensusVersion = ConsensusVersion, int height = 0)
         {
-            if (transaction == null || transaction.Id != transaction.CalculateId() || transaction.Outputs.Count == 0) throw new InvalidOperationException("Invalid transaction.");
+            if (transaction == null || transaction.Id != transaction.CalculateId() || (transaction.Outputs.Count == 0 && transaction.Kind != TransactionKind.TokenManage)) throw new InvalidOperationException("Invalid transaction.");
             if (transaction.TransactionApproval != null && !RequiresLockedTokenApproval(transaction))
                 throw new InvalidOperationException("Only fee-paying movements may carry an approval.");
             if (consensusVersion < 19 && (transaction.PoolParticipation != null || transaction.LiquidityChange != null ||
@@ -941,6 +942,7 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Swap terms are only valid on pool swaps.");
             if (transaction.WalletDistributionId != null && transaction.Kind != TransactionKind.WalletCreate)
                 throw new InvalidOperationException("Only wallet receipts may reference a distribution.");
+            TokenGovernance.Validate(transaction, utxo, height, consensusVersion);
             if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution)
             {
                 if (allowMint != (transaction.Kind == TransactionKind.WalletDistribution) || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count != 1 ||
@@ -956,7 +958,7 @@ namespace PrivateCoin.Core
             if (!Enum.IsDefined(typeof(TransactionKind), transaction.Kind)) throw new InvalidOperationException("Unknown transaction kind.");
             TokenExchange.ValidatePoolOperation(transaction, utxo);
             bool poolOperation = TokenExchange.IsPoolOperation(transaction.Kind);
-            bool tokenOperation = transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || poolOperation;
+            bool tokenOperation = transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || transaction.Kind == TransactionKind.TokenManage || poolOperation;
             if (allowMint && (transaction.Kind != TransactionKind.Transfer || transaction.Token != null || transaction.Outputs.Any(o => o.AssetId != null)))
                 throw new InvalidOperationException("Rewards must contain only POVIX.");
             if (transaction.Kind == TransactionKind.TokenCreate)
@@ -998,7 +1000,7 @@ namespace PrivateCoin.Core
                 if (source.Output.AssetId == null) inputTotal = checked(inputTotal + source.Output.Amount);
                 else
                 {
-                    if (transaction.Kind != TransactionKind.TokenTransfer && !poolOperation) throw new InvalidOperationException("Token inputs require a token transfer.");
+                    if (transaction.Kind != TransactionKind.TokenTransfer && transaction.Kind != TransactionKind.TokenManage && !poolOperation) throw new InvalidOperationException("Token inputs require a token transfer.");
                     AddAssetAmount(tokenInputs, source.Output.AssetId, source.Output.Amount);
                 }
             }
@@ -1018,6 +1020,16 @@ namespace PrivateCoin.Core
             {
                 if (tokenOutputs.Count != 1 || !tokenOutputs.ContainsKey(transaction.Token.Id) || tokenOutputs[transaction.Token.Id] != transaction.Token.Supply)
                     throw new InvalidOperationException("Token creation must issue exactly the declared supply.");
+            }
+            if (transaction.Kind == TransactionKind.TokenManage)
+            {
+                string asset = transaction.TokenCommand.TokenId;
+                long before, after;
+                tokenInputs.TryGetValue(asset, out before); tokenOutputs.TryGetValue(asset, out after);
+                long delta = transaction.TokenCommand.Operation == "mint" ? transaction.TokenCommand.Amount :
+                    transaction.TokenCommand.Operation == "burn" ? -transaction.TokenCommand.Amount : 0;
+                if (tokenInputs.Keys.Concat(tokenOutputs.Keys).Any(id => id != asset) || checked(before + delta) != after)
+                    throw new InvalidOperationException("Token command does not conserve the declared amount.");
             }
             if ((transaction.Kind == TransactionKind.TokenTransfer || poolOperation) &&
                 (tokenInputs.Count == 0 || tokenInputs.Count != tokenOutputs.Count ||
@@ -1057,10 +1069,24 @@ namespace PrivateCoin.Core
 
         public IReadOnlyList<TokenDefinition> GetTokens()
         {
-            lock (sync) return blocks.SelectMany(block => block.Transactions)
-                .Where(tx => tx.Kind == TransactionKind.TokenCreate).Select(tx => new TokenDefinition {
-                    Id = tx.Token.Id, Name = tx.Token.Name, Symbol = tx.Token.Symbol,
-                    Decimals = tx.Token.Decimals, Supply = tx.Token.Supply }).ToArray();
+            lock (sync) return BuildUtxo().Values.Where(item => item.TokenRuntime != null).Select(item => {
+                var state = item.TokenRuntime; var token = state.Token;
+                return new TokenDefinition { Id = token.Id, Name = token.Name, Symbol = token.Symbol,
+                    Decimals = token.Decimals, Supply = state.Supply, Policy = token.Policy?.Copy() };
+            }).ToArray();
+        }
+
+        public TokenRuntime GetTokenRuntime(string tokenId)
+        {
+            lock (sync)
+            {
+                var state = TokenGovernance.State(BuildUtxo(), tokenId);
+                if (state == null) return null;
+                var token = state.Token;
+                return new TokenRuntime { Token = new TokenDefinition { Id = token.Id, Name = token.Name, Symbol = token.Symbol,
+                    Decimals = token.Decimals, Supply = token.Supply, Policy = token.Policy?.Copy() },
+                    Supply = state.Supply, Issued = state.Issued, Paused = state.Paused, Revision = state.Revision };
+            }
         }
 
         public IReadOnlyList<Transaction> GetApprovedTokenCreations(IEnumerable<Transaction> pendingTransactions)
@@ -1112,8 +1138,9 @@ namespace PrivateCoin.Core
                 var amounts = new Dictionary<string, long>(StringComparer.Ordinal);
                 foreach (UnspentOutput output in BuildUtxo().Values.Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)))
                     AddAssetAmount(amounts, output.Output.AssetId, output.Output.Amount);
+                var definitions = GetTokens().ToDictionary(token => token.Id, StringComparer.Ordinal);
                 return blocks.SelectMany(block => block.Transactions.Where(tx => tx.Kind == TransactionKind.TokenCreate)
-                    .Select(tx => new TokenBalance(tx.Token, amounts.ContainsKey(tx.Token.Id) ? amounts[tx.Token.Id] : 0,
+                    .Select(tx => new TokenBalance(definitions[tx.Token.Id], amounts.ContainsKey(tx.Token.Id) ? amounts[tx.Token.Id] : 0,
                         block.Height, blocks[blocks.Count - 1].Height - block.Height + 1,
                         tx.TransactionApproval != null || block.TransactionValidations?.Any(proof => proof.TransactionId == tx.Id) == true ? 1 : 0))).ToArray();
             }
@@ -1140,13 +1167,14 @@ namespace PrivateCoin.Core
                 ValidateTransactions(pending);
                 var reserved = new HashSet<string>(pending.SelectMany(tx => tx.Inputs).Select(i => Key(i.TransactionId, i.OutputIndex)), StringComparer.Ordinal);
                 var owned = new HashSet<string>(addresses ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
-                return BuildPendingUtxo(BuildUtxo(), pending, blocks).Values.Where(item => owned.Contains(item.Output.OneTimeAddress) && item.Output.AssetId == tokenId && !item.IsPoolReserve &&
+                return BuildPendingUtxo(BuildUtxo(), pending, blocks).Values.Where(item => owned.Contains(item.Output.OneTimeAddress) && item.Output.AssetId == tokenId && item.Output.UnlockHeight <= blocks.Count && !item.IsPoolReserve &&
                     !reserved.Contains(Key(item.TransactionId, item.OutputIndex))).ToArray();
             }
         }
 
         private static void AddOutputs(Transaction transaction, IDictionary<string, UnspentOutput> utxo)
         {
+            TokenGovernance.Record(transaction, utxo);
             for (int i = 0; i < transaction.Outputs.Count; i++)
                 if (transaction.Outputs[i].Amount > 0) utxo.Add(Key(transaction.Id, i), new UnspentOutput { TransactionId = transaction.Id, OutputIndex = i, Output = transaction.Outputs[i],
                     TransactionKind = i == 0 || (i == 1 && (transaction.Kind == TransactionKind.LiquidityPool || transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove)) ? transaction.Kind : TransactionKind.Transfer,
