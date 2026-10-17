@@ -18,7 +18,6 @@ namespace Povix.Dex
             routes.MapRoute("CreatePool", "liquidez/criar", new { controller = "Liquidity", action = "Create" });
             routes.MapRoute("Liquidity", "liquidez", new { controller = "Liquidity", action = "Index" });
             routes.MapRoute("LiquidityReceipt", "liquidez/operacao/{id}", new { controller = "Liquidity", action = "Details" });
-            routes.MapRoute("TransferToken", "tokens/movimentar/{tokenId}", new { controller = "TokenTransfers", action = "Index", tokenId = UrlParameter.Optional });
             routes.MapRoute("TransferReceipt", "tokens/movimentacao/{id}", new { controller = "TokenTransfers", action = "Details" });
             routes.MapRoute("TokenRegistration", "tokens/registro/{id}", new { controller = "Tokens", action = "Details" });
 

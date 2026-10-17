@@ -36,7 +36,7 @@ const vm = require('node:vm');
         assert.equal(signs, 1); assert(verifies > 0); assert.equal(redirected, 1); assert.equal(context.busy, false);
         for (const id of ['download-backup', 'backup-confirmed']) assert.equal(nodes.has(id), false);
     }
-    for (const file of ['Tokens/Create', 'TokenTransfers/Index', 'Liquidity/Index', 'Liquidity/_PoolTrading']) {
+    for (const file of ['Tokens/Create',  'Liquidity/Index', 'Liquidity/_PoolTrading']) {
         const view = fs.readFileSync('Povix.Dex/Views/' + file + '.cshtml', 'utf8');
         assert(!view.includes('id="download-backup"')); assert(!view.includes('id="backup-confirmed"'));
     }

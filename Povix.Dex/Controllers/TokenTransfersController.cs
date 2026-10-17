@@ -12,14 +12,6 @@ namespace Povix.Dex.Controllers
 {
     public sealed class TokenTransfersController : Controller
     {
-        [HttpGet]
-        public ActionResult Index(string tokenId)
-        {
-            NoCache();
-            return View(new TokenTransferViewModel { TokenId = ValidId(tokenId) ? tokenId : null,
-                Network = MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel() });
-        }
-
         [HttpPost, ValidateAntiForgeryToken]
         public ActionResult WalletTokens(string[] publicKeys)
         {

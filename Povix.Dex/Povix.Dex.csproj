@@ -173,7 +173,6 @@
     <Content Include="Views\Tokens\Create.cshtml" />
     <Content Include="Views\Tokens\Details.cshtml" />
     <Content Include="Views\Shared\_Wallet.cshtml" />
-    <Content Include="Views\TokenTransfers\Index.cshtml" />
     <Content Include="Views\Liquidity\Index.cshtml" />
     <Content Include="Views\Liquidity\Market.cshtml" />
     <Content Include="Views\Liquidity\_PoolTrading.cshtml" />
