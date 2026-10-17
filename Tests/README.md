@@ -577,3 +577,31 @@ provedores e restauração da blockchain e do cache DEX. A suíte existente tamb
 verifica que a permissão permanece desabilitada por padrão e rejeita aportes.
 Os clones de blocos usam DataContractJsonSerializer para preservar o manifesto
 genesis imutável.
+
+## Pools de lançamento (v21)
+
+Após a compilação Release e instalação do jsdom conforme a seção de liquidez:
+
+```sh
+mcs -r:Povix.Dex/bin/Povix.Dex.dll -r:Povix.Dex/bin/PrivateCoin.Core.dll \
+  -r:Povix.Dex/bin/System.Web.Mvc.dll -r:System.Runtime.Serialization \
+  -r:System.Web.Extensions -r:System.Web -r:System.Core -r:System.Numerics \
+  -r:System.ComponentModel.DataAnnotations -main:PovixDexLaunchMain \
+  -out:work/PovixDexLaunchRegression.exe \
+  Tests/PovixDexLaunchRegression.cs Tests/PovixDexPublicLiquidityRegression.cs \
+  Tests/PovixDexRegression.cs Tests/PovixDexTransferRegression.cs \
+  Tests/PovixDexLiquidityRegression.cs Tests/PovixDexProfileRegression.cs \
+  Tests/ValidationBatchFixture.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=Povix.Dex/bin mono work/PovixDexLaunchRegression.exe \
+  work/launch-regression "$(command -v node)"
+```
+
+Use um diretório de execução vazio. Verifica captação POVIX/token e token/token,
+formulários reais com Web Crypto, assinaturas por sessão, concorrência e retries,
+proibição de swaps e encerramento na captação, tentativa de exceder a meta,
+abertura atômica e entrega proporcional, swaps normais após a abertura, limite
+por altura da cadeia, devolução integral por outra carteira sem assinatura do
+criador, restauração e reorganização que revoga a abertura órfã. Ataques com
+novas assinaturas válidas não podem alterar a meta, o prazo, as participações
+iniciais de liquidez, os destinatários dos tokens ou os destinatários dos aportes.
+As duas suítes anteriores continuam cobrindo pools comuns e liquidez pública.

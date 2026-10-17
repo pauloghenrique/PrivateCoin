@@ -11,7 +11,7 @@ for (const [unlocked, addresses, managing, expected] of [
     [true, [], true, 0], [true, ['alice'], false, 3]
 ]) {
     const nodes = { 'pool-list': { replaceChildren() { this.cleared = true; } }, 'pools-empty': {} };
-    const context = { managing, pools: [{ providerAddress: 'alice' }, { providerAddress: 'bob' }, { providerAddress: 'alice' }],
+    const context = { app: { dataset: {} }, managing, pools: [{ providerAddress: 'alice' }, { providerAddress: 'bob' }, { providerAddress: 'alice' }],
         wallet: { isUnlocked: () => unlocked, addresses: () => addresses }, byId: id => nodes[id] };
     vm.runInNewContext(source.slice(start, end) + '\nglobalThis.count = visiblePools.length;', context);
     assert.equal(context.count, expected);
@@ -47,7 +47,7 @@ const actionNodes = {}, actionNode = id => {
     return actionNodes[id] || (actionNodes[id] = { value: '', dataset: { url: '/liquidez/criar' }, querySelectorAll: () => [], addEventListener(type, callback) { this[type] = callback; } });
 };
 let connected = false, navigations = 0;
-const actionContext = { byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null,
+const actionContext = { app: { dataset: {} }, byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null,
     integrated: false, window: {}, updateUserLiquidity() {}, updatePrices() {}, selectedPool: () => null, asset: () => null,
     atomicText: () => '0', fee: () => '0', location: { assign(url) { assert.equal(url, '/liquidez/criar'); navigations++; } } };
 const updateStart = source.indexOf('    function update() {'), updateEnd = source.indexOf('    function addReview(', updateStart);

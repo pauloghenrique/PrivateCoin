@@ -14,7 +14,7 @@
     let swapDirection = integrated ? '1' : null;
     const swapSide = () => integrated ? swapDirection : byId('swap-side').value;
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
-    const poolStates = { available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
+    const poolStates = { collecting: 'Em captação', launch_expired: 'Prazo encerrado: devolução disponível', available: 'Disponível', busy: 'Reservas em uso por operação pendente', unavailable: 'Reservas indisponíveis',
         pending: 'Aguardando validação', validated: 'Validada, aguardando bloco', rejected: 'Criação não confirmada',
         unlocked: 'Reservas antigas sem bloqueio', closed: 'Encerrada' };
     const atomicText = (value, decimals) => wallet.formatAtomic(String(value), decimals);
@@ -70,7 +70,7 @@
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
     }
     function options(id, entries, label, empty) {
-        const element = byId(id), previous = element.value || (id === 'swap-pool' ? preferredPool : null);
+        const element = byId(id), previous = element.value || (id === 'swap-pool' ? preferredPool : id === 'launch-token' ? app.dataset.launchTokenId : null);
         element.replaceChildren(new Option(empty, ''));
         if (integrated && id === 'swap-pool') entries = entries.filter(item => item.poolId === preferredPool);
         entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false; element.add(option); });
@@ -98,6 +98,7 @@
             byId('pool-burn-fixed-a').disabled = percent || asset(byId('pool-asset-a').value)?.id === 'povix';
             byId('pool-burn-fixed-b').disabled = percent || asset(byId('pool-asset-b').value)?.id === 'povix';
         }
+        if (app.dataset.prepareLaunchPoolUrl) updateLaunch();
         if (byId('pool-reward-mode')) {
             const loyalty = byId('pool-reward-mode').value === 'loyalty';
             byId('pool-reward-title').textContent = loyalty ? 'Bônus por permanência' : 'Participação nas taxas';
@@ -193,21 +194,31 @@
             addReview('Saída antecipada planejada', result.loyaltyPolicy.earlyExit === 'locked' ? 'Bloquear retirada até o fim do prazo' : 'Permitir retirar o aporte com perda do bônus');
             addReview('Prazo', 'O provedor escolherá dias, meses ou anos; bloqueio e pagamentos ainda não estão ativos.');
         }
-        if (result.operation === 'pool') addReview('Liquidez de usuários', result.allowUserLiquidity ? 'Habilitada: adicionar e remover a própria participação' : 'Desabilitada');
+        if (result.operation === 'pool') addReview('Liquidez de usuários', (result.launch ? result.launch.allowUserLiquidity : result.allowUserLiquidity) ? 'Habilitada: adicionar e remover a própria participação' : 'Desabilitada');
         if (['add', 'remove'].includes(result.operation)) {
             byId('review-title').textContent = result.operation === 'add' ? 'Adicionar liquidez' : 'Remover minha liquidez';
             byId('review-description').textContent = 'Confira os dois ativos. A participação será atualizada após a confirmação em bloco.';
         }
+        if (result.launch) {
+            byId('review-title').textContent = result.transactionKind === 13 ? 'Criar pool de lançamento' : result.transactionKind === 16 ? 'Devolver aportes do lançamento' : result.transactionKind === 15 ? 'Completar meta e abrir negociação' : 'Aportar no lançamento';
+            byId('review-description').textContent = 'As reservas e cada pagamento abaixo são conferidos pela carteira. Tudo depende da confirmação em bloco.';
+            addReview('Meta da captação', atomicText(result.launch.targetAtomic, result.assetB.decimals) + ' ' + result.assetB.symbol);
+            addReview('Total captado após a operação', atomicText(result.launch.raisedAtomic, result.assetB.decimals) + ' ' + result.assetB.symbol);
+            addReview('Tokens para venda', atomicText(result.launch.saleTokensAtomic, result.assetA.decimals) + ' ' + result.assetA.symbol);
+            addReview('Bloco limite', String(result.launch.deadlineHeight));
+            addReview('Abertura', 'Captação integral na liquidez da carteira criadora; compradores recebem tokens proporcionais.');
+        }
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
-            addReview(index < 2 ? (result.operation === 'close' ? 'Devolução ' : 'Reserva bloqueada ') + token.symbol : result.operation === 'remove' && index < 4 ? 'Liquidez recebida' : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
+            addReview(result.transactionKind === 16 ? 'Devolução de lançamento' : result.transactionKind === 15 && index >= 2 && index < 2 + result.launch.contributors.length ? 'Tokens comprados no lançamento' : index < 2 ? (result.operation === 'close' ? 'Devolução ' : 'Reserva bloqueada ') + token.symbol : result.operation === 'remove' && index < 4 ? 'Liquidez recebida' : result.operation === 'swap' && index === 2 ? 'Recebimento do comprador' : 'Troco',
                 atomicText(output.amountAtomic, token.decimals) + ' ' + token.symbol);
             addReview('Endereço', output.address);
         });
         byId('sign-exchange').textContent = result.operation === 'lock' ? 'Confirmar bloqueio das reservas' : result.operation === 'close' ? 'Confirmar encerramento da pool' :
             result.operation === 'add' ? 'Confirmar e adicionar liquidez' : result.operation === 'remove' ? 'Confirmar e remover liquidez' :
             result.operation === 'pool' ? 'Confirmar e criar pool' : 'Confirmar troca';
+        if (result.launch) byId('sign-exchange').textContent = result.transactionKind === 16 ? 'Assinar devolução dos aportes' : result.transactionKind === 15 ? 'Assinar aporte e abrir negociação' : result.transactionKind === 13 ? 'Assinar e criar lançamento' : 'Assinar aporte no lançamento';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     function ensureFunds(requirements) {
@@ -263,6 +274,77 @@
         } catch (error) { reset(); message(error.message); }
         finally { busy = false; update(); }
     });
+    function launchCreateRequest() {
+        const a = asset(byId('launch-token').value), b = asset(byId('launch-funding-asset').value);
+        if (!a || !b || a.id === b.id || a.id === 'povix') throw new Error('Escolha o token e outro ativo de captação.');
+        const saleTokensAtomic = wallet.parseSupply(byId('launch-sale').value, a.decimals), liquidity = wallet.parseSupply(byId('launch-liquidity').value, a.decimals);
+        const targetAtomic = wallet.parseSupply(byId('launch-target').value, b.decimals), raisedAtomic = wallet.parseSupply(byId('launch-seed').value, b.decimals);
+        const totalTokensAtomic = String(BigInt(saleTokensAtomic) + BigInt(liquidity)), deadlineHeight = Number(byId('launch-deadline').value);
+        if (!Number.isSafeInteger(deadlineHeight) || deadlineHeight <= (network?.Height || 0) + 1 || deadlineHeight > (network?.Height || 0) + 1000001 ||
+            BigInt(raisedAtomic) >= BigInt(targetAtomic) || BigInt(saleTokensAtomic) * BigInt(raisedAtomic) / BigInt(targetAtomic) < 1n)
+            throw new Error('Use um bloco futuro e um aporte inicial menor que a meta, suficiente para comprar ao menos uma unidade atômica do token.');
+        const address = wallet.addresses()[0];
+        return { a, b, address, launch: { saleTokensAtomic, totalTokensAtomic, targetAtomic, raisedAtomic, deadlineHeight,
+            allowUserLiquidity: Boolean(byId('launch-user-liquidity').checked), contributors: [{ address, amountAtomic: raisedAtomic }] } };
+    }
+    function launchOperationRequest() {
+        const pool = pools.find(item => item.poolId === byId('launch-pool').value), refund = byId('launch-operation').value === 'refund';
+        if (!pool?.launch || pool.status !== (refund ? 'launch_expired' : 'collecting')) throw new Error(refund ? 'A devolução exige prazo encerrado e meta não atingida.' : 'Selecione um lançamento em captação.');
+        const amountAtomic = refund ? '0' : wallet.parseSupply(byId('launch-amount').value, pool.assetB.decimals);
+        if (!refund && BigInt(amountAtomic) > BigInt(pool.launch.targetAtomic) - BigInt(pool.launch.raisedAtomic)) throw new Error('O aporte supera o valor restante para a meta.');
+        return { pool, refund, amountAtomic };
+    }
+    function updateLaunch() {
+        if (!app.dataset.prepareLaunchPoolUrl) return;
+        const ready = !busy && !draft && wallet.isUnlocked() && network?.CanCreate && assets.length > 0;
+        byId('launch-create-fields').disabled = !ready; byId('prepare-launch-create').disabled = !ready;
+        byId('launch-contribute-fields').disabled = !ready; byId('prepare-launch-operation').disabled = !ready;
+        if (network?.Height != null) { byId('launch-deadline').min = String(network.Height + 2); if (!byId('launch-deadline').value) byId('launch-deadline').value = String(network.Height + 1000); }
+        const refund = byId('launch-operation').value === 'refund'; byId('launch-amount').disabled = refund; byId('launch-amount').required = !refund;
+        const selected = pools.find(item => item.poolId === byId('launch-pool').value);
+        byId('launch-progress').textContent = selected?.launch ? 'Captado: ' + atomicText(selected.launch.raisedAtomic, selected.assetB.decimals) + ' / ' + atomicText(selected.launch.targetAtomic, selected.assetB.decimals) + ' ' + selected.assetB.symbol + ' · Tokens para compradores: ' + atomicText(selected.launch.saleTokensAtomic, selected.assetA.decimals) + ' ' + selected.assetA.symbol + ' · Bloco limite ' + selected.launch.deadlineHeight : 'Selecione um lançamento.';
+        try {
+            const request = launchCreateRequest();
+            byId('launch-create-estimate').textContent = 'Depósito: ' + atomicText(request.launch.totalTokensAtomic, request.a.decimals) + ' ' + request.a.symbol + ' + ' + atomicText(request.launch.raisedAtomic, request.b.decimals) + ' ' + request.b.symbol + '. Meta: ' + atomicText(request.launch.targetAtomic, request.b.decimals) + ' ' + request.b.symbol;
+        } catch (error) { byId('prepare-launch-create').disabled = true; byId('launch-create-estimate').textContent = error.message; }
+        try {
+            const request = launchOperationRequest();
+            byId('launch-contribution-estimate').textContent = request.refund ? 'A rede devolverá cada aporte ao seu endereço original, junto com os tokens ao criador.' :
+                'Seu aporte será reservado até a meta. Tokens proporcionais entregues na abertura; arredondamentos permanecem na liquidez.';
+        } catch (error) { byId('prepare-launch-operation').disabled = true; byId('launch-contribution-estimate').textContent = error.message; }
+    }
+    if (app.dataset.prepareLaunchPoolUrl) {
+        for (const id of ['launch-create-form', 'launch-contribute-form']) { byId(id).addEventListener('input', updateLaunch); byId(id).addEventListener('change', updateLaunch); }
+        byId('launch-create-form').addEventListener('submit', async event => {
+            event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate) return;
+            busy = true; message(''); update();
+            try {
+                const request = launchCreateRequest(), feeAtomic = fee();
+                const funds = new Map([['povix', BigInt(feeAtomic)]]);
+                for (const [id, amount] of [[request.a.id, request.launch.totalTokensAtomic], [request.b.id, request.launch.raisedAtomic]]) funds.set(id, (funds.get(id) || 0n) + BigInt(amount));
+                ensureFunds(funds);
+                const wanted = { operation: 'pool', rewardMode: 'fees', allowUserLiquidity: false, launch: request.launch, assetA: request.a, assetB: request.b,
+                    reserveAAtomic: request.launch.totalTokensAtomic, reserveBAtomic: request.launch.raisedAtomic, feeAtomic, changeAddress: request.address };
+                const result = await post(app.dataset.prepareLaunchPoolUrl, { AssetA: request.a.id, AssetB: request.b.id, SaleTokens: byId('launch-sale').value, LiquidityTokens: byId('launch-liquidity').value,
+                    InitialContribution: byId('launch-seed').value, Target: byId('launch-target').value, DeadlineHeight: request.launch.deadlineHeight, AllowUserLiquidity: request.launch.allowUserLiquidity,
+                    FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress: request.address });
+                await review(result, wanted);
+            } catch (error) { reset(); message(error.message); } finally { busy = false; update(); }
+        });
+        byId('launch-contribute-form').addEventListener('submit', async event => {
+            event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate) return;
+            busy = true; message(''); update();
+            try {
+                const request = launchOperationRequest(), feeAtomic = fee(), changeAddress = wallet.addresses()[0];
+                const funds = new Map([['povix', BigInt(feeAtomic)]]);
+                if (!request.refund) funds.set(request.pool.assetB.id, (funds.get(request.pool.assetB.id) || 0n) + BigInt(request.amountAtomic)); ensureFunds(funds);
+                const wanted = { ...wantedFromPool(request.pool), launch: request.pool.launch, operation: request.refund ? 'launch-refund' : 'launch-contribute', amountAtomic: request.amountAtomic, feeAtomic, changeAddress };
+                const result = await post(app.dataset.prepareLaunchOperationUrl, { PoolId: request.pool.poolId, Operation: request.refund ? 'refund' : 'contribute',
+                    Amount: request.refund ? '' : byId('launch-amount').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
+                await review(result, wanted);
+            } catch (error) { reset(); message(error.message); } finally { busy = false; update(); }
+        });
+    }
     function liquidityRequest() {
         const pool = pools.find(item => item.poolId === byId('user-liquidity-pool').value);
         if (!pool || !pool.allowUserLiquidity || !pool.available) throw new Error('Selecione uma pool habilitada com reservas disponíveis.');
@@ -391,8 +473,8 @@
         try {
             await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(0, ['swap', 'add', 'remove'].includes(draft.operation) ? draft.userInputCount : undefined).map(item => item.address) });
-            const result = await post(['add', 'remove'].includes(draft.operation) ? app.dataset.submitLiquidityUrl : draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
+                inputAddresses: draft.inputs.slice(0, ['swap', 'add', 'remove', 'launch-contribute', 'launch-refund'].includes(draft.operation) ? draft.userInputCount : undefined).map(item => item.address) });
+            const result = await post(['launch-contribute', 'launch-refund'].includes(draft.operation) ? app.dataset.submitLaunchUrl : ['add', 'remove'].includes(draft.operation) ? app.dataset.submitLiquidityUrl : draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
                 draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                 { draftId: draft.draftId, signatures });
             const receiptUrl = receipt(result.transactionId);
@@ -438,7 +520,7 @@
                 options('pool-asset-b', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o segundo ativo');
                 options('swap-pool', pools, item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12) + ' · ' + (poolStates[item.status] || 'Indisponível'), 'Selecione uma pool');
             }
-            const visiblePools = managing ? pools.filter(pool => wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) : pools;
+            const visiblePools = managing ? pools.filter(pool => wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) : app.dataset.mode === 'launch' ? pools.filter(pool => pool.launch) : pools;
             byId('pool-list').replaceChildren(); byId('pools-empty').hidden = visiblePools.length > 0;
             if (managing) byId('pools-empty').textContent = wallet.isUnlocked() ? 'Nenhuma pool criada por esta carteira.' : 'Conecte sua carteira para consultar suas pools.';
             visiblePools.forEach(pool => {
@@ -487,11 +569,18 @@
                 }
                 const policy = node('div', 'pool-card-policy', pool.allowUserLiquidity ? 'Liquidez aberta a outros usuários' : 'Liquidez exclusiva do criador');
                 if (pool.statusMessage) details.append(node('p', 'pool-item-message', pool.statusMessage));
+                if (pool.launch) details.append(node('p', 'pool-item-message', 'Captação: ' + atomicText(pool.launch.raisedAtomic, pool.assetB.decimals) + ' / ' + atomicText(pool.launch.targetAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Bloco limite ' + pool.launch.deadlineHeight));
                 if (pool.managementMessage) details.append(node('p', 'pool-item-message', pool.managementMessage));
                 const top = node('div', 'pool-card-top'); top.append(heading, status);
                 entry.append(top, reserves, price, policy, details, actions); byId('pool-list').appendChild(entry);
             });
             filterPoolList();
+            if (app.dataset.prepareLaunchPoolUrl && !draft) {
+                options('launch-token', assets.filter(item => item.id !== 'povix'), item => item.symbol + ' · ' + item.id.slice(0, 12), 'Selecione o token confirmado');
+                options('launch-funding-asset', assets, item => item.symbol + ' · ' + item.id.slice(0, 12), 'Selecione o ativo de captação');
+                options('launch-pool', pools.filter(item => item.launch && ['collecting', 'launch_expired', 'busy'].includes(item.status)).map(item => ({ ...item, available: item.status !== 'busy' })),
+                    item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12) + ' · ' + poolStates[item.status], 'Selecione o lançamento');
+            }
             if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
             updateUserLiquidity();
             if (wallet.isUnlocked()) {

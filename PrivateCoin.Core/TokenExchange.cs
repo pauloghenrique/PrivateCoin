@@ -7,7 +7,7 @@ using System.Text;
 namespace PrivateCoin.Core
 {
     /// <summary>Atomic, externally signed transactions with consensus-enforced pool reserves.</summary>
-    public static class TokenExchange
+    public static partial class TokenExchange
     {
         public const int PoolFeeBasisPoints = 30;
 
@@ -114,13 +114,16 @@ namespace PrivateCoin.Core
 
         internal static bool IsPoolOperation(TransactionKind kind) => kind == TransactionKind.LiquidityPool ||
             kind == TransactionKind.LiquiditySwap || kind == TransactionKind.LiquidityClose ||
-            kind == TransactionKind.LiquidityAdd || kind == TransactionKind.LiquidityRemove;
+            kind == TransactionKind.LiquidityAdd || kind == TransactionKind.LiquidityRemove || TokenLaunch.IsOperation(kind);
 
-        internal static void ValidatePoolOperation(Transaction tx, IDictionary<string, UnspentOutput> utxo)
+        internal static void ValidatePoolOperation(Transaction tx, IDictionary<string, UnspentOutput> utxo, int height)
         {
             var sources = tx.Inputs.Select(input => { UnspentOutput source;
                 return utxo.TryGetValue(Key(input), out source) ? source : null; }).ToArray();
             var locked = sources.Where(source => source != null && source.IsPoolReserve).ToArray();
+            if (TokenLaunch.IsOperation(tx.Kind)) { TokenLaunch.Validate(tx, sources, height); return; }
+            if (tx.Launch != null || sources.Any(source => source?.Launch != null))
+                throw new InvalidOperationException("Launch escrow can only fund launch operations.");
             if (tx.PoolParticipation != null && (!IsPoolOperation(tx.Kind) || tx.Kind == TransactionKind.LiquidityClose))
                 throw new InvalidOperationException("Invalid pool participation metadata.");
             bool change = tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove;
@@ -281,9 +284,9 @@ namespace PrivateCoin.Core
             }
         }
         private static UnsignedTokenExchange Build(List<UnspentOutput> selected, Dictionary<string, string> keys,
-            List<TransactionOutput> outputs, int userCount, long fee, TransactionKind kind, LiquiditySwapTerms terms = null, PoolParticipation participation = null, LiquidityChangeTerms change = null, PoolBurnPolicy burnPolicy = null)
+            List<TransactionOutput> outputs, int userCount, long fee, TransactionKind kind, LiquiditySwapTerms terms = null, PoolParticipation participation = null, LiquidityChangeTerms change = null, PoolBurnPolicy burnPolicy = null, LaunchPoolState launch = null)
         {
-            var tx = new Transaction { Kind = kind, PoolBurnPolicy = burnPolicy?.Copy(), LiquiditySwap = terms, PoolParticipation = participation, LiquidityChange = change, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Outputs = outputs,
+            var tx = new Transaction { Kind = kind, Launch = launch, PoolBurnPolicy = burnPolicy?.Copy(), LiquiditySwap = terms, PoolParticipation = participation, LiquidityChange = change, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee, Outputs = outputs,
                 Inputs = selected.Select(item => new TransactionInput { TransactionId = item.TransactionId,
                     OutputIndex = item.OutputIndex, PublicKey = keys[item.Output.OneTimeAddress] }).ToList() };
             return new UnsignedTokenExchange(tx, selected.ToArray(), userCount);
@@ -299,6 +302,7 @@ namespace PrivateCoin.Core
         public int UserInputCount { get; }
         public IReadOnlyList<UnspentOutput> Sources { get; }
         public byte[] SigningPayload => Encoding.UTF8.GetBytes(transaction.SigningPayload());
+        public LaunchPoolState Launch => transaction.Launch?.Copy();
         public PoolParticipation PoolParticipation => transaction.PoolParticipation?.Copy();
         public LiquidityChangeTerms LiquidityChange => transaction.LiquidityChange;
         public long Fee => transaction.Fee;
@@ -317,14 +321,14 @@ namespace PrivateCoin.Core
         public Transaction Complete(IEnumerable<string> signatures)
         {
             var values = signatures.ToArray();
-            if ((transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove) && values.Length == UserInputCount)
+            if ((transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(transaction.Kind)) && values.Length == UserInputCount)
             {
                 if (values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every funding input.");
                 values = values.Concat(new[] { string.Empty, string.Empty }).ToArray();
             }
             else if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace))
                 throw new ArgumentException("One signature is required for every input.");
-            var tx = new Transaction { PoolBurnPolicy = transaction.PoolBurnPolicy?.Copy(), PoolParticipation = transaction.PoolParticipation?.Copy(), LiquidityChange = transaction.LiquidityChange, Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
+            var tx = new Transaction { Launch = transaction.Launch?.Copy(), PoolBurnPolicy = transaction.PoolBurnPolicy?.Copy(), PoolParticipation = transaction.PoolParticipation?.Copy(), LiquidityChange = transaction.LiquidityChange, Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
                 LiquiditySwap = transaction.LiquiditySwap == null ? null : new LiquiditySwapTerms {
                     InputSide = transaction.LiquiditySwap.InputSide, Amount = transaction.LiquiditySwap.Amount,
                     InputBurn = transaction.LiquiditySwap.InputBurn, OutputBurn = transaction.LiquiditySwap.OutputBurn },

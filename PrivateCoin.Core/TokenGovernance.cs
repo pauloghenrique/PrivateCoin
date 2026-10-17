@@ -203,11 +203,11 @@ namespace PrivateCoin.Core
                 if (!utxo.TryGetValue(input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture), out source)) continue;
                 if (source.TokenRuntime != null) throw new InvalidOperationException("Token state is not spendable.");
                 if (source.Output.UnlockHeight > height) throw new InvalidOperationException("Token tranche is not unlocked yet.");
-                if (source.Output.AssetId != null && State(utxo, source.Output.AssetId)?.Paused == true)
+                if (source.Output.AssetId != null && State(utxo, source.Output.AssetId)?.Paused == true && tx.Kind != TransactionKind.LaunchRefund)
                     throw new InvalidOperationException("Token transfers are paused.");
             }
             foreach (var output in tx.Outputs.Where(output => output.AssetId != null))
-                if (State(utxo, output.AssetId)?.Paused == true) throw new InvalidOperationException("Token transfers are paused.");
+                if (State(utxo, output.AssetId)?.Paused == true && tx.Kind != TransactionKind.LaunchRefund) throw new InvalidOperationException("Token transfers are paused.");
             if (tx.Kind == TransactionKind.TokenCreate && tx.Token?.Policy != null)
             {
                 var policy = tx.Token.Policy;

@@ -32,6 +32,23 @@ namespace Povix.Dex.Models
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountA { get; set; }
         [Required, StringLength(30), RegularExpression("[0-9]+([.,][0-9]+)?")] public string AmountB { get; set; }
     }
+    public sealed class CreateLaunchPoolViewModel : ExchangeFeeModel
+    {
+        [Required, RegularExpression("[0-9a-f]{64}")] public string AssetA { get; set; }
+        [Required, RegularExpression("(povix|[0-9a-f]{64})")] public string AssetB { get; set; }
+        [Required, StringLength(30)] public string SaleTokens { get; set; }
+        [Required, StringLength(30)] public string LiquidityTokens { get; set; }
+        [Required, StringLength(30)] public string InitialContribution { get; set; }
+        [Required, StringLength(30)] public string Target { get; set; }
+        [Range(1, int.MaxValue)] public int DeadlineHeight { get; set; }
+        public bool AllowUserLiquidity { get; set; }
+    }
+    public sealed class LaunchContributionViewModel : ExchangeFeeModel
+    {
+        [Required, RegularExpression("[0-9a-f]{64}")] public string PoolId { get; set; }
+        [Required, RegularExpression("(contribute|refund)")] public string Operation { get; set; }
+        [StringLength(30)] public string Amount { get; set; }
+    }
     [DataContract]
     public sealed class PoolLoyaltyPolicy
     {

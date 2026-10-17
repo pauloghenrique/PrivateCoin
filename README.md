@@ -315,11 +315,11 @@ encerramento exigem as assinaturas do dono. Blocos históricos v17 mantêm a
 exigência original de assinatura das reservas. A ativação requer atualizar o
 DEX e os nós da rede em conjunto.
 
-Novos blocos usam `ConsensusVersion = 19`. Ao restaurar, o Core revalida o
-histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18 com suas regras originais e permite
-sua extensão em v19. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
+Novos blocos usam `ConsensusVersion = 21`. Ao restaurar, o Core revalida o
+histórico v0/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18/v19/v20 com suas regras originais e permite
+sua extensão em v21. Blocos v16 preservam o limite de 1 a 20 operações. Blocos v15 continuam exigindo uma operação; blocos históricos
 v4 a v14 mantêm os lotes originais de 20 quando exigidos por suas regras.
-Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18 são revalidados
+Caches DEX v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15/v16/v17/v18/v19/v20 são revalidados
 antes da migração. Nós e clientes DEX precisam atualizar juntos, pois o handshake
 rejeita versões diferentes. As pendências antigas passam a aguardar inclusão
 em bloco, sem apagar transações ou alterar saldos já confirmados.
@@ -509,3 +509,53 @@ regras são metadados persistentes de configuração; ainda não financiam uma r
 separam taxas, bloqueiam retiradas por tempo ou pagam bônus. O fluxo atual de
 liquidez não muda. A escolha do prazo em dias, meses ou anos e a execução
 financeira exigem implementação no mecanismo de posições e de reservas do Core.
+
+### Pool de lançamento (v21)
+
+Em Pools → Criar pool, “Criar pool de lançamento” recebe qualquer token nativo
+confirmado e outro ativo confirmado para captação (POVIX ou token distinto). O
+comprovante de criação do token oferece um atalho com o token pré-selecionado.
+O menu Lançamentos permite a participação pública sem misturar o catálogo com
+Minhas pools, que continua limitado à carteira criadora. Apenas unidades
+desbloqueadas do token podem ser depositadas; vesting e pausa continuam sendo
+validados. A devolução determinística de uma captação fracassada permanece
+permitida mesmo se o token for pausado, sem desativar a pausa para outros usos.
+O criador deposita os tokens destinados aos compradores mais os tokens da
+liquidez inicial e faz um aporte inicial positivo no ativo de captação, menor
+que a meta. Esse aporte conta como compra do criador. A meta é expressa no ativo
+de captação; a quantidade de tokens para venda define a quantidade comprometida
+quando a meta é completada. Não se usa o número de transações como meta.
+
+Durante a captação, as duas reservas são custodiadas pelo consenso: nem o
+criador consegue transferi-las, encerrar a pool ou usá-las em swaps. Novos
+aportes atualizam apenas a contribuição da carteira que assina e não podem
+exceder a meta. A abertura é parte do último aporte: uma única transação
+confirmada entrega os tokens a cada comprador proporcionalmente ao total
+aportado, forma a liquidez com 100% da captação e libera a negociação.
+A alocação usa divisão inteira para baixo; tokens residuais permanecem na
+liquidez. Os compradores recebem tokens, não participações LP pelo lançamento.
+A participação inicial de liquidez pertence à carteira criadora e segue as
+regras normais de administração e encerramento após a abertura. O criador
+escolhe se permitirá aportes e retiradas proporcionais de outros provedores
+depois da abertura. O lançamento utiliza a participação nas taxas da pool;
+não ativa o bônus de permanência que permanece apenas como configuração.
+
+O prazo é um bloco limite, não uma data estimada. Contribuições precisam ser
+confirmadas em altura menor que esse limite. A partir da altura limite, uma
+captação incompleta permite devolução integral de todos os aportes, incluindo
+o inicial do criador, e retorno de todos os tokens depositados ao criador.
+Qualquer carteira pode pagar a taxa para executar essa devolução conjunta;
+não é necessária assinatura do criador, e os destinatários não podem ser
+alterados. Taxas de rede previamente pagas não são reembolsadas. A devolução
+não é executada em segundo plano: deve ser revisada, assinada e confirmada.
+Os aportes não têm retirada antes desse limite. O limite de participantes é
+100 endereços; cada endereço pode fazer vários aportes. O bloco limite deve
+ser futuro e estar a até 1.000.000 de blocos da criação.
+
+Criação, aportes, abertura e devolução são assinados localmente, propagados pelo
+P2P e verificados pelo Core, inclusive durante restauração e reorganizações.
+A interface mostra progresso, prazo e cada saída antes da assinatura. A taxa
+da rede sempre usa POVIX livres, inclusive em lançamentos token/token.
+Blocos v19/v20 continuam válidos, mas as operações de lançamento exigem v21; nós
+e clientes devem ser atualizados juntos. O hash dos fontes do Core continua
+a integrar a identidade da rede conforme a configuração existente.

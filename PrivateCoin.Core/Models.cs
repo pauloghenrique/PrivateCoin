@@ -21,7 +21,11 @@ namespace PrivateCoin.Core
         LiquidityClose = 9,
         LiquidityAdd = 10,
         LiquidityRemove = 11,
-        TokenManage = 12
+        TokenManage = 12,
+        LaunchCreate = 13,
+        LaunchContribute = 14,
+        LaunchActivate = 15,
+        LaunchRefund = 16
     }
 
     [DataContract]
@@ -66,6 +70,24 @@ namespace PrivateCoin.Core
     {
         [DataMember(Order = 1)] public string Address { get; set; }
         [DataMember(Order = 2)] public long Shares { get; set; }
+    }
+
+    [DataContract]
+    public sealed class LaunchPoolState
+    {
+        [DataMember(Order = 1)] public long Target { get; set; }
+        [DataMember(Order = 2)] public long SaleTokens { get; set; }
+        [DataMember(Order = 3)] public long TotalTokens { get; set; }
+        [DataMember(Order = 4)] public int DeadlineHeight { get; set; }
+        [DataMember(Order = 5)] public bool AllowUserLiquidity { get; set; }
+        [DataMember(Order = 6)] public Dictionary<string, long> Contributions { get; set; } = new Dictionary<string, long>();
+        public long Raised => Contributions.Values.Aggregate(0L, (total, value) => checked(total + value));
+        public string Terms() => string.Join("|", new[] { Target.ToString(CultureInfo.InvariantCulture), SaleTokens.ToString(CultureInfo.InvariantCulture),
+            TotalTokens.ToString(CultureInfo.InvariantCulture), DeadlineHeight.ToString(CultureInfo.InvariantCulture), AllowUserLiquidity ? "1" : "0" });
+        public string Canonical() => Terms() + "|" + string.Join(",", (Contributions ?? new Dictionary<string, long>()).OrderBy(item => item.Key, StringComparer.Ordinal)
+            .Select(item => item.Key + ":" + item.Value.ToString(CultureInfo.InvariantCulture)));
+        public LaunchPoolState Copy() => new LaunchPoolState { Target = Target, SaleTokens = SaleTokens, TotalTokens = TotalTokens,
+            DeadlineHeight = DeadlineHeight, AllowUserLiquidity = AllowUserLiquidity, Contributions = new Dictionary<string, long>(Contributions, StringComparer.Ordinal) };
     }
 
     [DataContract]
@@ -197,6 +219,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 19, EmitDefaultValue = false)] public PoolBurnPolicy PoolBurnPolicy { get; set; }
         public bool PoolBurnEnabled => PoolBurnPolicy != null;
 
+        [DataMember(Order = 20, EmitDefaultValue = false)] public LaunchPoolState Launch { get; set; }
+
         internal string SigningPayload()
         {
             var value = new StringBuilder(TimestampUtcTicks.ToString(CultureInfo.InvariantCulture));
@@ -240,6 +264,7 @@ namespace PrivateCoin.Core
                 value.Append("|token-locks-v1|").Append(string.Join(",", Outputs.Select(output => output.UnlockHeight.ToString(CultureInfo.InvariantCulture))));
             if (TokenTransferTerms != null) value.Append("|token-transfer-burn-v1|").Append(TokenTransferTerms.Canonical());
             if (PoolBurnEnabled) value.Append("|pool-burn-enabled-v1|").Append(PoolBurnPolicy.Canonical());
+            if (Launch != null) value.Append("|pool-launch-v1|").Append(Launch.Canonical());
             return value.ToString();
         }
 
@@ -310,8 +335,10 @@ namespace PrivateCoin.Core
         public TransactionOutput Output { get; internal set; }
         public TransactionKind TransactionKind { get; internal set; }
         public PoolParticipation PoolParticipation { get; internal set; }
+        public LaunchPoolState Launch { get; internal set; }
         public bool IsPoolReserve => TransactionKind == TransactionKind.LiquidityPool || TransactionKind == TransactionKind.LiquiditySwap ||
-            TransactionKind == TransactionKind.LiquidityAdd || TransactionKind == TransactionKind.LiquidityRemove;
+            TransactionKind == TransactionKind.LiquidityAdd || TransactionKind == TransactionKind.LiquidityRemove ||
+            TransactionKind == TransactionKind.LaunchCreate || TransactionKind == TransactionKind.LaunchContribute || TransactionKind == TransactionKind.LaunchActivate;
         public string ValidatorPublicKey { get; internal set; }
         public string ValidatorRewardAddress { get; internal set; }
         public IReadOnlyCollection<string> ValidatorOwnedAddresses { get; internal set; }
