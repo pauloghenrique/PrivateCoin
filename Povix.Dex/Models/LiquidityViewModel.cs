@@ -18,6 +18,11 @@ namespace Povix.Dex.Models
     public sealed class CreatePoolViewModel : ExchangeFeeModel
     {
         public bool AllowUserLiquidity { get; set; }
+        public bool BurnEnabled { get; set; }
+        [RegularExpression("(percent|fixed)")] public string BurnMode { get; set; } = "percent";
+        [StringLength(30)] public string BurnPercent { get; set; }
+        [StringLength(30)] public string BurnFixedA { get; set; }
+        [StringLength(30)] public string BurnFixedB { get; set; }
         [Required, RegularExpression("(fees|loyalty)")] public string RewardMode { get; set; } = "fees";
         public string LoyaltyFeePercent { get; set; }
         public string LoyaltyMinimumReserve { get; set; }

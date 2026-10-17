@@ -76,8 +76,28 @@
         entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false; element.add(option); });
         if (entries.some(item => (item.id || item.poolId) === previous)) element.value = previous;
     }
+    function selectedBurnPolicy(a, b) {
+        if (!byId('pool-burn-enabled')?.checked) return null;
+        if (byId('pool-burn-mode').value === 'percent') {
+            const rate = Number(wallet.parseSupply(byId('pool-burn-percent').value, 2));
+            if (rate > 10000) throw new Error('A porcentagem máxima de queima é 100%.');
+            return { basisPoints: rate, fixedAAtomic: '0', fixedBAtomic: '0' };
+        }
+        const fixed = (id, item) => item.id === 'povix' || byId(id).value === '0' ? '0' : wallet.parseSupply(byId(id).value, item.decimals);
+        const fixedAAtomic = fixed('pool-burn-fixed-a', a), fixedBAtomic = fixed('pool-burn-fixed-b', b);
+        if (fixedAAtomic === '0' && fixedBAtomic === '0') throw new Error('Defina uma queima fixa positiva para ao menos um token.');
+        return { basisPoints: 0, fixedAAtomic, fixedBAtomic };
+    }
     function update() {
         updateUserLiquidity();
+        if (byId('pool-burn-fields')) {
+            const enabled = Boolean(byId('pool-burn-enabled')?.checked), percent = byId('pool-burn-mode').value === 'percent';
+            byId('pool-burn-fields').hidden = !enabled; byId('pool-burn-fields').disabled = !enabled;
+            byId('pool-burn-percent-field').hidden = !percent; byId('pool-burn-percent').disabled = !percent; byId('pool-burn-percent').required = enabled && percent;
+            byId('pool-burn-fixed-fields').hidden = percent;
+            byId('pool-burn-fixed-a').disabled = percent || asset(byId('pool-asset-a').value)?.id === 'povix';
+            byId('pool-burn-fixed-b').disabled = percent || asset(byId('pool-asset-b').value)?.id === 'povix';
+        }
         if (byId('pool-reward-mode')) {
             const loyalty = byId('pool-reward-mode').value === 'loyalty';
             byId('pool-reward-title').textContent = loyalty ? 'Bônus por permanência' : 'Participação nas taxas';
@@ -134,8 +154,9 @@
             if (!pool) throw new Error();
             const side = Number(swapSide()), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
             const amount = wallet.parseSupply(byId('swap-amount').value, input.decimals);
-            const receive = wallet.quoteExchange(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount);
-            byId('swap-estimate').textContent = 'Cotação estimada: ' + atomicText(receive, output.decimals) + ' ' + output.symbol + ' · Taxa da pool: 0,30%';
+            const quote = wallet.quotePoolSwap(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount, pool.assetA, pool.assetB, side, pool.burnPolicy);
+            const receive = quote.receiveAtomic;
+            byId('swap-estimate').textContent = 'Cotação estimada: ' + atomicText(receive, output.decimals) + ' ' + output.symbol + ' · Queima na entrada: ' + atomicText(quote.inputBurnAtomic, input.decimals) + ' ' + input.symbol + ' · Queima na saída: ' + atomicText(quote.outputBurnAtomic, output.decimals) + ' ' + output.symbol + ' · Taxa da pool: 0,30%';
         } catch (_) { byId('swap-estimate').textContent = 'Escolha a pool e uma quantidade compatível com a liquidez.'; }
     }
     function addReview(label, value) {
@@ -148,6 +169,7 @@
         byId('review-title').textContent = result.operation === 'pool' ? 'Criação da pool' : 'Executar troca';
         byId('review-description').textContent = result.operation === 'pool' ? 'A pool ficará disponível após a confirmação das reservas em bloco.' :
             'A carteira selecionada assina a troca e a envia à rede, sem aprovação do criador da pool. Aguarde a confirmação em bloco.';
+        addReview('Queima própria da pool', result.burnEnabled ? result.burnPolicy.basisPoints > 0 ? atomicText(result.burnPolicy.basisPoints, 2) + '% em tokens; POVIX isento' : 'Fixa: ' + atomicText(result.burnPolicy.fixedAAtomic, result.assetA.decimals) + ' ' + result.assetA.symbol + ' / ' + atomicText(result.burnPolicy.fixedBAtomic, result.assetB.decimals) + ' ' + result.assetB.symbol : 'Desabilitada');
         if (result.operation === 'lock' || result.operation === 'close') {
             byId('review-title').textContent = result.operation === 'lock' ? 'Bloquear reservas da pool' : 'Encerrar pool e liberar reservas';
             byId('review-description').textContent = result.operation === 'lock' ?
@@ -157,7 +179,9 @@
         if (result.operation === 'swap') {
             const input = result.inputSide === 0 ? result.assetA : result.assetB, output = result.inputSide === 0 ? result.assetB : result.assetA;
             addReview('Quantidade entregue pelo comprador', atomicText(result.amountAtomic, input.decimals) + ' ' + input.symbol);
-            addReview('Quantidade recebida pelo comprador', atomicText(result.receiveAtomic, output.decimals) + ' ' + output.symbol);
+            addReview('Queima na entrada', atomicText(result.inputBurnAtomic || '0', input.decimals) + ' ' + input.symbol);
+            addReview('Queima na saída', atomicText(result.outputBurnAtomic || '0', output.decimals) + ' ' + output.symbol);
+            addReview('Quantidade líquida recebida pelo comprador', atomicText(result.receiveAtomic, output.decimals) + ' ' + output.symbol);
             addReview('Mínimo a receber', atomicText(result.minimumReceiveAtomic, output.decimals) + ' ' + output.symbol);
         }
         if (result.operation === 'pool') {
@@ -193,7 +217,7 @@
         }
     }
     const wantedFromPool = pool => ({ poolId: pool.poolId, reserveTransactionId: pool.reserveTransactionId, providerAddress: pool.providerAddress,
-        participation: pool.participation, assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
+        burnEnabled: Boolean(pool.burnEnabled), burnPolicy: pool.burnPolicy, participation: pool.participation, assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
     async function manageReserves(pool) {
         if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate || !pool.canManage) return;
         if (managing) { byId('pool-management-review').hidden = false; byId('pool-management-fee').hidden = false; }
@@ -229,9 +253,11 @@
                 if (feeBasisPoints > 10000 || !['forfeit', 'locked'].includes(earlyExit)) throw new Error('Defina uma parcela de até 100% das taxas e uma regra de saída válida.');
                 loyaltyPolicy = { feeBasisPoints, minimumReserveAtomic, earlyExit };
             }
-            const wanted = { operation: 'pool', rewardMode, loyaltyPolicy, allowUserLiquidity, assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
+            const burnPolicy = selectedBurnPolicy(a, b);
+            const wanted = { operation: 'pool', burnEnabled: Boolean(burnPolicy), burnPolicy, rewardMode, loyaltyPolicy, allowUserLiquidity, assetA: a, assetB: b, reserveAAtomic, reserveBAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.preparePoolUrl, { AssetA: a.id, AssetB: b.id, AmountA: byId('pool-amount-a').value,
-                AmountB: byId('pool-amount-b').value, AllowUserLiquidity: allowUserLiquidity, RewardMode: rewardMode, LoyaltyFeePercent: rewardMode === 'loyalty' ? byId('pool-loyalty-fee').value : '',
+                AmountB: byId('pool-amount-b').value, BurnEnabled: Boolean(burnPolicy), BurnMode: byId('pool-burn-mode')?.value || 'percent',
+                BurnPercent: byId('pool-burn-percent')?.value || '', BurnFixedA: byId('pool-burn-fixed-a')?.value || '0', BurnFixedB: byId('pool-burn-fixed-b')?.value || '0', AllowUserLiquidity: allowUserLiquidity, RewardMode: rewardMode, LoyaltyFeePercent: rewardMode === 'loyalty' ? byId('pool-loyalty-fee').value : '',
                 LoyaltyMinimumReserve: rewardMode === 'loyalty' ? byId('pool-loyalty-minimum').value : '', LoyaltyEarlyExit: loyaltyPolicy?.earlyExit || '', FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await review(result, wanted);
         } catch (error) { reset(); message(error.message); }
@@ -295,10 +321,11 @@
             if (!pool.available) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
             const inputSide = Number(selectedSide), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
-            const receive = wallet.quoteExchange(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic);
+            const quote = wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
+            const receive = quote.receiveAtomic;
             if (BigInt(receive) < BigInt(minimumReceiveAtomic)) throw new Error('O mínimo a receber supera a cotação atual.');
             const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map([['povix', BigInt(feeAtomic)]]);
-            funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(amountAtomic)); ensureFunds(funds);
+            funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(quote.inputDebitAtomic)); ensureFunds(funds);
             const wanted = { ...wantedFromPool(pool), operation: 'swap', inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, InputAssetId: input.id, OutputAssetId: output.id, Amount: byId('swap-amount').value,
                 MinimumReceive: byId('swap-minimum').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });

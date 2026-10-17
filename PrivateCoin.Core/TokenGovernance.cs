@@ -135,6 +135,23 @@ namespace PrivateCoin.Core
             if (tx.Outputs.Skip(1).Any(output => output.AssetId != null && !owners.Contains(output.OneTimeAddress)))
                 throw new InvalidOperationException("Token change must return to a signing input owner.");
         }
+        internal static long SwapBurn(Transaction tx, string assetId)
+        {
+            if (tx.Kind != TransactionKind.LiquiditySwap || !tx.PoolBurnEnabled || tx.LiquiditySwap == null || assetId == null) return 0;
+            var terms = tx.LiquiditySwap;
+            return tx.Outputs[terms.InputSide].AssetId == assetId ? terms.InputBurn :
+                tx.Outputs[1 - terms.InputSide].AssetId == assetId ? terms.OutputBurn : 0;
+        }
+        private static void BurnPoolAsset(IDictionary<string, UnspentOutput> utxo, string assetId, long amount)
+        {
+            if (amount == 0) return;
+            var prior = State(utxo, assetId);
+            if (prior == null || amount < 0) throw new InvalidOperationException("Invalid pool burn.");
+            utxo[Key(assetId)] = new UnspentOutput { TransactionId = Key(assetId), OutputIndex = -1,
+                Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
+                TokenRuntime = new TokenRuntime { Token = prior.Token, Supply = checked(prior.Supply - amount),
+                    Issued = prior.Issued, Paused = prior.Paused, Revision = prior.Revision } };
+        }
         internal static void Record(Transaction tx, IDictionary<string, UnspentOutput> utxo)
         {
             TokenRuntime next = null;
@@ -161,11 +178,18 @@ namespace PrivateCoin.Core
             }
             if (next != null) utxo[Key(next.Token.Id)] = new UnspentOutput { TransactionId = Key(next.Token.Id), OutputIndex = -1,
                 Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" }, TokenRuntime = next };
+            if (tx.Kind == TransactionKind.LiquiditySwap && tx.PoolBurnEnabled && tx.LiquiditySwap != null)
+            {
+                var terms = tx.LiquiditySwap;
+                BurnPoolAsset(utxo, tx.Outputs[terms.InputSide].AssetId, terms.InputBurn);
+                BurnPoolAsset(utxo, tx.Outputs[1 - terms.InputSide].AssetId, terms.OutputBurn);
+            }
         }
         internal static void Validate(Transaction tx, IDictionary<string, UnspentOutput> utxo, int height, int version)
         {
-            if (tx.Token?.Policy != null || tx.TokenCommand != null || tx.TokenAuthorizations != null || tx.TokenTransferTerms != null || tx.Outputs.Any(output => output.UnlockHeight != 0))
+            if (tx.PoolBurnEnabled || tx.Token?.Policy != null || tx.TokenCommand != null || tx.TokenAuthorizations != null || tx.TokenTransferTerms != null || tx.Outputs.Any(output => output.UnlockHeight != 0))
                 if (version < 20) throw new InvalidOperationException("Token policies require consensus v20.");
+            if (tx.PoolBurnEnabled && !TokenExchange.IsPoolOperation(tx.Kind)) throw new InvalidOperationException("Pool burn choice requires a pool operation.");
             if (tx.TokenCommand == null && (tx.Kind == TransactionKind.TokenManage || tx.TokenAuthorizations != null))
                 throw new InvalidOperationException("Missing token command.");
             if (tx.TokenTransferTerms != null && tx.Kind != TransactionKind.TokenTransfer)

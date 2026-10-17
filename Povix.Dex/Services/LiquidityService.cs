@@ -52,7 +52,7 @@ namespace Povix.Dex.Services
                 string key = publicKeys.FirstOrDefault(value => AddressFor(value) == address);
                 if (key == null) throw new TokenOperationException("wallet_invalid", "O endereço da pool deve pertencer à carteira aberta.");
                 var tx = TokenExchange.PrepareLiquidity(blockchain, pending, publicKeys, AssetId(a), AssetId(b), amountA, amountB,
-                    address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys(), model.AllowUserLiquidity);
+                    address, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys(), model.AllowUserLiquidity, BuildPoolBurnPolicy(model, a, b));
                 var draft = new PreparedExchange { Transaction = tx, Operation = "pool", RewardMode = model.RewardMode, LoyaltyPolicy = loyaltyPolicy, Owner = owner, ProviderKey = key,
                     Address = address, AssetA = a, AssetB = b, ReserveA = amountA, ReserveB = amountB, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) };
                 return AddExchangeDraft(draft);
@@ -393,7 +393,7 @@ namespace Povix.Dex.Services
         }
         private static object PoolResponse(PoolSnapshot pool) => new {
             rewardMode = pool.RewardMode, loyaltyPolicy = LoyaltyPolicyResponse(pool.LoyaltyPolicy),
-            allowUserLiquidity = pool.Transaction.PoolParticipation != null,
+            burnEnabled = pool.Transaction.PoolBurnEnabled, burnPolicy = PoolBurnResponse(pool.Transaction.PoolBurnPolicy), allowUserLiquidity = pool.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(pool.Transaction.PoolParticipation),
             poolId = pool.Id, providerAddress = AddressFor(pool.ProviderKey), assetA = AssetResponse(pool.AssetA), assetB = AssetResponse(pool.AssetB),
             reserveTransactionId = pool.Transaction.Id, reserveAAtomic = Atomic(pool.Transaction.Outputs[0].Amount), reserveBAtomic = Atomic(pool.Transaction.Outputs[1].Amount),
@@ -403,12 +403,13 @@ namespace Povix.Dex.Services
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
             rewardMode = draft.RewardMode ?? "fees", loyaltyPolicy = LoyaltyPolicyResponse(draft.LoyaltyPolicy),
-            allowUserLiquidity = draft.Transaction.PoolParticipation != null,
+            burnEnabled = draft.Transaction.BurnEnabled, burnPolicy = PoolBurnResponse(draft.Transaction.BurnPolicy), allowUserLiquidity = draft.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(draft.Transaction.PoolParticipation),
             sharesAtomic = draft.Transaction.LiquidityChange == null ? "0" : Atomic(draft.Transaction.LiquidityChange.Shares),
             draftId = id, operation = draft.Operation, transactionKind = (int)draft.Transaction.Kind, poolId = draft.PoolId, reserveTransactionId = draft.ReserveId,
             assetA = AssetResponse(draft.AssetA), assetB = AssetResponse(draft.AssetB), providerAddress = AddressFor(draft.ProviderKey),
             reserveAAtomic = Atomic(draft.ReserveA), reserveBAtomic = Atomic(draft.ReserveB), inputSide = draft.InputSide, amountAtomic = Atomic(draft.Amount),
+            inputBurnAtomic = Atomic(draft.Transaction.InputBurn), outputBurnAtomic = Atomic(draft.Transaction.OutputBurn),
             receiveAtomic = draft.Operation == "swap" ? Atomic(draft.Transaction.Outputs[2].Amount) : "0", minimumReceiveAtomic = Atomic(draft.MinimumReceive),
             changeAddress = draft.Address, feeAtomic = Atomic(draft.Transaction.Fee), userInputCount = draft.Transaction.UserInputCount,
             inputs = draft.Transaction.Inputs.Select((input, index) => new { transactionId = input.TransactionId, outputIndex = input.OutputIndex,
@@ -418,6 +419,24 @@ namespace Povix.Dex.Services
             signingPayload = Convert.ToBase64String(draft.Transaction.SigningPayload), timestampUtcTicks = Atomic(draft.Transaction.TimestampUtcTicks),
             networkId = Blockchain.NetworkId, consensusVersion = Blockchain.ConsensusVersion, expiresUtc = draft.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture),
             poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
+        private static PoolBurnPolicy BuildPoolBurnPolicy(CreatePoolViewModel model, TokenDefinition a, TokenDefinition b)
+        {
+            if (!model.BurnEnabled) return null;
+            long percent, fixedA = 0, fixedB = 0;
+            if (model.BurnMode == "percent")
+            {
+                if (!CreateTokenViewModel.TryParseSupply(model.BurnPercent, 2, out percent) || percent > 10000)
+                    throw new TokenOperationException("burn_invalid", "Informe uma porcentagem de queima entre 0,01% e 100%.");
+                return new PoolBurnPolicy { BasisPoints = (int)percent };
+            }
+            if (model.BurnMode != "fixed" ||
+                a.Id != "povix" && model.BurnFixedA != "0" && !CreateTokenViewModel.TryParseSupply(model.BurnFixedA, a.Decimals, out fixedA) ||
+                b.Id != "povix" && model.BurnFixedB != "0" && !CreateTokenViewModel.TryParseSupply(model.BurnFixedB, b.Decimals, out fixedB) || fixedA == 0 && fixedB == 0)
+                throw new TokenOperationException("burn_invalid", "Informe uma taxa fixa positiva para ao menos um token. POVIX não sofre queima.");
+            return new PoolBurnPolicy { FixedA = fixedA, FixedB = fixedB };
+        }
+        private static object PoolBurnResponse(PoolBurnPolicy policy) => policy == null ? null : new {
+            basisPoints = policy.BasisPoints, fixedAAtomic = Atomic(policy.FixedA), fixedBAtomic = Atomic(policy.FixedB) };
         private static object LoyaltyPolicyResponse(PoolLoyaltyPolicy policy) => policy == null ? null : new {
             feeBasisPoints = policy.FeeBasisPoints, minimumReserveAtomic = Atomic(policy.MinimumReserveAtomic), earlyExit = policy.EarlyExit,
             status = "configured", periodUnits = new[] { "days", "months", "years" } };

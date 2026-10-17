@@ -727,7 +727,7 @@ namespace PrivateCoin.Core
                 validation.Proof.Signature = validator.CreateVote(CreateTransactionApprovalPayload(transaction, validation));
                 var approved = new Transaction { Id = transaction.Id, TimestampUtcTicks = transaction.TimestampUtcTicks,
                     Inputs = transaction.Inputs, Outputs = transaction.Outputs, Fee = transaction.Fee, Kind = transaction.Kind,
-                    Token = transaction.Token, TokenTransferTerms = transaction.TokenTransferTerms, TokenCommand = transaction.TokenCommand, TokenAuthorizations = transaction.TokenAuthorizations, TransactionApproval = validation };
+                    PoolBurnPolicy = transaction.PoolBurnPolicy?.Copy(), Token = transaction.Token, TokenTransferTerms = transaction.TokenTransferTerms, TokenCommand = transaction.TokenCommand, TokenAuthorizations = transaction.TokenAuthorizations, TransactionApproval = validation };
                 var candidate = pending.Where(tx => tx.Id != transaction.Id).Concat(new[] { approved }).ToList();
                 if (!IsValidTransactionApproval(approved, BuildPendingUtxo(BuildUtxo(), candidate, blocks, transaction.Id), blocks)) return null;
                 return validation;
@@ -833,7 +833,7 @@ namespace PrivateCoin.Core
         {
             Transaction reward = block.Transactions[0];
             if (block.ConsensusVersion >= ApprovalVersion && (reward.Kind != TransactionKind.Transfer || reward.Fee != 0 || reward.Token != null ||
-                reward.TokenTransferTerms != null || reward.TokenCommand != null || reward.TokenAuthorizations != null || reward.Outputs.Any(output => output.UnlockHeight != 0) ||
+                reward.PoolBurnEnabled || reward.TokenTransferTerms != null || reward.TokenCommand != null || reward.TokenAuthorizations != null || reward.Outputs.Any(output => output.UnlockHeight != 0) ||
                 reward.TransactionApproval != null || reward.WalletDistributionId != null || reward.ValidatorPublicKey != null ||
                 reward.ValidatorRewardAddress != null || reward.ValidatorOwnedAddresses != null))
                 throw new InvalidOperationException("Invalid scheduled block reward.");
@@ -1034,7 +1034,7 @@ namespace PrivateCoin.Core
             if (transaction.Kind == TransactionKind.TokenTransfer) TokenGovernance.ValidateTransferConservation(transaction, utxo, tokenInputs, tokenOutputs);
             if (poolOperation &&
                 (tokenInputs.Count == 0 || tokenInputs.Count != tokenOutputs.Count ||
-                 tokenInputs.Any(pair => !tokenOutputs.ContainsKey(pair.Key) || tokenOutputs[pair.Key] != pair.Value)))
+                 tokenInputs.Any(pair => !tokenOutputs.ContainsKey(pair.Key) || checked(tokenOutputs[pair.Key] + TokenGovernance.SwapBurn(transaction, pair.Key)) != pair.Value)))
                 throw new InvalidOperationException("Token transfers must conserve each asset independently.");
             if (transaction.Fee < 0) throw new InvalidOperationException("A transaction fee cannot be negative.");
             if (transaction.Kind == TransactionKind.StakeLock)
@@ -1180,6 +1180,7 @@ namespace PrivateCoin.Core
                 if (transaction.Outputs[i].Amount > 0) utxo.Add(Key(transaction.Id, i), new UnspentOutput { TransactionId = transaction.Id, OutputIndex = i, Output = transaction.Outputs[i],
                     TransactionKind = i == 0 || (i == 1 && (transaction.Kind == TransactionKind.LiquidityPool || transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove)) ? transaction.Kind : TransactionKind.Transfer,
                     PoolParticipation = i < 2 ? transaction.PoolParticipation?.Copy() : null,
+                    PoolBurnPolicy = i < 2 ? transaction.PoolBurnPolicy?.Copy() : null,
                     ValidatorPublicKey = i == 0 ? transaction.ValidatorPublicKey : null,
                     ValidatorRewardAddress = i == 0 ? transaction.ValidatorRewardAddress : null,
                     ValidatorOwnedAddresses = i == 0 ? transaction.ValidatorOwnedAddresses : null });

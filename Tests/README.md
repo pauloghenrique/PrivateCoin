@@ -9,6 +9,12 @@ falha de atualização, respostas antigas após desconexão e carteira sem token
 
 ## Políticas de tokens e administração (v20 em rascunho)
 
+A regressão também cobre a regra opcional de queima própria da pool: padrão sem
+queima, percentual e fixo independentes da taxa do token, ambos os sentidos,
+POVIX isento, mínimo líquido, imutabilidade, confirmação e replay da oferta.
+O teste de liquidez assina no navegador uma pool token/token com taxas fixas e
+confirma o swap no nó P2P.
+
 A regressão também cobre queima automática percentual e fixa, débito adicional,
 precisão e limites numéricos, saldo insuficiente para a taxa, rejeição de omissão,
 subpagamento, sobrepagamento e desvio do troco, compatibilidade com o Desktop e
