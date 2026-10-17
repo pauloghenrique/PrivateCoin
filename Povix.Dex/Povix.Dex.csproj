@@ -168,6 +168,8 @@
     <Content Include="Scripts\povix-token-profile.js" />
     <Content Include="Views\TokenProfiles\Index.cshtml" />
     <Content Include="Scripts\povix-token-create.js" />
+    <Content Include="Scripts\povix-token-list.js" />
+    <Content Include="Views\Tokens\Index.cshtml" />
     <Content Include="Scripts\povix-token-management.js" />
     <Content Include="Views\Tokens\Manage.cshtml" />
     <Content Include="Scripts\povix-token-status.js" />

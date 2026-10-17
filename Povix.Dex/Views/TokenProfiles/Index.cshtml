@@ -1,5 +1,6 @@
 @{ ViewBag.Title = "Editar tokens"; }
 <main id="profile-app" data-tokens-url="@Url.Action("WalletTokens")" data-prepare-url="@Url.Action("Prepare")" data-submit-url="@Url.Action("Submit")" data-network-id="@PrivateCoin.Core.Blockchain.NetworkId" data-token-id="@ViewBag.TokenId">
+    <a class="back-link" href="@Url.Action("Index", "Tokens")">← Voltar para Token</a>
     <div class="page-intro"><span class="eyebrow">PERFIL E PERMISSÕES</span><h1>Edite o perfil do seu token.</h1><p>A carteira do criador autoriza cada alteração com uma assinatura local.</p></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div class="create-grid"><div>
