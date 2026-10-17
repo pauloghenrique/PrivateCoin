@@ -10,15 +10,17 @@ namespace PrivateCoin.Desktop
 {
     internal sealed class WalletBalanceSummary
     {
-        private WalletBalanceSummary(long available, long pendingChange)
+        private WalletBalanceSummary(long available, long pendingChange, long launchLocked = 0)
         {
             Available = available;
             PendingChange = pendingChange;
+            LaunchLocked = launchLocked;
         }
 
         public long Available { get; }
         public long PendingChange { get; }
-        public long Total => checked(Available + PendingChange);
+        public long LaunchLocked { get; }
+        public long Total => checked(Available + PendingChange + LaunchLocked);
 
         public static WalletBalanceSummary Read(Blockchain chain, Wallet wallet, IEnumerable<Transaction> pending)
         {
@@ -28,7 +30,8 @@ namespace PrivateCoin.Desktop
             // This query validates the queue and keeps the spending rules in the Core.
             UnspentOutput[] spendable = chain.GetSpendableOutputs(addresses, queue).ToArray();
             long available = spendable.Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
-            if (queue.Length == 0) return new WalletBalanceSummary(available, 0);
+            long launchLocked = chain.GetInitialLaunchLockedBalance(addresses);
+            if (queue.Length == 0) return new WalletBalanceSummary(available, 0, launchLocked);
 
             var outgoingIds = new HashSet<string>(queue.Where(transaction => transaction.Inputs.Any(input =>
                 OwnsInput(addresses, input))).Select(transaction => transaction.Id), StringComparer.Ordinal);
@@ -38,9 +41,9 @@ namespace PrivateCoin.Desktop
             // payments, locked collateral and change already available are not added.
             long pendingChange = chain.GetUnspentOutputs(addresses, queue)
                 .Where(item => item.Output.AssetId == null && item.TransactionKind != TransactionKind.StakeLock && !item.IsPoolReserve &&
-                    outgoingIds.Contains(item.TransactionId) && !availableKeys.Contains(Key(item.TransactionId, item.OutputIndex)))
+                    !item.Output.InitialLaunchLocked && outgoingIds.Contains(item.TransactionId) && !availableKeys.Contains(Key(item.TransactionId, item.OutputIndex)))
                 .Aggregate(0L, (total, item) => checked(total + item.Output.Amount));
-            return new WalletBalanceSummary(available, pendingChange);
+            return new WalletBalanceSummary(available, pendingChange, launchLocked);
         }
 
         private static string Key(string transactionId, int outputIndex)

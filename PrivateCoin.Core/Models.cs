@@ -25,7 +25,9 @@ namespace PrivateCoin.Core
         LaunchCreate = 13,
         LaunchContribute = 14,
         LaunchActivate = 15,
-        LaunchRefund = 16
+        LaunchRefund = 16,
+        InitialLaunchCreate = 17,
+        InitialLaunchPurchase = 18
     }
 
     [DataContract]
@@ -58,11 +60,13 @@ namespace PrivateCoin.Core
     [DataContract]
     public sealed class PoolParticipation
     {
+        [DataMember(Order = 2, EmitDefaultValue = false)] public long LockedShares { get; set; }
         [DataMember(Order = 1)] public Dictionary<string, long> Shares { get; set; } = new Dictionary<string, long>();
-        public PoolParticipation Copy() => new PoolParticipation { Shares = new Dictionary<string, long>(Shares, StringComparer.Ordinal) };
-        public long Total => Shares.Values.Aggregate(0L, (sum, value) => checked(sum + value));
+        public PoolParticipation Copy() => new PoolParticipation { LockedShares = LockedShares, Shares = new Dictionary<string, long>(Shares, StringComparer.Ordinal) };
+        public long Total => Shares.Values.Aggregate(LockedShares, (sum, value) => checked(sum + value));
         public string Canonical() => string.Join(",", Shares.OrderBy(item => item.Key, StringComparer.Ordinal)
-            .Select(item => item.Key + ":" + item.Value.ToString(CultureInfo.InvariantCulture)));
+            .Select(item => item.Key + ":" + item.Value.ToString(CultureInfo.InvariantCulture))) +
+            (LockedShares == 0 ? "" : "|locked:" + LockedShares.ToString(CultureInfo.InvariantCulture));
     }
 
     [DataContract]
@@ -187,9 +191,10 @@ namespace PrivateCoin.Core
     {
         [DataMember(Order = 1)] public long Amount { get; set; }
         [DataMember(Order = 3, EmitDefaultValue = false)] public string AssetId { get; set; }
-        // A one-use hash. No persistent wallet address is ever written to the chain.
+        // Normal receipts use one-use hashes. Initial-launch purchases reuse the registered wallet identity.
         [DataMember(Order = 2)] public string OneTimeAddress { get; set; }
         [DataMember(Order = 4, EmitDefaultValue = false)] public int UnlockHeight { get; set; }
+        [DataMember(Order = 5, EmitDefaultValue = false)] public bool InitialLaunchLocked { get; set; }
     }
 
     [DataContract]
@@ -220,6 +225,7 @@ namespace PrivateCoin.Core
         public bool PoolBurnEnabled => PoolBurnPolicy != null;
 
         [DataMember(Order = 20, EmitDefaultValue = false)] public LaunchPoolState Launch { get; set; }
+        [DataMember(Order = 21, EmitDefaultValue = false)] public TokenAuthorization InitialLaunchIdentity { get; set; }
 
         internal string SigningPayload()
         {
@@ -265,6 +271,9 @@ namespace PrivateCoin.Core
             if (TokenTransferTerms != null) value.Append("|token-transfer-burn-v1|").Append(TokenTransferTerms.Canonical());
             if (PoolBurnEnabled) value.Append("|pool-burn-enabled-v1|").Append(PoolBurnPolicy.Canonical());
             if (Launch != null) value.Append("|pool-launch-v1|").Append(Launch.Canonical());
+            if (InitialLaunchIdentity != null) AppendField(value.Append("|initial-launch-identity-v1|"), InitialLaunchIdentity.PublicKey);
+            if (Outputs.Any(output => output.InitialLaunchLocked))
+                value.Append("|initial-launch-locks-v1|").Append(string.Join(",", Outputs.Select(output => output.InitialLaunchLocked ? "1" : "0")));
             return value.ToString();
         }
 
@@ -284,6 +293,7 @@ namespace PrivateCoin.Core
         {
             string signatures = string.Join("|", Inputs.Select(i => i.Signature ?? string.Empty));
             if (TokenAuthorizations != null) signatures += "|token-authorizations-v1|" + string.Join("|", TokenAuthorizations.Select(proof => proof.Signature ?? string.Empty));
+            if (InitialLaunchIdentity != null) signatures += "|initial-launch-identity-v1|" + (InitialLaunchIdentity.Signature ?? string.Empty);
             return Crypto.Sha256(SigningPayload() + "|" + signatures);
         }
     }
@@ -327,6 +337,11 @@ namespace PrivateCoin.Core
 
     public sealed class UnspentOutput
     {
+        internal InitialLaunchStatus InitialLaunchState { get; set; }
+        internal bool WalletRegistration { get; set; }
+        internal bool InitialLaunchPurchased { get; set; }
+        internal long WalletRegistrationReward { get; set; }
+        public bool InitialLaunchCollecting { get; internal set; }
         public PoolBurnPolicy PoolBurnPolicy { get; internal set; }
         public bool PoolBurnEnabled => PoolBurnPolicy != null;
         internal TokenRuntime TokenRuntime { get; set; }
@@ -338,7 +353,7 @@ namespace PrivateCoin.Core
         public LaunchPoolState Launch { get; internal set; }
         public bool IsPoolReserve => TransactionKind == TransactionKind.LiquidityPool || TransactionKind == TransactionKind.LiquiditySwap ||
             TransactionKind == TransactionKind.LiquidityAdd || TransactionKind == TransactionKind.LiquidityRemove ||
-            TransactionKind == TransactionKind.LaunchCreate || TransactionKind == TransactionKind.LaunchContribute || TransactionKind == TransactionKind.LaunchActivate;
+            TransactionKind == TransactionKind.LaunchCreate || TransactionKind == TransactionKind.LaunchContribute || TransactionKind == TransactionKind.LaunchActivate || InitialLaunch.IsOperation(TransactionKind);
         public string ValidatorPublicKey { get; internal set; }
         public string ValidatorRewardAddress { get; internal set; }
         public IReadOnlyCollection<string> ValidatorOwnedAddresses { get; internal set; }

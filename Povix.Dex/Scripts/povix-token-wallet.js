@@ -155,7 +155,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 21 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 22 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
@@ -200,7 +200,7 @@
     }
     async function verifyManagementDraft(draft, expected, networkId) {
         const current = requireWallet(), token = expected.token;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 21 || draft.tokenId !== token.tokenId ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 22 || draft.tokenId !== token.tokenId ||
             draft.operation !== expected.operation || draft.amountAtomic !== expected.amountAtomic || draft.feeAtomic !== expected.feeAtomic ||
             draft.revision !== token.revision || !/^[0-9a-f]{32}$/.test(draft.draftId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
             !/^[0-9]+$/.test(draft.revision) || !Array.isArray(draft.inputs) || draft.inputs.length < 1 || draft.inputs.length > 1000 ||
@@ -270,7 +270,7 @@
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
         const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
-        if (draft.networkId !== networkId || draft.consensusVersion !== 21 || draft.operation !== expected.operation ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 22 || draft.operation !== expected.operation ||
             !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
             draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
             draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
@@ -304,17 +304,21 @@
         const addSpend = (assetId, amount) => spends.set(assetId, (spends.get(assetId) || 0n) + BigInt(amount));
         const a = BigInt(draft.reserveAAtomic), b = BigInt(draft.reserveBAtomic);
         const participation = value => {
-            if (!value || !Array.isArray(value.holders) || !value.holders.length || value.holders.length > 1000) fail();
+            if (!value || !Array.isArray(value.holders) || value.holders.length > 1000) fail();
             const map = new Map();
+            const locked = value.lockedSharesAtomic || '0';
+            if (!atomic(locked)) fail();
+            map.lockedShares = BigInt(locked);
+            if (!value.holders.length && map.lockedShares === 0n) fail();
             for (const holder of value.holders) {
                 if (!id(holder.address) || !atomic(holder.sharesAtomic) || BigInt(holder.sharesAtomic) <= 0n || map.has(holder.address)) fail();
                 map.set(holder.address, BigInt(holder.sharesAtomic));
             }
-            const total = [...map.values()].reduce((sum, amount) => sum + amount, 0n);
+            const total = [...map.values()].reduce((sum, amount) => sum + amount, map.lockedShares);
             if (!atomic(value.totalSharesAtomic) || total !== BigInt(value.totalSharesAtomic)) fail();
             return map;
         };
-        const canonical = map => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([address, shares]) => address + ':' + shares).join(',');
+        const canonical = map => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([address, shares]) => address + ':' + shares).join(',') + (map.lockedShares > 0n ? '|locked:' + map.lockedShares : '');
         const launchState = value => {
             if (!value || !atomic(value.targetAtomic) || BigInt(value.targetAtomic) <= 1n || !atomic(value.saleTokensAtomic) || BigInt(value.saleTokensAtomic) <= 0n ||
                 !atomic(value.totalTokensAtomic) || BigInt(value.totalTokensAtomic) <= BigInt(value.saleTokensAtomic) ||
@@ -392,7 +396,7 @@
             }
             const add = draft.operation === 'add', shares = BigInt(draft.sharesAtomic), total = BigInt(expected.participation.totalSharesAtomic);
             const owned = expectedShares.get(draft.changeAddress) || 0n;
-            if (!add && (shares > owned || shares >= total || draft.changeAddress === draft.providerAddress && shares === owned)) fail();
+            if (!add && (shares > owned || shares >= total || !(expectedShares.lockedShares > 0n) && draft.changeAddress === draft.providerAddress && shares === owned)) fail();
             const amountA = (a * shares + (add ? total - 1n : 0n)) / total, amountB = (b * shares + (add ? total - 1n : 0n)) / total;
             if (amountA <= 0n || amountB <= 0n) fail();
             const next = add ? owned + shares : owned - shares;
@@ -453,7 +457,7 @@
             payload += '|pool-swap-v1|' + draft.inputSide + '|' + draft.amountAtomic;
             if (BigInt(draft.inputBurnAtomic || '0') > 0n || BigInt(draft.outputBurnAtomic || '0') > 0n) payload += '|pool-burn-v1|' + draft.inputBurnAtomic + '|' + draft.outputBurnAtomic;
         }
-        if (draft.operation === 'close') expectedShares = null;
+        if (draft.operation === 'close') { if (expectedShares?.lockedShares > 0n) fail(); expectedShares = null; }
         if (Boolean(draft.allowUserLiquidity) !== Boolean(expectedShares)) fail();
         if (expectedShares) {
             if (canonical(participation(draft.participation)) !== canonical(expectedShares)) fail();
@@ -471,7 +475,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 21 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 22 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||

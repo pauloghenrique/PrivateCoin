@@ -82,9 +82,9 @@ internal static class PrivateCoinGenesisRulesRegression
         GenesisRules rules = chain.Blocks[0].Rules;
         Check(chain.IsValid() && ProofOfWork.MeetsTarget(Blockchain.GenesisHash), "canonical genesis has valid proof of work");
         Check(new Blockchain().Blocks[0].Hash == chain.Blocks[0].Hash, "genesis construction is deterministic");
-        Check(rules.TotalSupplyAtomicUnits == 18000000L * Blockchain.OneCoin && rules.InitialDistributionAtomicUnits == 180000L * Blockchain.OneCoin &&
+        Check(rules.TotalSupplyAtomicUnits == 18180000L * Blockchain.OneCoin && rules.InitialDistributionAtomicUnits == 600L * Blockchain.OneCoin &&
             rules.ValidatorSupplyAtomicUnits == 17820000L * Blockchain.OneCoin && rules.GenesisIssuanceAtomicUnits == 0, "genesis exposes total, distribution, rewards and zero premine");
-        Check(rules.WalletRewardAtomicUnits == 6L * Blockchain.OneCoin && rules.RewardedWalletLimit == 30000 && rules.RewardPhases.Count == 4 &&
+        Check(rules.WalletRewardAtomicUnits == 6L * Blockchain.OneCoin && rules.RewardedWalletLimit == 100 && rules.RewardPhases.Count == 4 &&
             rules.RewardPhases.Sum(phase => (phase.LastHeight - phase.FirstHeight + 1) * phase.RewardAtomicUnits) == rules.ValidatorSupplyAtomicUnits,
             "distribution and all emission phases agree with executable policy");
         Check(rules.MaxOperationsPerBlock == 20 && rules.BlockWaitSeconds == 10 && rules.ProofOfWorkDifficultyBits == 12 &&
@@ -113,7 +113,7 @@ internal static class PrivateCoinGenesisRulesRegression
         typeof(WalletStore).GetMethod("SaveNetwork", BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(store, new object[] { new NamedWallet[0], chain, new Transaction[0] });
         string file = Path.Combine(directory, "Blockchain.json"), original = File.ReadAllText(file);
-        Check(original.Contains("\"Genesis\"") && original.Contains("\"TotalSupplyAtomicUnits\":1800000000000000"), "Blockchain.json contains readable genesis rules");
+        Check(original.Contains("\"Genesis\"") && original.Contains("\"TotalSupplyAtomicUnits\":1818000000000000"), "Blockchain.json contains readable genesis rules");
         List<Transaction> pending;
         Check(store.LoadNetwork(out pending).IsValid() && pending.Count == 0, "real Desktop storage reloads the manifest");
         File.WriteAllText(file, original.Replace("\"BlockWaitSeconds\":10", "\"BlockWaitSeconds\":11"));

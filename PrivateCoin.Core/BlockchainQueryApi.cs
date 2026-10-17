@@ -126,10 +126,11 @@ namespace PrivateCoin.Core
         {
             Block[] snapshot = blockchain.Blocks.ToArray();
             int initialBlocks = snapshot.Skip(1).Count(IsInitialDistributionBlock) + snapshot.Skip(1).SelectMany(block => block.Transactions)
-                .Count(tx => (tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.WalletDistribution) && tx.Outputs[0].Amount == Blockchain.WalletCreationReward);
+                .Count(tx => (tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.WalletDistribution || tx.Kind == TransactionKind.InitialLaunchCreate) && InitialLaunch.WalletReward(tx) == Blockchain.WalletCreationReward);
             long validatorIssuance = snapshot.Skip(1).Where(IsProofOfStakeBlock)
                 .Aggregate(0L, (total, block) => checked(total + ProofOfStake.GetBlockReward(block.Height)));
-            long issued = checked((long)initialBlocks * Blockchain.WalletCreationReward + validatorIssuance);
+            long launchIssuance = snapshot.SelectMany(block => block.Transactions).Count(tx => tx.Kind == TransactionKind.InitialLaunchCreate) * InitialLaunch.ReserveSupply;
+            long issued = checked((long)initialBlocks * Blockchain.WalletCreationReward + launchIssuance + validatorIssuance);
             return new BlockchainSummary(Math.Max(0, snapshot.Length - 1), issued,
                 ProofOfWork.GetBlockReward(snapshot.Length), initialBlocks,
                 snapshot.Aggregate(BigInteger.Zero, (total, block) => total + ProofOfWork.GetBlockWork(block)).ToString(CultureInfo.InvariantCulture));
@@ -171,6 +172,8 @@ namespace PrivateCoin.Core
                         type = LedgerEntryType.InitialDistribution;
                         issuedAmount = outputAmount;
                     }
+                    if (transaction.Kind == TransactionKind.InitialLaunchCreate)
+                    { type = LedgerEntryType.InitialDistribution; issuedAmount = InitialLaunch.ReserveSupply + Blockchain.WalletCreationReward; }
                     if (transaction.Kind == TransactionKind.TokenCreate) type = LedgerEntryType.TokenCreation;
                     else if (transaction.Kind == TransactionKind.TokenTransfer) type = LedgerEntryType.TokenTransfer;
                     else if (transaction.Kind == TransactionKind.LiquiditySwap) type = LedgerEntryType.LiquiditySwap;

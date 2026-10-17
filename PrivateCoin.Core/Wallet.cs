@@ -180,6 +180,28 @@ namespace PrivateCoin.Core
             return transaction;
         }
 
+        public Transaction CreateInitialLaunchPurchase(Blockchain chain, IEnumerable<Transaction> pending, string registeredAddress, string changeAddress, long fee)
+        {
+            RSACryptoServiceProvider identity;
+            if (!keys.TryGetValue(registeredAddress, out identity)) throw new InvalidOperationException("The original registered identity is not in this wallet.");
+            var state = chain.GetInitialLaunchStatus();
+            if (!state.Created || state.Active) throw new InvalidOperationException("The initial launch is not collecting.");
+            var provider = Crypto.Sha256(state.ProviderPublicKey);
+            var reserves = chain.GetUnspentOutputs(new[] { provider }).Where(item => item.TransactionId == state.ReserveTransactionId && item.OutputIndex < 2).OrderBy(item => item.OutputIndex).ToArray();
+            if (reserves.Length != 2) throw new InvalidOperationException("The initial launch reserves are unavailable.");
+            var draft = TokenExchange.PrepareInitialLaunchPurchase(chain, pending, keys.Values.Select(key => key.ToXmlString(false)),
+                reserves[0], reserves[1], state.ProviderPublicKey, identity.ToXmlString(false), changeAddress, fee);
+            return CompleteInitialLaunch(draft, identity);
+        }
+
+        private Transaction CompleteInitialLaunch(UnsignedTokenExchange draft, RSACryptoServiceProvider identity)
+        {
+            var signatures = draft.Sources.Take(draft.UserInputCount).Select(item => Convert.ToBase64String(keys[item.Output.OneTimeAddress].SignData(
+                draft.SigningPayload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm))));
+            string proof = identity == null ? null : Convert.ToBase64String(identity.SignData(draft.SigningPayload, CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm)));
+            return draft.Complete(signatures, proof);
+        }
+
         private Transaction CreateSignedTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
             string destinationOneTimeAddress, long amount, long fee, TransactionKind kind, string validatorPublicKey, string validatorRewardAddress)
         {

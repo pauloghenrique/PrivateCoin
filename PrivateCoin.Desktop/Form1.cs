@@ -499,7 +499,7 @@ namespace PrivateCoin.Desktop
                         () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
                         {
                             var orphaned = blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate).ToArray();
+                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate).ToArray();
                             if (!blockchain.TrySynchronizeChain(e.Blocks, out changed)) return false;
                             if (changed)
                             {
@@ -848,6 +848,8 @@ namespace PrivateCoin.Desktop
             balanceLabel.Text = ((decimal)balance.Total / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             toolTip.SetToolTip(balanceLabel, "Disponível para enviar: " +
                 ((decimal)balance.Available / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX" +
+                (balance.LaunchLocked == 0 ? string.Empty : "\nBloqueado até a abertura do lançamento: " +
+                    ((decimal)balance.LaunchLocked / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX") +
                 (balance.PendingChange == 0 ? string.Empty : "\nTroco aguardando confirmação em bloco: " +
                     ((decimal)balance.PendingChange / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX"));
             validatorStatusLabel.Text = lockedStake == 0

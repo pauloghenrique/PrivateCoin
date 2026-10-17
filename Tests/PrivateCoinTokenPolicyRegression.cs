@@ -223,7 +223,7 @@ internal static class PrivateCoinTokenPolicyRegression
                 var closing = finishPool(TokenExchange.PrepareReserveOperation(chain, Empty, publicKeys, fixedReserves[0], fixedReserves[1], address, 2, true));
                 batches.Confirm(chain, new[] { closing }, validators);
                 Check(chain.GetTokenRuntime(fixedToken.Token.Id).Supply == 99 && closing.PoolBurnPolicy.FixedA == 3, "pool closure preserves rule and returns reserves without burn");
-                Check(chain.IsValid() && Blockchain.MaximumSupply == 180000L * Blockchain.OneCoin, "full chain valid and native supply constants unchanged");
+                Check(chain.IsValid() && Blockchain.MaximumSupply == 360000L * Blockchain.OneCoin, "full chain valid and v22 initial native supply cap enforced");
                 Console.WriteLine("PASS " + checks + " token policy checks");
             }
         }

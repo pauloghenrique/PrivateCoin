@@ -56,6 +56,12 @@ namespace PrivateCoin.Core
         [DataMember(Order = 23)] public string ImplementationHash { get; private set; }
 
         [DataMember(Order = 24)] public string CoreConfigurationManifest { get; private set; }
+        [DataMember(Order = 25)] public long InitialLaunchReserveAtomicUnits { get; private set; }
+        [DataMember(Order = 26)] public long InitialLaunchPrincipalAtomicUnits { get; private set; }
+        [DataMember(Order = 27)] public int InitialLaunchPurchaseLimit { get; private set; }
+        [DataMember(Order = 28)] public string LocalUsdcTokenId { get; private set; }
+        [DataMember(Order = 29)] public string LocalUsdtTokenId { get; private set; }
+        [DataMember(Order = 30)] public long LocalFundingSupplyAtomicUnits { get; private set; }
 
         private static readonly string implementationHash = CalculateImplementationHash();
 
@@ -63,11 +69,17 @@ namespace PrivateCoin.Core
         {
             return new GenesisRules
             {
-                SchemaVersion = 1,
+                SchemaVersion = 2,
+                InitialLaunchReserveAtomicUnits = InitialLaunch.ReserveSupply,
+                InitialLaunchPrincipalAtomicUnits = InitialLaunch.PrincipalSupply,
+                InitialLaunchPurchaseLimit = InitialLaunch.MaximumPurchases,
+                LocalUsdcTokenId = InitialLaunch.UsdcTokenId,
+                LocalUsdtTokenId = InitialLaunch.UsdtTokenId,
+                LocalFundingSupplyAtomicUnits = InitialLaunch.FundingTokenSupply,
                 ConsensusVersion = Blockchain.ConsensusVersion,
                 DecimalPlaces = Blockchain.DecimalPlaces,
                 AtomicUnitsPerCoin = Blockchain.OneCoin,
-                TotalSupplyAtomicUnits = checked(Blockchain.DistributionSupply + ProofOfStake.MaximumSupply),
+                TotalSupplyAtomicUnits = checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply),
                 InitialDistributionAtomicUnits = Blockchain.DistributionSupply,
                 WalletRewardAtomicUnits = Blockchain.WalletCreationReward,
                 RewardedWalletLimit = Blockchain.RewardedWalletLimit,
@@ -84,7 +96,7 @@ namespace PrivateCoin.Core
                 PoolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints,
                 BlockProductionRule = "Produce a nonempty eligible batch at the operation limit or after the wait from first local observation. The local monotonic wait is not remotely verifiable consensus.",
                 BlockValidationRule = "Every block requires proof of work, valid ordered operations, supply and UTXO conservation. Wallet and collateral operations are self-validated. Transfers, tokens and pools require signed collateral-backed approvals; stake blocks require the globally eligible validator set, deterministic creator selection and signed votes. Fork choice uses cumulative required work.",
-                InitialDistributionRule = "No premine in genesis. One confirmed wallet reward per address, up to the rewarded-wallet limit; later wallets receive zero. No replay of historical distribution receipts.",
+                InitialDistributionRule = "No premine in genesis. First 100 registered addresses receive 6 POVIX each (600 total). The hundredth rewarded registration automatically issues 359400 POVIX into an ownerless local-USDC launch escrow; one purchase of 6 per registered wallet identity for one protocol-defined local USDC unit (six decimals). The same registration issues exactly 1000000 units of each local funding token to the hundredth rewarded wallet. Purchased outputs unlock at 29950 purchases, leaving 179700 POVIX and all funding in permanently locked principal liquidity. No bridge or external backing is implied.",
                 ImplementationHash = implementationHash,
                 CoreConfigurationManifest = CoreConfiguration.Manifest
             };
