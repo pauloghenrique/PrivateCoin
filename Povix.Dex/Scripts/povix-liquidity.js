@@ -10,6 +10,7 @@
     const asset = id => assets.find(item => item.id === id);
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const integrated = app.dataset.integrated === 'true';
+    const managing = app.dataset.mode === 'manage';
     let swapDirection = integrated ? '1' : null;
     const swapSide = () => integrated ? swapDirection : byId('swap-side').value;
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
@@ -64,6 +65,7 @@
         return result;
     }
     function reset() {
+        if (managing) { byId('pool-management-review').hidden = true; byId('pool-management-fee').hidden = true; }
         draft = null; expected = null; signatures = null; byId('sign-actions').hidden = true;
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
     }
@@ -193,6 +195,7 @@
         participation: pool.participation, assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
     async function manageReserves(pool) {
         if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate || !pool.canManage) return;
+        if (managing) { byId('pool-management-review').hidden = false; byId('pool-management-fee').hidden = false; }
         busy = true; message(''); update();
         try {
             const operation = pool.locked ? 'close' : 'lock', feeAtomic = fee();
@@ -390,8 +393,10 @@
                 options('pool-asset-b', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o segundo ativo');
                 options('swap-pool', pools, item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12) + ' · ' + (poolStates[item.status] || 'Indisponível'), 'Selecione uma pool');
             }
-            byId('pool-list').replaceChildren(); byId('pools-empty').hidden = pools.length > 0;
-            pools.forEach(pool => {
+            const visiblePools = managing ? pools.filter(pool => wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) : pools;
+            byId('pool-list').replaceChildren(); byId('pools-empty').hidden = visiblePools.length > 0;
+            if (managing) byId('pools-empty').textContent = wallet.isUnlocked() ? 'Nenhuma pool criada por esta carteira.' : 'Conecte sua carteira para consultar suas pools.';
+            visiblePools.forEach(pool => {
                 const entry = document.createElement('a'); entry.href = receipt(pool.poolId);
                 entry.textContent = pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + (poolStates[pool.status] || 'Indisponível');
                 const detail = document.createElement('small'); detail.textContent = 'Reservas registradas: ' + atomicText(pool.reserveAAtomic, pool.assetA.decimals) + ' ' + pool.assetA.symbol + ' / ' + atomicText(pool.reserveBAtomic, pool.assetB.decimals) + ' ' + pool.assetB.symbol + ' · Recompensa: ' + (pool.rewardMode === 'loyalty' ? 'Bônus por permanência (configuração, sem pagamento ativo)' : 'Participação nas taxas') + ' · Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada') + ' · Pool ' + pool.poolId;
@@ -409,7 +414,7 @@
                 marketLink.textContent = 'Ver candles e livro caixa →'; byId('pool-list').appendChild(marketLink);
                 if (pool.canManage && wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) {
                     const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-secondary';
-                    button.textContent = pool.locked ? 'Revisar encerramento da pool' : 'Bloquear reservas desta pool';
+                    button.textContent = pool.locked ? 'Encerrar pool' : 'Bloquear reservas desta pool';
                     button.addEventListener('click', () => manageReserves(pool)); byId('pool-list').appendChild(button);
                 }
             });
@@ -423,7 +428,9 @@
     }
     document.addEventListener('povix-wallet-change', async () => {
         try {
-            epoch++; assets = []; reset();
+            epoch++; assets = []; pools = [];
+            if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = 'Consultando pools da carteira…'; }
+            reset();
             await refresh(); update();
         } catch (error) { message(error.message); }
     });
