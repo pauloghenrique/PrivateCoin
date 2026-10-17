@@ -10,6 +10,7 @@
         epoch++; pending?.abort(); pending = null; hasResult = false;
         byId('token-list').replaceChildren(); byId('token-list').hidden = true;
         byId('token-list-connect').hidden = wallet.isUnlocked(); byId('token-list-refresh').disabled = !wallet.isUnlocked();
+        byId('token-create').disabled = byId('token-edit').disabled = !wallet.isUnlocked();
         byId('token-list-state').textContent = wallet.isUnlocked() ? 'Consultando tokens…' : 'Conecte sua carteira para consultar os tokens criados.';
         message('');
     }
@@ -56,6 +57,12 @@
         } finally {
             if (pending === controller) { pending = null; byId('token-list-refresh').disabled = !wallet.isUnlocked(); }
         }
+    }
+    for (const id of ['token-create', 'token-edit']) {
+        byId(id).addEventListener('click', () => {
+            if (!wallet.isUnlocked()) return;
+            location.assign(byId(id).dataset.url);
+        });
     }
     byId('token-list-refresh').addEventListener('click', refresh);
     document.addEventListener('povix-wallet-change', () => { clear(); refresh(); });
