@@ -6,10 +6,15 @@
       data-prepare-reserves-url="@Url.Action("PrepareReserveOperation")" data-submit-reserves-url="@Url.Action("SubmitReserveOperation")"
       data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")"
       data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
-    <div class="page-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>@(creating ? "Criar pool de liquidez" : "Minhas pools")</h1>
+    <div class="page-intro liquidity-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>@(creating ? "Criar pool de liquidez" : "Minhas pools")</h1>
         @if (creating) { <p>Escolha os ativos e revise a criação antes de assinar com sua carteira.</p><a class="text-button" href="@Url.Action("Index")">← Voltar para minhas pools</a> }
         else { <p>Somente pools criadas pela carteira conectada.</p> }
     </div>
+    @if (creating) {
+        <ol class="pool-create-steps" aria-label="Etapas da criação">
+            <li aria-current="step"><span>01</span> Configure os ativos</li><li><span>02</span> Revise a operação</li><li><span>03</span> Assine com a carteira</li>
+        </ol>
+    }
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div class="liquidity-grid">
@@ -24,10 +29,12 @@
                 @Html.AntiForgeryToken()
                 <div class="section-heading"><span class="step-number">01</span><div><h2>Criar pool de liquidez</h2><p>Escolha dois ativos distintos. As duas reservas ficam bloqueadas na blockchain e separadas do saldo livre da carteira.</p></div></div>
                 <fieldset id="pool-fields" disabled>
-                    <label for="pool-asset-a">Primeiro ativo</label><select id="pool-asset-a" required></select><small id="pool-balance-a"></small>
-                    <label for="pool-amount-a">Quantidade do primeiro ativo</label><input id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
-                    <label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
-                    <label for="pool-amount-b">Quantidade do segundo ativo</label><input id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <div class="pool-assets"><section class="pool-asset-card" aria-label="Primeiro ativo"><span class="eyebrow">ATIVO 01</span><label for="pool-asset-a">Primeiro ativo</label><select id="pool-asset-a" required></select><small id="pool-balance-a"></small>
+                    <label for="pool-amount-a">Quantidade do primeiro ativo</label><input placeholder="0,00" id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    </section><span class="pool-pair-plus" aria-hidden="true">+</span><section class="pool-asset-card" aria-label="Segundo ativo"><span class="eyebrow">ATIVO 02</span><label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
+                    <label for="pool-amount-b">Quantidade do segundo ativo</label><input placeholder="0,00" id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    </section></div>
+                    <section class="pool-settings"><h2>Recompensas da pool</h2><p>Escolha como recompensar quem fornece liquidez.</p>
                     <label for="pool-reward-mode">Opção de recompensa</label>
                     <select id="pool-reward-mode" aria-describedby="pool-reward-description" required>
                         <option value="fees" selected>Participação nas taxas</option>
@@ -50,11 +57,14 @@
                         <p>O provedor escolherá o prazo em dias, meses ou anos. O bônus será proporcional à participação e receberá a parcela das taxas definida acima.</p>
                         <small>Cadastro das regras: a reserva ainda não é debitada ou separada e não há pagamento de bônus nem bloqueio por prazo ativo.</small>
                     </fieldset>
+                    </section>
+                    <section class="pool-permissions"><h2>Participação de usuários</h2>
                     <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
                     <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
+                    </section>
                 </fieldset>
                 <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço: selecione dois ativos distintos e informe as reservas.</p>
-                <div class="form-bottom"><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
+                <div class="form-bottom"><p>Confira os detalhes antes de assinar com sua carteira.</p><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
             </form>
             <form hidden id="user-liquidity-form" class="card token-form">
                 <h2>Adicionar ou remover liquidez</h2><p>Disponível nas pools que permitem liquidez de usuários. As quantidades seguem a proporção das reservas; a taxa da rede é paga em POVIX livres.</p>
