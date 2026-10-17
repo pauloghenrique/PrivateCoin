@@ -17,10 +17,6 @@
     }
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
-    @if (creating)
-    {
-        <nav class="creation-tabs" aria-label="Tipo de criação"><a href="@Url.Action("Create", "Liquidity", new { tipo = "token" })">Criar token</a><a href="@Url.Action("Create", "Liquidity")" aria-current="page">Criar pool</a></nav>
-    }
     <div class="liquidity-grid">
         <div id="pool-management-fee" class="liquidity-setup" hidden="@(!creating)">
 
@@ -100,7 +96,7 @@
             <div id="sign-actions" hidden><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
         </section></aside>
     </div>
-    <section hidden="@creating" class="token-form liquidity-pools"><div class="pool-list-heading"><div><span class="eyebrow">SUA LIQUIDEZ</span><h2>Seu painel de pools</h2><p>Seus pares, suas reservas. Tudo em um só lugar.</p></div><a class="button button-primary" href="@Url.Action("Create")">+ Criar pool</a></div><div class="pool-list-tools">
+    <section hidden="@creating" class="token-form liquidity-pools"><div class="pool-list-heading"><div><span class="eyebrow">SUA LIQUIDEZ</span><h2>Seu painel de pools</h2><p>Seus pares, suas reservas. Tudo em um só lugar.</p></div><button id="create-pool" type="button" class="button button-primary" data-url="@Url.Action("Create")" disabled>+ Criar pool</button></div><div class="pool-list-tools">
         <div><label for="pool-search">Buscar pool</label><input id="pool-search" type="search" placeholder="Par, token ou identificador" autocomplete="off" /></div>
         <div><label for="pool-status-filter">Status</label><select id="pool-status-filter"><option value="all">Todos os status</option><option value="available">Disponíveis</option><option value="waiting">Aguardando confirmação</option><option value="closed">Encerradas</option><option value="other">Outros status</option></select></div>
         <span id="pool-result-count" role="status" aria-live="polite"></span>

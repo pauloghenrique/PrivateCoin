@@ -41,3 +41,26 @@ for (const [query, status, count] of [['', 'all', 3], ['POVIX', 'all', 2], [' ab
 nodes['pool-list'].children = []; filterContext.filterPoolList();
 assert.equal(nodes['pool-filter-empty'].hidden, true);
 console.log('PASS: pool search, combined status filters, result counts and empty results.');
+
+const actionNodes = {}, actionNode = id => {
+    if (id === 'pool-reward-mode') return null;
+    return actionNodes[id] || (actionNodes[id] = { value: '', dataset: { url: '/liquidez/criar' }, querySelectorAll: () => [], addEventListener(type, callback) { this[type] = callback; } });
+};
+let connected = false, navigations = 0;
+const actionContext = { byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null,
+    integrated: false, window: {}, updateUserLiquidity() {}, updatePrices() {}, selectedPool: () => null, asset: () => null,
+    atomicText: () => '0', fee: () => '0', location: { assign(url) { assert.equal(url, '/liquidez/criar'); navigations++; } } };
+const updateStart = source.indexOf('    function update() {'), updateEnd = source.indexOf('    function addReview(', updateStart);
+const actionStart = source.indexOf("    const createPoolButton = byId('create-pool');"), actionEnd = source.indexOf("    for (const id of ['pool-form', 'swap-form', 'exchange-priority'])", actionStart);
+vm.createContext(actionContext); vm.runInContext(source.slice(updateStart, updateEnd) + source.slice(actionStart, actionEnd), actionContext);
+for (const value of [false, true, false, true]) {
+    connected = value; actionContext.update();
+    assert.equal(actionNode('create-pool').disabled, !connected);
+    const before = navigations; actionNode('create-pool').click(); assert.equal(navigations, before + (connected ? 1 : 0));
+}
+const liquidityView = fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
+assert(!liquidityView.includes('creation-tabs')); assert(!liquidityView.includes('>Criar token</a>'));
+assert.match(liquidityView, /id="create-pool"[^>]* disabled>\+ Criar pool/);
+const layout = fs.readFileSync('Povix.Dex/Views/Shared/_Layout.cshtml', 'utf8');
+assert(!layout.includes('Pools e trocas')); assert(layout.includes('>Pools</a>'));
+console.log('PASS: create pool requires connected wallet, reconnect restores it, creation tabs removed and menu uses Pools.');

@@ -91,6 +91,7 @@
             }
         }
         const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate && assets.length > 0, editing = !busy && !draft;
+        if (byId('create-pool')) byId('create-pool').disabled = !unlocked;
         window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
@@ -509,6 +510,13 @@
         // bubbles to the form, whose update restores the stored direction.
         byId('swap-side').addEventListener('input', selectDirection);
         byId('swap-side').addEventListener('change', selectDirection);
+    }
+    const createPoolButton = byId('create-pool');
+    if (createPoolButton) {
+        createPoolButton.addEventListener('click', () => {
+            if (!wallet.isUnlocked()) return;
+            location.assign(createPoolButton.dataset.url);
+        });
     }
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
