@@ -8,7 +8,7 @@
       data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
     <div class="page-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>@(creating ? "Criar pool de liquidez" : "Minhas pools")</h1>
         @if (creating) { <p>Escolha os ativos e revise a criação antes de assinar com sua carteira.</p><a class="text-button" href="@Url.Action("Index")">← Voltar para minhas pools</a> }
-        else { <p>Somente pools criadas pela carteira conectada.</p><a class="button button-primary" href="@Url.Action("Create")">Criar pool →</a> }
+        else { <p>Somente pools criadas pela carteira conectada.</p> }
     </div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
