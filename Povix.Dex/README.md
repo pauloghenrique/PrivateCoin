@@ -177,66 +177,16 @@ Rejeições que exigem outra preparação retornam HTTP 400. Os erros não mostr
 os dados da transação nem o conteúdo das exceções do servidor. Uma falha no
 envio não equivale a uma confirmação; consulte sempre o comprovante.
 
-## Movimentação dos tokens pelo criador
+## Comprovantes de movimentação
 
-Acesse **Movimentar tokens** no menu ou **Movimentar este token** no
-comprovante da criação. Abra o `wallets.dat` pelo auxiliar local Windows ou
-o `.povixwallet` atualizado e selecione a carteira que criou o token. A tela
-consulta as criações confirmadas na blockchain, reconhece o criador pela
-chave que assinou a primeira entrada da criação (da qual deriva o
-identificador do token) e mostra o saldo confirmado e o disponível.
-
-Escolha o token, a quantidade, o endereço de destino e a prioridade da taxa.
-O botão de revisão fica disponível quando a carteira está aberta e a rede
-está pronta. Ao clicar, a tela valida a seleção do token, os campos e os dois saldos,
-mostrando a causa precisa se faltar quantidade, destino, taxa ou saldo livre.
-O saldo em POVIX paga a taxa; ele não substitui o saldo do token. Se o token
-aparece sem saldo nas chaves abertas e seu endereço foi gerado no navegador,
-abra o `.povixwallet` atualizado daquela criação. Tokens reservados por envios
-pendentes aguardam a confirmação. Alterações dos campos e da taxa atualizam
-a revisão pelos eventos `input` e `change`.
-Para cada token, a tela mostra os endereços que receberam a emissão, seu
-saldo confirmado atual e se suas chaves estão na carteira aberta. Esses dados
-vêm das saídas e dos UTXOs da blockchain. Um endereço sem chave pode ter saldo
-confirmado, mas esse valor não é somado ao disponível da carteira. Se o
-`wallets.dat` original mostrar zero porque o destino foi gerado em uma versão
-anterior do DEX, bloqueie a carteira, abra o `.povixwallet` baixado antes de
-assinar aquela criação e selecione a mesma carteira. Esse backup contém a
-chave de recebimento e permite assinar o gasto do saldo real. A correção das
-novas criações não altera os destinos de transações já confirmadas.
-O envio só usa tokens e POVIX confirmados disponíveis nas chaves dessa
-carteira. Se a criação enviou o token a outra carteira, o criador não pode
-gastar o saldo dela. Se o endereço de recebimento foi gerado pelo DEX, use
-o backup atualizado que contém essa chave.
-
-A revisão mostra quantidade, taxa em POVIX, troco do token, troco em POVIX e
-seus endereços. Ambos os trocos voltam ao primeiro endereço já existente da
-carteira aberta; a preparação não gera chaves novas. Confira
-os dados e clique em **Confirmar transação**. O navegador reconstrói o payload
-nativo `TokenTransfer` e assina cada entrada localmente. Também assina uma
-autorização separada, vinculada à rede, ao token, ao identificador da
-preparação e ao payload completo. O servidor valida essa autorização com a
-chave do criador registrada na blockchain antes de aceitar ou retransmitir.
-Conhecer a chave pública, receber tokens ou assinar entradas de outra carteira
-não concede essa permissão. Chaves privadas e senha continuam no dispositivo.
-
-A exclusividade do criador é uma regra **dessa tela e dos endpoints do DEX**.
-O consenso da rede e as transferências feitas por proprietários fora dela
-mantêm suas regras atuais. A assinatura do criador não permite gastar tokens
-ou POVIX de terceiros sem as assinaturas das entradas correspondentes.
-
-O comprovante começa pendente e confirma somente após um bloco validado,
-mostrando hash, altura e confirmações. O histórico lista os últimos 20 envios
-desse token aceitos por esta instalação do DEX, incluindo pendentes e
-rejeitados após mudança de cadeia; ele não é um histórico global da rede.
-Preparações expiram em 15 minutos, exigem a mesma sessão e são descartadas ao
-reiniciar. Envios já aceitos e seus comprovantes persistem; repetir o mesmo
-envio recupera o comprovante. Falhas temporárias preservam a revisão para
-uma nova tentativa, sem criar outra transferência.
+A tela **Movimentar tokens** foi removida do DEX, incluindo os atalhos do menu
+e do comprovante de criação. Os endpoints de movimentação e os comprovantes
+já registrados continuam disponíveis. O link de retorno dos comprovantes
+leva ao mercado.
 
 ## Verificação
 
-As telas de criação, movimentação e edição carregam a carteira e seu script em
+As telas de criação e edição carregam a carteira e seu script em
 um único bundle com URL versionada pelo conteúdo, inclusive em modo Debug.
 Isso evita reutilizar uma carteira antiga do cache após atualizar o DEX.
 
