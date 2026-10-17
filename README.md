@@ -512,9 +512,14 @@ financeira exigem implementação no mecanismo de posições e de reservas do Co
 
 ### Pool de lançamento (v21)
 
-Em Pools e liquidez, “Criar pool de lançamento” recebe qualquer token nativo
+Em Pools → Criar pool, “Criar pool de lançamento” recebe qualquer token nativo
 confirmado e outro ativo confirmado para captação (POVIX ou token distinto). O
 comprovante de criação do token oferece um atalho com o token pré-selecionado.
+O menu Lançamentos permite a participação pública sem misturar o catálogo com
+Minhas pools, que continua limitado à carteira criadora. Apenas unidades
+desbloqueadas do token podem ser depositadas; vesting e pausa continuam sendo
+validados. A devolução determinística de uma captação fracassada permanece
+permitida mesmo se o token for pausado, sem desativar a pausa para outros usos.
 O criador deposita os tokens destinados aos compradores mais os tokens da
 liquidez inicial e faz um aporte inicial positivo no ativo de captação, menor
 que a meta. Esse aporte conta como compra do criador. A meta é expressa no ativo
