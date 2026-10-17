@@ -27,6 +27,17 @@ namespace PrivateCoin.Core
         // Confidential transfers require a separate proof system; never accept a
         // flag which would leave plaintext values or participants on the chain.
         [DataMember(Order = 14)] public string Privacy { get; set; } = "public";
+        [DataMember(Order = 15, EmitDefaultValue = false)] public int AutoBurnBasisPoints { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public long AutoBurnFixedAtomic { get; set; }
+        public long CalculateTransferBurn(long amount)
+        {
+            if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
+            if (AutoBurnBasisPoints < 0 || AutoBurnBasisPoints > 10000 || AutoBurnFixedAtomic < 0 || AutoBurnBasisPoints != 0 && AutoBurnFixedAtomic != 0)
+                throw new InvalidOperationException("Invalid automatic burn policy.");
+            // Split the multiplication to avoid overflow at Int64.MaxValue.
+            return AutoBurnFixedAtomic != 0 ? AutoBurnFixedAtomic : checked(amount / 10000 * AutoBurnBasisPoints + amount % 10000 * AutoBurnBasisPoints / 10000);
+        }
+        public bool HasAutomaticBurn => AutoBurnBasisPoints != 0 || AutoBurnFixedAtomic != 0;
 
         public string Canonical()
         {
@@ -34,7 +45,8 @@ namespace PrivateCoin.Core
                 string.Join(",", Administrators ?? new List<string>()), RequiredSignatures.ToString(CultureInfo.InvariantCulture),
                 Description, LogoUrl, Website, SocialUrl, VestingStartHeight.ToString(CultureInfo.InvariantCulture),
                 VestingIntervalBlocks.ToString(CultureInfo.InvariantCulture), VestingTranches.ToString(CultureInfo.InvariantCulture), Privacy };
-            return string.Concat(fields.Select(field => "|" + (field == null ? -1 : field.Length).ToString(CultureInfo.InvariantCulture) + ":" + field));
+            return string.Concat(fields.Select(field => "|" + (field == null ? -1 : field.Length).ToString(CultureInfo.InvariantCulture) + ":" + field)) +
+                (HasAutomaticBurn ? "|auto-burn-v1:" + AutoBurnBasisPoints.ToString(CultureInfo.InvariantCulture) + ":" + AutoBurnFixedAtomic.ToString(CultureInfo.InvariantCulture) : "");
         }
         public TokenPolicy Copy()
         {
@@ -45,6 +57,7 @@ namespace PrivateCoin.Core
         internal static bool Address(string value) => value != null && value.Length == 64 && value.All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f');
         internal void Validate(long supply)
         {
+            CalculateTransferBurn(1);
             if (MaximumSupply < supply || !Mintable && MaximumSupply != supply ||
                 Administrators == null || Administrators.Count < 1 || Administrators.Count > 16 ||
                 Administrators.Any(address => !Address(address)) || Administrators.Distinct(StringComparer.Ordinal).Count() != Administrators.Count ||
@@ -100,6 +113,28 @@ namespace PrivateCoin.Core
             UnspentOutput item;
             return id != null && utxo.TryGetValue(Key(id), out item) ? item.TokenRuntime : null;
         }
+        internal static void ValidateTransferConservation(Transaction tx, IDictionary<string, UnspentOutput> utxo,
+            IDictionary<string, long> inputs, IDictionary<string, long> outputs)
+        {
+            var terms = tx.TokenTransferTerms;
+            bool taxed = inputs.Keys.Any(id => State(utxo, id)?.Token.Policy?.HasAutomaticBurn == true);
+            if (terms == null && !taxed)
+            {
+                if (inputs.Count == 0 || inputs.Count != outputs.Count || inputs.Any(pair => !outputs.ContainsKey(pair.Key) || outputs[pair.Key] != pair.Value))
+                    throw new InvalidOperationException("Token transfers must conserve each asset independently.");
+                return;
+            }
+            var policy = terms == null ? null : State(utxo, terms.TokenId)?.Token.Policy;
+            if (!taxed || policy == null || !policy.HasAutomaticBurn || inputs.Count != 1 || outputs.Count != 1 ||
+                !inputs.ContainsKey(terms.TokenId) || !outputs.ContainsKey(terms.TokenId) || terms.Amount <= 0 ||
+                tx.Outputs[0].AssetId != terms.TokenId || tx.Outputs[0].Amount != terms.Amount ||
+                terms.BurnAmount != policy.CalculateTransferBurn(terms.Amount) ||
+                inputs[terms.TokenId] != checked(outputs[terms.TokenId] + terms.BurnAmount))
+                throw new InvalidOperationException("Transfer does not pay the automatic token burn.");
+            var owners = new HashSet<string>(tx.Inputs.Select(input => Crypto.Sha256(input.PublicKey)), StringComparer.Ordinal);
+            if (tx.Outputs.Skip(1).Any(output => output.AssetId != null && !owners.Contains(output.OneTimeAddress)))
+                throw new InvalidOperationException("Token change must return to a signing input owner.");
+        }
         internal static void Record(Transaction tx, IDictionary<string, UnspentOutput> utxo)
         {
             TokenRuntime next = null;
@@ -117,15 +152,24 @@ namespace PrivateCoin.Core
                 if (command.Operation == "pause") next.Paused = true;
                 if (command.Operation == "resume") next.Paused = false;
             }
+            else if (tx.Kind == TransactionKind.TokenTransfer && tx.TokenTransferTerms != null)
+            {
+                var prior = State(utxo, tx.TokenTransferTerms.TokenId);
+                if (prior?.Token.Policy == null) throw new InvalidOperationException("Unknown automatic burn token.");
+                next = new TokenRuntime { Token = prior.Token, Supply = checked(prior.Supply - prior.Token.Policy.CalculateTransferBurn(tx.TokenTransferTerms.Amount)),
+                    Issued = prior.Issued, Paused = prior.Paused, Revision = prior.Revision };
+            }
             if (next != null) utxo[Key(next.Token.Id)] = new UnspentOutput { TransactionId = Key(next.Token.Id), OutputIndex = -1,
                 Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" }, TokenRuntime = next };
         }
         internal static void Validate(Transaction tx, IDictionary<string, UnspentOutput> utxo, int height, int version)
         {
-            if (tx.Token?.Policy != null || tx.TokenCommand != null || tx.TokenAuthorizations != null || tx.Outputs.Any(output => output.UnlockHeight != 0))
+            if (tx.Token?.Policy != null || tx.TokenCommand != null || tx.TokenAuthorizations != null || tx.TokenTransferTerms != null || tx.Outputs.Any(output => output.UnlockHeight != 0))
                 if (version < 20) throw new InvalidOperationException("Token policies require consensus v20.");
             if (tx.TokenCommand == null && (tx.Kind == TransactionKind.TokenManage || tx.TokenAuthorizations != null))
                 throw new InvalidOperationException("Missing token command.");
+            if (tx.TokenTransferTerms != null && tx.Kind != TransactionKind.TokenTransfer)
+                throw new InvalidOperationException("Automatic burn terms require a direct token transfer.");
             foreach (var output in tx.Outputs)
                 if (output.UnlockHeight != 0 && (tx.Kind != TransactionKind.TokenCreate || tx.Token?.Policy == null || output.AssetId != tx.Token.Id))
                     throw new InvalidOperationException("Only a token vesting creation may lock outputs.");

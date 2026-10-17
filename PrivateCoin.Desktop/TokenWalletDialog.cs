@@ -211,9 +211,12 @@ namespace PrivateCoin.Desktop
                 long quantity = TokenAmount.Parse(amount.Text, token.Decimals);
                 string address = destination.Text.Trim();
                 TokenWalletOperations.ValidateTransfer(chain(), wallet?.Wallet, pendingTransactions(), token.Id, address, quantity, fee.Amount);
+                long burn = chain().GetTokenRuntime(token.Id)?.Token.Policy?.CalculateTransferBurn(quantity) ?? 0;
                 string review = "Carteira: " + wallet.Name + "\nToken: " + token.Name + " (" + token.Symbol + ")\nIdentificador: " + token.Id +
                     "\nQuantidade: " + TokenAmount.Format(quantity, token.Decimals) + "\nDestino: " + address +
-                    "\nTaxa: " + TokenAmount.Format(fee.Amount, 8) + " POVIX\n\nO troco do token e de POVIX permanece nesta carteira. Confirmar envio?";
+                    "\nQueima automática: " + TokenAmount.Format(burn, token.Decimals) + " " + token.Symbol +
+                    "\nTotal debitado em tokens: " + TokenAmount.Format(checked(quantity + burn), token.Decimals) +
+                    "\nTaxa de rede: " + TokenAmount.Format(fee.Amount, 8) + " POVIX\n\nO troco do token e de POVIX permanece nesta carteira. Confirmar envio?";
                 if (MessageBox.Show(this, review, "Revisar transferência de token", MessageBoxButtons.OKCancel,
                     MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
                 sending = true;

@@ -35,12 +35,19 @@
             Decimals: byId('Decimals').value, DestinationAddress: byId('DestinationAddress').value,
             FeePriority: form.querySelector('[name="FeePriority"]:checked').value,
             UsePolicy: true, Mintable: byId('Mintable').value, MaximumSupply: byId('MaximumSupply').value,
-            Burnable: byId('Burnable').checked, Pausable: byId('Pausable').checked,
+            Burnable: byId('Burnable').checked, AutoBurnMode: byId('AutoBurnMode').value, AutoBurnValue: byId('AutoBurnValue').value, Pausable: byId('Pausable').checked,
             AdministratorAddresses: byId('AdministratorAddresses').value, RequiredSignatures: byId('RequiredSignatures').value,
             Description: byId('Description').value, LogoUrl: byId('LogoUrl').value, Website: byId('Website').value, SocialUrl: byId('SocialUrl').value,
             VestingStartHeight: byId('vesting-enabled').value === 'true' ? byId('VestingStartHeight').value : '0',
             VestingIntervalBlocks: byId('vesting-enabled').value === 'true' ? byId('VestingIntervalBlocks').value : '0',
             VestingTranches: byId('vesting-enabled').value === 'true' ? byId('VestingTranches').value : '0', Privacy: byId('Privacy').value };
+    }
+    function automaticBurn(data) {
+        if (data.AutoBurnMode === 'none') return { rate: '0', fixed: '0' };
+        if (!['percent', 'fixed'].includes(data.AutoBurnMode)) throw new Error('Escolha uma modalidade de queima automática.');
+        const value = wallet.parseSupply(data.AutoBurnValue, data.AutoBurnMode === 'percent' ? 2 : Number(data.Decimals));
+        if (data.AutoBurnMode === 'percent' && BigInt(value) > 10000n) throw new Error('A porcentagem máxima de queima é 100%.');
+        return { rate: data.AutoBurnMode === 'percent' ? value : '0', fixed: data.AutoBurnMode === 'fixed' ? value : '0' };
     }
     function policyValues(data) {
         const admins = data.AdministratorAddresses.trim() ? data.AdministratorAddresses.split(/[,;\s]+/).filter(Boolean) : [wallet.addresses()[0]];
@@ -102,6 +109,7 @@
         const rows = [
             ['Descrição', source.Description || 'Não informada'], ['Logo', source.LogoUrl || 'Não informado'], ['Site', source.Website || 'Não informado'], ['Redes sociais', source.SocialUrl || 'Não informadas'],
             ['Limite de emissão', source.Mintable === 'true' ? source.MaximumSupply : source.Supply],
+            ['Queima automática', source.AutoBurnMode === 'none' ? 'Desabilitada' : source.AutoBurnValue + (source.AutoBurnMode === 'percent' ? '% sobre cada transferência direta' : ' tokens por transferência direta') + ' (cobrada além do valor recebido)'],
             ['Queima pelo titular', source.Burnable ? 'Permitida' : 'Desabilitada'], ['Pausa administrativa', source.Pausable ? 'Permitida' : 'Desabilitada'],
             ['Administradores', source.AdministratorAddresses || (wallet.isUnlocked() ? wallet.addresses()[0] : 'Carteira conectada')],
             ['Assinaturas necessárias', source.RequiredSignatures], ['Liberação inicial', Number(source.VestingTranches) > 0 ? source.VestingTranches + ' parcelas a partir do bloco ' + source.VestingStartHeight + ', intervalo ' + source.VestingIntervalBlocks + ' blocos' : 'Após confirmação'],
@@ -180,6 +188,9 @@
         updateControls();
     });
     function conditionalFields() {
+        const auto = byId('AutoBurnMode').value;
+        byId('auto-burn-field').hidden = auto === 'none'; byId('AutoBurnValue').disabled = auto === 'none'; byId('AutoBurnValue').required = auto !== 'none';
+        byId('auto-burn-label').textContent = auto === 'percent' ? 'Taxa de queima (%)' : 'Taxa fixa de queima (tokens)';
         const mintable = byId('Mintable').value === 'true', vesting = byId('vesting-enabled').value === 'true';
         byId('maximum-supply-field').hidden = !mintable; byId('MaximumSupply').disabled = !mintable; byId('MaximumSupply').required = mintable;
         byId('vesting-fields').hidden = !vesting; byId('vesting-fields').disabled = !vesting;
@@ -194,7 +205,8 @@
         busy = true; message(''); updateControls();
         try {
             const values = fields();
-            expected = Object.freeze({ ...values, FeeAtomic: selectedFee(), PolicyValues: Object.freeze(policyValues(values)) });
+            const burn = automaticBurn(values);
+            expected = Object.freeze({ ...values, AutoBurnBasisPoints: burn.rate, AutoBurnFixedAtomic: burn.fixed, FeeAtomic: selectedFee(), PolicyValues: Object.freeze(policyValues(values)) });
             wallet.parseSupply(expected.Supply, Number(expected.Decimals));
             // Keep POVIX change under a key already present in the imported wallet.
             // A new browser-only key would hide the remaining funds from Desktop.

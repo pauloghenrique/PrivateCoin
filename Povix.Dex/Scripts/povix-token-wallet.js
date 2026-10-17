@@ -176,7 +176,9 @@
         if (await sha256('povix-token-v1|' + first.transactionId + '|' + first.outputIndex) !== draft.tokenId)
             throw new Error('Identificador do token inválido.');
         const policy = expected.PolicyValues || null;
-        if ((draft.policyCanonical || null) !== (policy ? policy.map(field).join('') : null)) throw new Error('As regras do token diferem da revisão.');
+        const rate = String(expected.AutoBurnBasisPoints || '0'), fixed = String(expected.AutoBurnFixedAtomic || '0');
+        const burnPolicy = rate !== '0' || fixed !== '0' ? '|auto-burn-v1:' + rate + ':' + fixed : '';
+        if ((draft.policyCanonical || null) !== (policy ? policy.map(field).join('') + burnPolicy : null)) throw new Error('As regras do token diferem da revisão.');
         const tranches = policy && Number(policy[12]) > 0 ? Number(policy[12]) : 1;
         const locks = [];
         for (let index = 0; index < tranches; index++) {
@@ -414,6 +416,10 @@
         payload += '|fee:' + draft.feeAtomic + '|kind:4|validator:|reward:|owned:|assets-v1|' + field(draft.tokenId);
         if (tokenChange) payload += field(draft.tokenId);
         if (povixChange) payload += field(null);
+        if (draft.automaticBurnEnabled) {
+            if (String(draft.automaticBurnAtomic) !== String(expected.AutomaticBurnAtomic) || !atomic(draft.automaticBurnAtomic)) throw new Error('A queima automática difere da revisão.');
+            payload += '|token-transfer-burn-v1|' + draft.tokenId + ':' + draft.amountAtomic + ':' + draft.automaticBurnAtomic;
+        } else if (BigInt(expected.AutomaticBurnAtomic || '0') !== 0n) throw new Error('A queima automática não foi incluída.');
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload || transferAuthorization(draft) !== draft.authorizationPayload)
             throw new Error('O conteúdo da assinatura ou da autorização do criador difere da revisão.');
         if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now())

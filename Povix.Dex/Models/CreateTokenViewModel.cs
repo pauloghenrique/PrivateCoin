@@ -39,6 +39,8 @@ namespace Povix.Dex.Models
         public bool Mintable { get; set; }
         public string MaximumSupply { get; set; }
         public bool Burnable { get; set; }
+        public string AutoBurnMode { get; set; } = "none";
+        [StringLength(30)] public string AutoBurnValue { get; set; }
         public bool Pausable { get; set; }
         [StringLength(1100)] public string AdministratorAddresses { get; set; }
         [Range(1, 16)] public int RequiredSignatures { get; set; } = 1;
@@ -57,7 +59,13 @@ namespace Povix.Dex.Models
             if (!TryParseSupply(Supply, Decimals, out supply)) throw new ArgumentException("Confira a quantidade inicial.");
             maximum = supply;
             if (Mintable && !TryParseSupply(MaximumSupply, Decimals, out maximum)) throw new ArgumentException("Limite máximo inválido.");
+            long automatic = 0;
+            if (AutoBurnMode != "none" && AutoBurnMode != "percent" && AutoBurnMode != "fixed") throw new ArgumentException("Modo de queima automática inválido.");
+            if (AutoBurnMode != "none" && !TryParseSupply(AutoBurnValue, AutoBurnMode == "percent" ? 2 : Decimals, out automatic))
+                throw new ArgumentException("Informe uma taxa de queima positiva com a precisão permitida.");
+            if (AutoBurnMode == "percent" && automatic > 10000) throw new ArgumentException("A porcentagem máxima é 100%.");
             return new TokenPolicy { Mintable = Mintable, MaximumSupply = maximum, Burnable = Burnable, Pausable = Pausable,
+                AutoBurnBasisPoints = AutoBurnMode == "percent" ? (int)automatic : 0, AutoBurnFixedAtomic = AutoBurnMode == "fixed" ? automatic : 0,
                 Administrators = string.IsNullOrWhiteSpace(AdministratorAddresses) ? new List<string> { creatorAddress } :
                     AdministratorAddresses.Split(new[] { ',', '\r', '\n', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList(),
                 RequiredSignatures = RequiredSignatures, Description = Description ?? "", LogoUrl = LogoUrl ?? "", Website = Website ?? "", SocialUrl = SocialUrl ?? "",

@@ -130,6 +130,47 @@ internal static class PrivateCoinTokenPolicyRegression
                 var fixedToken = Complete(TokenCreation.Prepare(chain, Empty, publicKeys, "Fixo", "FIX", 0, 100, address, address, 2, null, noMint));
                 batches.Confirm(chain, new[] { fixedToken }, validators);
                 Reject(() => TokenManagement.Prepare(chain, Empty, publicKeys, fixedToken.Token.Id, "mint", 1, address, address, 2), "fixed supply cannot be expanded");
+                var auto = policy.Copy(); auto.Mintable = false; auto.MaximumSupply = 10000; auto.Burnable = false; auto.AutoBurnBasisPoints = 100;
+                Check(auto.CalculateTransferBurn(long.MaxValue) == long.MaxValue / 100, "percent calculation handles Int64 maximum without overflow");
+                var taxedCreation = Complete(TokenCreation.Prepare(chain, Empty, publicKeys, "Taxado", "TAX", 0, 10000, address, address, 2, null, auto));
+                batches.Confirm(chain, new[] { taxedCreation }, validators);
+                string taxedId = taxedCreation.Token.Id;
+                var transferDraft = TokenTransfer.Prepare(chain, Empty, new[] { publicKeys[0] }, taxedId, other, 100, address, 2);
+                Check(transferDraft.AutomaticBurnAmount == 1 && transferDraft.TokenChangeAmount == 9899, "one percent burn charged on top of recipient amount");
+                var taxedTransfer = transferDraft.Complete(transferDraft.InputAddresses.Select(ownerAddress => Sign(ownerAddress, transferDraft.SigningPayload)));
+                chain.ValidatePendingTransactions(new[] { taxedTransfer });
+                Check(chain.GetTokenRuntime(taxedId).Supply == 10000, "pending automatic burn does not change confirmed supply");
+                var bypass = Copy(taxedTransfer); bypass.TokenTransferTerms = null; bypass.Outputs[1].Amount++; Resign(bypass);
+                Reject(() => chain.ValidatePendingTransactions(new[] { bypass }), "conserving transfer cannot omit a mandatory automatic burn");
+                var underpay = Copy(taxedTransfer); underpay.TokenTransferTerms.BurnAmount = 0; underpay.Outputs[1].Amount++; Resign(underpay);
+                Reject(() => chain.ValidatePendingTransactions(new[] { underpay }), "valid holder signatures cannot underpay automatic burn");
+                var overpay = Copy(taxedTransfer); overpay.TokenTransferTerms.BurnAmount = 2; overpay.Outputs[1].Amount--; Resign(overpay);
+                Reject(() => chain.ValidatePendingTransactions(new[] { overpay }), "automatic burn must match the policy exactly");
+                var redirect = Copy(taxedTransfer); redirect.Outputs[1].OneTimeAddress = other; Resign(redirect);
+                Reject(() => chain.ValidatePendingTransactions(new[] { redirect }), "untaxed token change cannot be redirected to recipient");
+                batches.Confirm(chain, new[] { taxedTransfer }, validators);
+                Check(chain.GetTokenRuntime(taxedId).Supply == 9999 && chain.GetTokenBalance(new[] { other }, taxedId) == 100 && chain.GetTokenBalance(new[] { address }, taxedId) == 9899, "confirmed transfer pays recipient and permanently destroys the fee");
+                Check(new Blockchain(chain.Blocks).GetTokenRuntime(taxedId).Supply == 9999, "restart replays automatic burn supply");
+                using (var wallet = Wallet.FromPrivateKeys(new[] { owner.ToXmlString(true) }))
+                {
+                    var desktopTransfer = wallet.CreateTokenTransferTransaction(chain, Empty, taxedId, other, 100, 2);
+                    Check(desktopTransfer.TokenTransferTerms.BurnAmount == 1, "Desktop wallet includes the automatic burn");
+                    chain.ValidatePendingTransactions(new[] { desktopTransfer });
+                    Reject(() => wallet.CreateTokenTransferTransaction(chain, Empty, taxedId, other, 9899, 2), "sending entire balance fails when additional burn cannot be funded");
+                }
+                Check(auto.CalculateTransferBurn(99) == 0 && auto.CalculateTransferBurn(100) == 1, "percentage fractions round down at atomic precision");
+                auto.AutoBurnBasisPoints = 0; auto.AutoBurnFixedAtomic = 3; auto.MaximumSupply = 100;
+                var fixedFeeCreation = Complete(TokenCreation.Prepare(chain, Empty, publicKeys, "Fixa", "FEE", 0, 100, address, address, 2, null, auto));
+                batches.Confirm(chain, new[] { fixedFeeCreation }, validators);
+                var fixedDraft = TokenTransfer.Prepare(chain, Empty, new[] { publicKeys[0] }, fixedFeeCreation.Token.Id, other, 1, address, 2);
+                var fixedTransfer = fixedDraft.Complete(fixedDraft.InputAddresses.Select(ownerAddress => Sign(ownerAddress, fixedDraft.SigningPayload)));
+                Check(fixedDraft.AutomaticBurnAmount == 3 && fixedDraft.TokenChangeAmount == 96, "fixed burn charged even on a small transfer");
+                batches.Confirm(chain, new[] { fixedTransfer }, validators);
+                Check(chain.GetTokenRuntime(fixedFeeCreation.Token.Id).Supply == 97, "fixed burn reduces current supply without permitting manual burn");
+                var invalid = auto.Copy(); invalid.AutoBurnBasisPoints = 100;
+                Reject(() => TokenCreation.Prepare(chain, Empty, publicKeys, "Inválido", "INV", 0, 100, address, address, 2, null, invalid), "conflicting burn modes are rejected");
+                invalid.AutoBurnFixedAtomic = 0; invalid.AutoBurnBasisPoints = 10001;
+                Reject(() => TokenCreation.Prepare(chain, Empty, publicKeys, "Inválido", "INV", 0, 100, address, address, 2, null, invalid), "burn percentage over one hundred rejected");
                 Check(chain.IsValid() && Blockchain.MaximumSupply == 180000L * Blockchain.OneCoin, "full chain valid and native supply constants unchanged");
                 Console.WriteLine("PASS " + checks + " token policy checks");
             }

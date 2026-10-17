@@ -24,7 +24,7 @@ module.exports = async function checkChangeUi(wallet, fixture) {
     node('token-app').dataset = { networkUrl: '/network', balanceUrl: '/balance', prepareUrl: '/prepare', networkId: fixture.networkId };
     for (const key of ['Name', 'Symbol', 'Supply', 'Decimals', 'DestinationAddress']) node(key).value = fixture.expected[key];
     node('DestinationAddress').value = '';
-    node('Mintable').value = 'false'; node('RequiredSignatures').value = '1'; node('Privacy').value = 'public';
+    node('AutoBurnMode').value = 'none'; node('Mintable').value = 'false'; node('RequiredSignatures').value = '1'; node('Privacy').value = 'public';
     node('vesting-enabled').value = 'false';
     let pending = false, refresh, preparations = 0;
     const quotedFee = fixture.draft.feeAtomic;

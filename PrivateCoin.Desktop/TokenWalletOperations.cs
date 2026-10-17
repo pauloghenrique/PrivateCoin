@@ -38,8 +38,9 @@ namespace PrivateCoin.Desktop
             if (amount <= 0) throw new InvalidOperationException("Informe uma quantidade de tokens maior que zero.");
             if (fee < Blockchain.TransferFeeStep || fee > Blockchain.MaximumTransferFee)
                 throw new InvalidOperationException("Selecione uma taxa POVIX válida.");
-            if (amount > GetAvailableBalance(chain, wallet, queue, tokenId))
-                throw new InvalidOperationException("Saldo disponível do token insuficiente. Valores bloqueados em pools ou reservados por transações pendentes não podem ser enviados.");
+            long automaticBurn = chain.GetTokenRuntime(tokenId)?.Token.Policy?.CalculateTransferBurn(amount) ?? 0;
+            if (checked(amount + automaticBurn) > GetAvailableBalance(chain, wallet, queue, tokenId))
+                throw new InvalidOperationException("Saldo disponível do token insuficiente para o envio e a queima automática. Valores bloqueados em pools ou reservados por transações pendentes não podem ser enviados.");
             if (fee > chain.GetSpendableBalance(wallet.OwnedOneTimeAddresses, queue))
                 throw new InvalidOperationException("Saldo POVIX disponível insuficiente para pagar a taxa nesta carteira.");
             return token;

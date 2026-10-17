@@ -23,7 +23,8 @@ namespace Povix.Dex.Services
                 return new { tokenId = token.Id, name = token.Name, symbol = token.Symbol, decimals = token.Decimals,
                     supplyAtomic = state.Supply.ToString(CultureInfo.InvariantCulture), issuedAtomic = state.Issued.ToString(CultureInfo.InvariantCulture),
                     maximumSupplyAtomic = policy.MaximumSupply.ToString(CultureInfo.InvariantCulture), revision = state.Revision.ToString(CultureInfo.InvariantCulture),
-                    paused = state.Paused, mintable = policy.Mintable, burnable = policy.Burnable, pausable = policy.Pausable,
+                    automaticBurnBasisPoints = policy.AutoBurnBasisPoints, automaticBurnFixedAtomic = policy.AutoBurnFixedAtomic.ToString(CultureInfo.InvariantCulture),
+                    burnedAtomic = (state.Issued - state.Supply).ToString(CultureInfo.InvariantCulture), paused = state.Paused, mintable = policy.Mintable, burnable = policy.Burnable, pausable = policy.Pausable,
                     administrators = policy.Administrators, requiredSignatures = policy.RequiredSignatures };
             }).ToArray();
         }

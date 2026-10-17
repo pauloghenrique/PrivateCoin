@@ -79,6 +79,15 @@ namespace PrivateCoin.Core
     }
 
     [DataContract]
+    public sealed class TokenTransferTerms
+    {
+        [DataMember(Order = 1)] public string TokenId { get; set; }
+        [DataMember(Order = 2)] public long Amount { get; set; }
+        [DataMember(Order = 3)] public long BurnAmount { get; set; }
+        internal string Canonical() => TokenId + ":" + Amount.ToString(CultureInfo.InvariantCulture) + ":" + BurnAmount.ToString(CultureInfo.InvariantCulture);
+    }
+
+    [DataContract]
     public sealed class BlockValidator
     {
         [DataMember(Order = 1)] public string ValidatorId { get; set; }
@@ -164,6 +173,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 15, EmitDefaultValue = false)] public LiquidityChangeTerms LiquidityChange { get; set; }
         [DataMember(Order = 16, EmitDefaultValue = false)] public TokenCommand TokenCommand { get; set; }
         [DataMember(Order = 17, EmitDefaultValue = false)] public List<TokenAuthorization> TokenAuthorizations { get; set; }
+        [DataMember(Order = 18, EmitDefaultValue = false)] public TokenTransferTerms TokenTransferTerms { get; set; }
 
         internal string SigningPayload()
         {
@@ -203,6 +213,7 @@ namespace PrivateCoin.Core
                 foreach (var proof in TokenAuthorizations) AppendField(value, proof.PublicKey);
             if (Outputs.Any(output => output.UnlockHeight != 0))
                 value.Append("|token-locks-v1|").Append(string.Join(",", Outputs.Select(output => output.UnlockHeight.ToString(CultureInfo.InvariantCulture))));
+            if (TokenTransferTerms != null) value.Append("|token-transfer-burn-v1|").Append(TokenTransferTerms.Canonical());
             return value.ToString();
         }
 
