@@ -154,6 +154,11 @@ namespace PrivateCoin.Core
         }
         internal static void Record(Transaction tx, IDictionary<string, UnspentOutput> utxo)
         {
+            if (tx.Kind == TransactionKind.InitialLaunchCreate)
+                foreach (var token in InitialLaunch.FundingTokens())
+                    utxo[Key(token.Id)] = new UnspentOutput { TransactionId = Key(token.Id), OutputIndex = -1,
+                        Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
+                        TokenRuntime = new TokenRuntime { Token = token, Supply = token.Supply, Issued = token.Supply } };
             TokenRuntime next = null;
             if (tx.Token != null && tx.Kind == TransactionKind.TokenCreate)
                 next = new TokenRuntime { Token = tx.Token, Supply = tx.Token.Supply, Issued = tx.Token.Supply };

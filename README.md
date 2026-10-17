@@ -4,7 +4,7 @@
 
 ## Características
 
-- bloco gênese sem emissão e recompensa promocional de **6 POVIX** por nova carteira, limitada a 180.000 POVIX;
+- bloco gênese sem emissão e recompensa promocional de **6 POVIX** por nova carteira, limitada a 600 POVIX (100 carteiras), seguida do lançamento de 359.400 POVIX;
 - consenso híbrido: stake escolhe o criador, votos são verificados e o bloco também exige prova de trabalho;
 - blocos ligados por SHA-256 e prova de trabalho;
 - escolha da cadeia válida por maior trabalho acumulado, sem checkpoint; emissão em quatro fases e seleção do criador ponderada pelo stake;
@@ -217,7 +217,7 @@ carteira no DEX, especialmente quando existem cópias em pastas antigas.
 
 SHA-256 é uma função de hash de mão única, e não uma criptografia reversível. Por isso, ele é usado para verificar a integridade de `Blockchain.json`; os dados públicos continuam recuperáveis pelo aplicativo. As chaves privadas permanecem efetivamente cifradas por DPAPI somente em `wallets.dat`.
 
-O painel inicia um nó TCP, conecta pares, sincroniza a cadeia, assina e propaga transações. Cada bloco inclui até 20 operações: criação de carteira, transferência de POVIX, criação de token, movimentação de token e bloqueio ou desbloqueio de garantia. Ao criar uma carteira, os 6 POVIX só ficam disponíveis após o bloco de registro; a distribuição termina em 180.000 POVIX, depois de 30.000 carteiras recompensadas.
+O painel inicia um nó TCP, conecta pares, sincroniza a cadeia, assina e propaga transações. Cada bloco inclui até 20 operações: criação de carteira, transferência de POVIX, criação de token, movimentação de token e bloqueio ou desbloqueio de garantia. Ao criar uma carteira, os 6 POVIX só ficam disponíveis após o bloco de registro; a distribuição gratuita termina em 600 POVIX, depois de 100 carteiras recompensadas.
 
 Na seção **Validador**, **Bloquear e ativar** reserva a entrada da garantia e solicita seu bloco. A ativação só ocorre depois da confirmação desse bloco. **Desbloquear** solicita outro bloco; a garantia é liberada e o validador desativado após a confirmação. Carteiras e garantias não cobram taxa individual e podem ter seus blocos minerados com prova de trabalho, permitindo iniciar a rede sem stake.
 
@@ -336,7 +336,7 @@ Transferências e operações de tokens exigem votos do bloco e sua prova
 individual assinada. A recompensa do bloco mantém seu cálculo e divisão.
 
 `CreateWalletCreationTransaction` retorna a própria operação `WalletCreate`,
-com 6 POVIX para as primeiras 30.000 carteiras (180.000 POVIX). Não altera a
+com 6 POVIX para as primeiras 100 carteiras (600 POVIX). Não altera a
 cadeia nem minera um bloco. Depois do limite, o registro conta sem emitir POVIX.
 O Core valida a fila completa e reserva suas entradas. Créditos iniciais, tokens,
 garantias, taxas, recebimentos e troco continuam indisponíveis até a confirmação
@@ -421,12 +421,13 @@ seguir a mesma política. Uma cadeia válida com maior trabalho ainda pode subst
 
 ## Regras comprometidas no bloco gênesis
 
-O gênesis contém `Rules`: total de 18.000.000 POVIX em unidades atômicas,
-180.000 para a distribuição de 6 POVIX às primeiras 30.000 carteiras,
+O gênesis contém `Rules`: total de 18.180.000 POVIX em unidades atômicas,
+600 para a distribuição de 6 POVIX às primeiras 100 carteiras,
+359.400 para o lançamento inicial,
 17.820.000 para validadores, todas as quatro fases de emissão, divisão de
 30%/70%, precisão, taxas, alvo da prova de trabalho, limite de operações e
 prazo de produção. O gênesis não emite moedas antecipadamente.
-`Blockchain.MaximumSupply` continua sendo o teto da distribuição de carteiras;
+`Blockchain.MaximumSupply` é o teto de 360.000 POVIX da distribuição gratuita mais a reserva de lançamento;
 `Rules.TotalSupplyAtomicUnits` explicita a soma desse teto com o dos validadores.
 
 O produtor escolhe até 20 operações prontas e elegíveis e inicia um lote ao
@@ -559,3 +560,32 @@ da rede sempre usa POVIX livres, inclusive em lançamentos token/token.
 Blocos v19/v20 continuam válidos, mas as operações de lançamento exigem v21; nós
 e clientes devem ser atualizados juntos. O hash dos fontes do Core continua
 a integrar a identidade da rede conforme a configuração existente.
+
+
+## Lançamento inicial nativo — consenso v22
+
+As regras executáveis e os exemplos de uso estão em [docs/povix-initial-launch.md](docs/povix-initial-launch.md).
+A confirmação da 100ª carteira completa os 600 POVIX gratuitos e cria automaticamente
+a pool com 359.400 POVIX na reserva. A mesma operação emite 1.000.000 de USDC local
+e 1.000.000 de USDT local para a 100ª carteira recompensada.
+Esses tokens têm seis casas decimais, IDs reservados e oferta fixa, sem ponte,
+lastro externo, emissão adicional, pausa ou queima administrativa.
+O par automático usa **USDC local**; USDT local continua transferível como ativo separado.
+
+Cada identidade registrada pode comprar uma vez: 1 token local por 6 POVIX
+bloqueados, além da taxa de rede em POVIX livres. As 100 carteiras gratuitas também
+podem participar. Após 29.950 compras, restam 179.700 POVIX e 29.950 unidades do
+ativo escolhido na pool; os compradores são desbloqueados e as trocas são liberadas.
+Não existe prazo ou devolução antecipada. Identidade significa a chave do endereço
+original registrado, não uma pessoa: endereços novos de recebimento não substituem
+essa chave e registrar outra carteira continua sendo possível.
+
+O principal usa cotas sem proprietário, permanentemente bloqueadas no consenso.
+Outros provedores podem adicionar e retirar suas cotas. A taxa existente de 0,30%
+fica nas reservas e beneficia proporcionalmente as cotas; a parte das cotas
+permanentes permanece na pool. O principal não pode ser encerrado nem pelo criador.
+
+A mudança altera o gênesis, o manifesto e a identidade da rede. Requer cadeia nova
+e atualização coordenada dos nós e clientes. Preserve as chaves e os arquivos da
+rede anterior; não há migração automática dos saldos. O cronograma de 17.820.000
+POVIX dos validadores permanece igual, resultando em teto total de 18.180.000 POVIX.

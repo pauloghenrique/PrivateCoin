@@ -114,13 +114,16 @@ namespace PrivateCoin.Core
 
         internal static bool IsPoolOperation(TransactionKind kind) => kind == TransactionKind.LiquidityPool ||
             kind == TransactionKind.LiquiditySwap || kind == TransactionKind.LiquidityClose ||
-            kind == TransactionKind.LiquidityAdd || kind == TransactionKind.LiquidityRemove || TokenLaunch.IsOperation(kind);
+            kind == TransactionKind.LiquidityAdd || kind == TransactionKind.LiquidityRemove || TokenLaunch.IsOperation(kind) || InitialLaunch.IsOperation(kind);
 
         internal static void ValidatePoolOperation(Transaction tx, IDictionary<string, UnspentOutput> utxo, int height)
         {
             var sources = tx.Inputs.Select(input => { UnspentOutput source;
                 return utxo.TryGetValue(Key(input), out source) ? source : null; }).ToArray();
             var locked = sources.Where(source => source != null && source.IsPoolReserve).ToArray();
+            if (InitialLaunch.IsOperation(tx.Kind)) { InitialLaunch.Validate(tx, utxo, sources); return; }
+            if (sources.Any(source => source?.InitialLaunchCollecting == true))
+                throw new InvalidOperationException("Initial launch reserves cannot trade until the exact target is reached.");
             if (TokenLaunch.IsOperation(tx.Kind)) { TokenLaunch.Validate(tx, sources, height); return; }
             if (tx.Launch != null || sources.Any(source => source?.Launch != null))
                 throw new InvalidOperationException("Launch escrow can only fund launch operations.");
@@ -140,6 +143,7 @@ namespace PrivateCoin.Core
             tx.PoolBurnPolicy?.Validate(tx.Outputs[0].AssetId, tx.Outputs[1].AssetId);
             if (tx.Kind == TransactionKind.LiquidityPool)
             {
+                if (tx.PoolParticipation?.LockedShares > 0) throw new InvalidOperationException("Locked principal can only originate in the initial launch.");
                 if (locked.Length != 0 || !tx.Inputs.Any(input => Crypto.Sha256(input.PublicKey) == tx.Outputs[0].OneTimeAddress))
                     throw new InvalidOperationException("Creating a pool requires the provider's authorization and free funds.");
                 if (tx.PoolParticipation != null && (tx.PoolParticipation.Shares.Count != 1 ||
@@ -158,6 +162,8 @@ namespace PrivateCoin.Core
                 throw new InvalidOperationException("Pool reserves must remain paired with the same assets and provider.");
             if (a.PoolBurnPolicy?.Canonical() != b.PoolBurnPolicy?.Canonical() || tx.PoolBurnPolicy?.Canonical() != a.PoolBurnPolicy?.Canonical())
                 throw new InvalidOperationException("Pool burn choice is permanent and must follow both reserves.");
+            if (a.PoolParticipation?.LockedShares > 0 && tx.Kind == TransactionKind.LiquidityClose)
+                throw new InvalidOperationException("The principal liquidity is permanently locked.");
             if (tx.Kind == TransactionKind.LiquidityClose && a.PoolParticipation != null &&
                 (a.PoolParticipation.Shares.Count != 1 || !a.PoolParticipation.Shares.ContainsKey(a.Output.OneTimeAddress)))
                 throw new InvalidOperationException("Other providers must withdraw their shares before pool closure.");
@@ -187,7 +193,7 @@ namespace PrivateCoin.Core
         private static void ValidateParticipation(PoolParticipation state)
         {
             if (state == null) return;
-            if (state.Shares == null || state.Shares.Count == 0 || state.Shares.Count > 1000 || state.Shares.Any(item =>
+            if (state.Shares == null || state.LockedShares < 0 || state.Shares.Count == 0 && state.LockedShares == 0 || state.Shares.Count > 1000 || state.Shares.Any(item =>
                 item.Key == null || item.Key.Length != 64 || item.Key.Any(c => !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f')) || item.Value <= 0) || state.Total <= 0)
                 throw new InvalidOperationException("Invalid liquidity shares.");
         }
@@ -198,10 +204,11 @@ namespace PrivateCoin.Core
         }
         private static PoolParticipation ChangedParticipation(UnspentOutput a, string address, long shares, bool add)
         {
+            if (a.InitialLaunchCollecting) throw new InvalidOperationException("The initial launch is still collecting.");
             if (a.PoolParticipation == null) throw new InvalidOperationException("User liquidity is disabled for this pool.");
             var next = a.PoolParticipation.Copy();
             long owned; next.Shares.TryGetValue(address, out owned);
-            if (shares <= 0 || !add && (shares > owned || shares >= next.Total || address == a.Output.OneTimeAddress && shares == owned))
+            if (shares <= 0 || !add && (shares > owned || shares >= next.Total || next.LockedShares == 0 && address == a.Output.OneTimeAddress && shares == owned))
                 throw new InvalidOperationException("Insufficient liquidity shares. Close the pool to withdraw its final position.");
             long balance = add ? checked(owned + shares) : owned - shares;
             if (balance == 0) next.Shares.Remove(address); else next.Shares[address] = balance;
@@ -313,22 +320,24 @@ namespace PrivateCoin.Core
         public long TimestampUtcTicks => transaction.TimestampUtcTicks;
         public TransactionKind Kind => transaction.Kind;
         public IReadOnlyList<TransactionOutput> Outputs => transaction.Outputs.Select(item => new TransactionOutput {
-            AssetId = item.AssetId, Amount = item.Amount, OneTimeAddress = item.OneTimeAddress }).ToArray();
+            InitialLaunchLocked = item.InitialLaunchLocked, UnlockHeight = item.UnlockHeight, AssetId = item.AssetId, Amount = item.Amount, OneTimeAddress = item.OneTimeAddress }).ToArray();
         public IReadOnlyList<TransactionInput> Inputs => transaction.Inputs.Select(item => new TransactionInput {
             TransactionId = item.TransactionId, OutputIndex = item.OutputIndex, PublicKey = item.PublicKey }).ToArray();
         internal UnsignedTokenExchange(Transaction tx, UnspentOutput[] sources, int userCount)
         { transaction = tx; Sources = Array.AsReadOnly(sources); UserInputCount = userCount; }
-        public Transaction Complete(IEnumerable<string> signatures)
+        internal void SetInitialLaunchIdentity(string publicKey)
+        { transaction.InitialLaunchIdentity = new TokenAuthorization { PublicKey = publicKey }; }
+        public Transaction Complete(IEnumerable<string> signatures, string initialLaunchIdentitySignature = null)
         {
             var values = signatures.ToArray();
-            if ((transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(transaction.Kind)) && values.Length == UserInputCount)
+            if ((transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(transaction.Kind) || transaction.Kind == TransactionKind.InitialLaunchPurchase) && values.Length == UserInputCount)
             {
                 if (values.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("One signature is required for every funding input.");
                 values = values.Concat(new[] { string.Empty, string.Empty }).ToArray();
             }
             else if (values.Length != transaction.Inputs.Count || values.Any(string.IsNullOrWhiteSpace))
                 throw new ArgumentException("One signature is required for every input.");
-            var tx = new Transaction { Launch = transaction.Launch?.Copy(), PoolBurnPolicy = transaction.PoolBurnPolicy?.Copy(), PoolParticipation = transaction.PoolParticipation?.Copy(), LiquidityChange = transaction.LiquidityChange, Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
+            var tx = new Transaction { InitialLaunchIdentity = transaction.InitialLaunchIdentity == null ? null : new TokenAuthorization { PublicKey = transaction.InitialLaunchIdentity.PublicKey, Signature = initialLaunchIdentitySignature }, Launch = transaction.Launch?.Copy(), PoolBurnPolicy = transaction.PoolBurnPolicy?.Copy(), PoolParticipation = transaction.PoolParticipation?.Copy(), LiquidityChange = transaction.LiquidityChange, Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
                 LiquiditySwap = transaction.LiquiditySwap == null ? null : new LiquiditySwapTerms {
                     InputSide = transaction.LiquiditySwap.InputSide, Amount = transaction.LiquiditySwap.Amount,
                     InputBurn = transaction.LiquiditySwap.InputBurn, OutputBurn = transaction.LiquiditySwap.OutputBurn },

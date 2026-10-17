@@ -605,3 +605,31 @@ criador, restauração e reorganização que revoga a abertura órfã. Ataques c
 novas assinaturas válidas não podem alterar a meta, o prazo, as participações
 iniciais de liquidez, os destinatários dos tokens ou os destinatários dos aportes.
 As duas suítes anteriores continuam cobrindo pools comuns e liquidez pública.
+
+## Lançamento inicial POVIX (v22)
+
+Após compilar o Core em Release:
+
+```sh
+mkdir -p work
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Numerics -r:System.Runtime.Serialization -r:System.Web.Extensions -out:work/InitialLaunchRegression.exe \
+  Tests/PrivateCoinInitialLaunchRegression.cs Tests/LegacyConsensusFixture.cs \
+  Tests/ValidationBatchFixture.cs PrivateCoin.Desktop/WalletBalanceSummary.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/InitialLaunchRegression.exe work/initial-launch-swap.json
+node Tests/PovixInitialLaunchWalletRegression.js work/initial-launch-swap.json
+```
+
+Verifica a distribuição de 600 POVIX, emissão única da reserva e dos dois tokens
+locais de um milhão, criação automática na 100ª carteira, compra única por identidade assinada,
+bloqueio de gasto e negociação antecipados, catálogo e saldo da carteira,
+restauração completa e contabilização. A fronteira 29.949 → 29.950 usa estado
+UTXO de teste, validado pelo mesmo `Apply` do consenso, para conferir abertura,
+liberação dos compradores, cotas principais permanentes, trocas com taxas e
+retirada integral da liquidez adicional. A fixture evita minerar 29.950 compras;
+não substitui teste de carga de rede ou uma simulação econômica.
+
+Para verificar descoberta automática no DEX sem registros locais de pools, compile
+os Models/Services do DEX e execute `Tests/PovixInitialLaunchCatalogueRegression.cs`
+com `work/initial-launch-swap.json.chain.json` gerado pela suíte anterior.
+A regressão usa a consulta real de catálogo, sem iniciar um servidor HTTP/TCP.

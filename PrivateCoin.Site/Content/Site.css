@@ -144,7 +144,7 @@ footer { color: var(--muted); font-size: .85rem; }
 .allocation-legend strong, .allocation-legend small { display: block; }
 .allocation-legend small { color: var(--muted); font-size: .7rem; line-height: 1.45; }
 .allocation-chart { display: flex; justify-content: center; }
-.donut { align-items: center; background: conic-gradient(var(--green) 0 99%, #acdccc 99% 100%); border-radius: 50%; display: flex; height: 210px; justify-content: center; width: 210px; }
+.donut { align-items: center; background: conic-gradient(var(--green) 0 98.02%, #acdccc 98.02% 100%); border-radius: 50%; display: flex; height: 210px; justify-content: center; width: 210px; }
 .donut::before { background: #fff; border-radius: 50%; content: ""; height: 135px; position: absolute; width: 135px; }
 .donut span { position: relative; text-align: center; z-index: 1; }
 .donut strong, .donut small { display: block; }.donut strong { font-size: 2rem; letter-spacing: -.04em; }.donut small { color: var(--green); font-size: .65rem; font-weight: 800; letter-spacing: .15em; }

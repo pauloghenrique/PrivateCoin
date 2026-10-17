@@ -27,11 +27,11 @@ namespace Povix.Dex.Services
                     var record = submitted.FirstOrDefault(item => item.Transaction.Id == tx.Id && item.Exchange?.PoolId == poolId);
                     bool next = started && !closed && tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 0) &&
                         tx.Inputs.Any(input => input.TransactionId == reserveId && input.OutputIndex == 1) &&
-                        (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(tx.Kind) || record != null);
+                        (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(tx.Kind) || tx.Kind == TransactionKind.InitialLaunchPurchase || record != null);
                     if (tx.Id != poolId && !next) continue;
                     if (tx.Outputs.Count < 2) continue;
                     string operation = tx.Id == poolId ? "pool" : tx.Kind == TransactionKind.LiquidityClose ? "close" :
-                        tx.Kind == TransactionKind.LaunchRefund ? "close" : tx.Kind == TransactionKind.LaunchActivate ? "launch-open" : tx.Kind == TransactionKind.LaunchContribute ? "launch-contribute" : tx.Kind == TransactionKind.LiquiditySwap ? "swap" : tx.Kind == TransactionKind.LiquidityAdd ? "add" : tx.Kind == TransactionKind.LiquidityRemove ? "remove" : record.Exchange.Operation;
+                        tx.Kind == TransactionKind.InitialLaunchPurchase ? (tx.Outputs[0].Amount == InitialLaunch.PrincipalSupply ? "launch-open" : "launch-contribute") : tx.Kind == TransactionKind.LaunchRefund ? "close" : tx.Kind == TransactionKind.LaunchActivate ? "launch-open" : tx.Kind == TransactionKind.LaunchContribute ? "launch-contribute" : tx.Kind == TransactionKind.LiquiditySwap ? "swap" : tx.Kind == TransactionKind.LiquidityAdd ? "add" : tx.Kind == TransactionKind.LiquidityRemove ? "remove" : record.Exchange.Operation;
                     long a = tx.Outputs[0].Amount, b = tx.Outputs[1].Amount;
                     history.Add(new MarketMovement { Id = tx.Id, Operation = operation, Status = "confirmed", Height = block.Height,
                         Time = UnixTime(block.TimestampUtcTicks), ReserveA = a, ReserveB = b,
@@ -64,7 +64,7 @@ namespace Povix.Dex.Services
                     }).ToArray();
                 var latest = history.LastOrDefault(item => item.Status == "confirmed");
                 return new { pool = PoolResponse(pool), tokens = new[] { MarketToken(pool.AssetA), MarketToken(pool.AssetB) }, interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
-                    price = latest == null || closed || pool.Transaction.Kind == TransactionKind.LaunchCreate || pool.Transaction.Kind == TransactionKind.LaunchContribute || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
+                    price = latest == null || closed || !pool.Available || pool.Transaction.Kind == TransactionKind.LaunchCreate || pool.Transaction.Kind == TransactionKind.LaunchContribute || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
                     candles = candles.Skip(Math.Max(0, candles.Length - 200)).ToArray(),
                     ledger = history.OrderByDescending(item => item.Time).ThenByDescending(item => item.Height).Take(100).Select(item => new {
                         transactionId = item.Id, operation = item.Operation, status = item.Status, time = item.Time, blockHeight = item.Height,

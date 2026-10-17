@@ -34,7 +34,7 @@ namespace Povix.Dex.Services
             {
                 NetworkState state = Deserialize(File.ReadAllBytes(statePath));
                 if (state.NetworkId != Blockchain.NetworkId ||
-                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11 && state.ConsensusVersion != 12 && state.ConsensusVersion != 13 && state.ConsensusVersion != 14 && state.ConsensusVersion != 15 && state.ConsensusVersion != 16 && state.ConsensusVersion != 17 && state.ConsensusVersion != 18 && state.ConsensusVersion != 19 && state.ConsensusVersion != 20))
+                    (state.ConsensusVersion != Blockchain.ConsensusVersion && state.ConsensusVersion != 3 && state.ConsensusVersion != 4 && state.ConsensusVersion != 7 && state.ConsensusVersion != 8 && state.ConsensusVersion != 9 && state.ConsensusVersion != 10 && state.ConsensusVersion != 11 && state.ConsensusVersion != 12 && state.ConsensusVersion != 13 && state.ConsensusVersion != 14 && state.ConsensusVersion != 15 && state.ConsensusVersion != 16 && state.ConsensusVersion != 17 && state.ConsensusVersion != 18 && state.ConsensusVersion != 19 && state.ConsensusVersion != 20 && state.ConsensusVersion != 21))
                     throw new InvalidOperationException("O cache pertence a outra rede ou versão de consenso.");
                 blockchain = new Blockchain(state.Blocks);
                 pending = state.Pending ?? new List<Transaction>();
@@ -96,6 +96,7 @@ namespace Povix.Dex.Services
                 long pendingFees = pending.Where(tx => tx.Inputs.Any(input => owned.Contains(AddressFor(input.PublicKey))))
                     .Sum(tx => tx.Fee);
                 return new {
+                    launchLockedAtomic = blockchain.GetInitialLaunchLockedBalance(addresses).ToString(CultureInfo.InvariantCulture),
                     pendingFeesAtomic = pendingFees.ToString(CultureInfo.InvariantCulture),
                     balanceAtomic = confirmed.Where(item => available.Contains(item.TransactionId + ":" + item.OutputIndex)).Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
                     confirmedAtomic = confirmed.Sum(item => item.Output.Amount).ToString(CultureInfo.InvariantCulture),
@@ -242,7 +243,7 @@ namespace Povix.Dex.Services
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
                         var valid = new List<Transaction>();
                         var recoverable = pending.Concat(candidate.GetUncountedWalletCreations()).Concat(blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate))
+                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate))
                             .Concat(submitted.Select(item => item.Transaction)).Where(tx => !confirmed.Contains(tx.Id))
                             .GroupBy(tx => tx.Id, StringComparer.Ordinal).Select(group => group.First());
                         foreach (Transaction transaction in Blockchain.OrderByFeePriority(recoverable))
