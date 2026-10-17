@@ -68,6 +68,7 @@
     <Compile Include="TokenManagement.cs" />
     <Compile Include="TokenTransfer.cs" />
     <Compile Include="TokenExchange.cs" />
+    <Compile Include="TokenLaunch.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

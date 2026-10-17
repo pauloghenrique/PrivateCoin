@@ -37,7 +37,7 @@ const d = fixture.draft;
     const recordText = JSON.stringify(fixture.wallet);
     await wallet.importFile({ size: Buffer.byteLength(recordText), arrayBuffer: async () => new TextEncoder().encode(recordText).buffer }, 'dex-test-password-only');
     const previousPool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
-    const expected = { burnEnabled: d.burnEnabled, burnPolicy: d.burnPolicy, loyaltyPolicy: d.loyaltyPolicy, rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
+    const expected = { launch: d.operation === 'pool' ? d.launch : previousPool?.launch, burnEnabled: d.burnEnabled, burnPolicy: d.burnPolicy, loyaltyPolicy: d.loyaltyPolicy, rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
@@ -56,6 +56,7 @@ const d = fixture.draft;
     if (d.operation === 'swap' && d.burnEnabled) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.outputBurnAtomic = '0'; }), expected, fixture.networkId));
     if (d.operation === 'pool') await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.rewardMode = d.rewardMode === 'loyalty' ? 'fees' : 'loyalty'; }), expected, fixture.networkId));
     if (d.operation === 'pool' && d.loyaltyPolicy) for (const mutation of [policy => { policy.feeBasisPoints++; }, policy => { policy.minimumReserveAtomic = '1'; }, policy => { policy.earlyExit = policy.earlyExit === 'locked' ? 'forfeit' : 'locked'; }]) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => mutation(draft.loyaltyPolicy)), expected, fixture.networkId));
+    if (d.launch) for (const change of [draft => { draft.launch.targetAtomic = String(BigInt(draft.launch.targetAtomic) + 1n); }, draft => { draft.launch.contributors[0].address = 'f'.repeat(64); }, draft => { draft.launch.deadlineHeight++; }]) await assert.rejects(wallet.verifyExchangeDraft(bad(change), expected, fixture.networkId));
     if (d.allowUserLiquidity) {
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.participation.holders[0].sharesAtomic = '1'; }), expected, fixture.networkId));
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.allowUserLiquidity = false; }), expected, fixture.networkId));
@@ -67,10 +68,11 @@ const d = fixture.draft;
     }
     assert(BigInt(wallet.quoteExchange('4611686018427387903', '9223372036854775807', '4611686018427387903')) > 0n);
     const app = byId('liquidity-app');
-    for (const key of ['networkUrl', 'catalogueUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareLiquidityUrl', 'submitLiquidityUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl']) app.dataset[key] = '/' + key;
+    for (const key of ['networkUrl', 'catalogueUrl', 'prepareLaunchPoolUrl', 'prepareLaunchOperationUrl', 'submitLaunchUrl', 'preparePoolUrl', 'prepareSwapUrl', 'prepareLiquidityUrl', 'submitLiquidityUrl', 'prepareReservesUrl', 'submitReservesUrl', 'submitPoolUrl', 'submitSwapUrl']) app.dataset[key] = '/' + key;
+    if (integrated) for (const key of ['prepareLaunchPoolUrl', 'prepareLaunchOperationUrl', 'submitLaunchUrl']) delete app.dataset[key];
     app.dataset.marketUrl = '/Liquidity/Market?poolId=__id__';
     app.dataset.networkId = fixture.networkId; app.dataset.receiptUrl = '/liquidez/operacao/__id__'; app.dataset.statusUrl = '/status/__id__';
-    const lifecyclePool = fixture.catalogue.pools.find(pool => pool.available && (!integrated || pool.poolId === d.poolId));
+    const lifecyclePool = d.launch ? null : fixture.catalogue.pools.find(pool => pool.available && (!integrated || pool.poolId === d.poolId));
     let poolPhase = lifecyclePool ? 'pending' : 'available';
     if (lifecyclePool) app.dataset.poolId = lifecyclePool.poolId;
     let captured = null, preparations = 0, submittedUrl = null, attempts = 0, firstSignatures = null, statusCalls = 0, statusPhase = 'pending', statusFailing = false;
@@ -88,13 +90,14 @@ const d = fixture.draft;
                 pool.statusMessage = poolPhase === 'pending' ? 'A criação aguarda validação da rede e confirmação em bloco.' : 'A criação foi validada e aguarda confirmação em bloco.';
             }
         }
+        else if (url === '/prepareLaunchPoolUrl' || url === '/prepareLaunchOperationUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); }
         else if (url === '/prepareLiquidityUrl') { preparations++; result = d; assert.equal(body.get('Shares'), d.sharesAtomic); assert.equal(body.get('Operation'), d.operation); }
         else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); if (d.operation === 'pool') { assert.equal(body.get('RewardMode'), d.rewardMode || 'fees'); assert.equal(body.get('BurnEnabled'), String(Boolean(d.burnEnabled))); if (d.burnEnabled) { assert.equal(body.get('BurnMode'), d.burnPolicy.basisPoints ? 'percent' : 'fixed'); } } }
         else if (url === '/prepareReservesUrl') {
             preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
             assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
         }
-        else if (url === '/submitLiquidityUrl' || url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl') {
+        else if (url === '/submitLaunchUrl' || url === '/submitLiquidityUrl' || url === '/submitReservesUrl' || url === '/submitPoolUrl' || url === '/submitSwapUrl') {
             assert.equal(body.get('draftId'), d.draftId); attempts++;
             const currentSignatures = body.getAll('signatures');
             if (integrated && attempts === 1) {
@@ -141,7 +144,24 @@ const d = fixture.draft;
         assert(byId('pool-list').textContent.includes(pool.managementMessage), 'the pool explains the renunciation');
     }
     byId('pool-form').requestSubmit(); assert.equal(preparations, 0, 'empty fields must not prepare a transaction');
-    if (d.operation === 'pool') {
+    if (d.launch && d.operation === 'pool') {
+        byId('launch-token').value = d.assetA.id; byId('launch-funding-asset').value = d.assetB.id;
+        byId('launch-sale').value = wallet.formatAtomic(d.launch.saleTokensAtomic, d.assetA.decimals);
+        byId('launch-liquidity').value = wallet.formatAtomic(BigInt(d.launch.totalTokensAtomic) - BigInt(d.launch.saleTokensAtomic), d.assetA.decimals);
+        byId('launch-target').value = wallet.formatAtomic(d.launch.targetAtomic, d.assetB.decimals);
+        byId('launch-seed').value = wallet.formatAtomic(d.launch.raisedAtomic, d.assetB.decimals);
+        byId('launch-deadline').value = String(d.launch.deadlineHeight);
+        byId('launch-user-liquidity').checked = d.launch.allowUserLiquidity;
+        byId('launch-create-form').dispatchEvent(new w.Event('input'));
+        assert.equal(byId('prepare-launch-create').disabled, false);
+        byId('launch-create-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    } else if (['launch-contribute', 'launch-refund'].includes(d.operation)) {
+        byId('launch-pool').value = d.poolId; byId('launch-operation').value = d.operation === 'launch-refund' ? 'refund' : 'contribute';
+        byId('launch-amount').value = d.operation === 'launch-refund' ? '' : wallet.formatAtomic(d.amountAtomic, d.assetB.decimals);
+        byId('launch-contribute-form').dispatchEvent(new w.Event('input'));
+        assert.equal(byId('prepare-launch-operation').disabled, false);
+        byId('launch-contribute-form').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    } else if (d.operation === 'pool') {
         byId('pool-reward-mode').value = d.rewardMode || 'fees';
         byId('pool-form').dispatchEvent(new w.Event('change'));
         assert.equal(byId('pool-reward-title').textContent, d.rewardMode === 'loyalty' ? 'Bônus por permanência' : 'Participação nas taxas');
@@ -208,7 +228,7 @@ const d = fixture.draft;
         byId('sign-exchange').click();
     }
     await wait(() => captured !== null);
-    assert.equal(captured.length, ['swap', 'add', 'remove'].includes(d.operation) ? d.userInputCount : d.inputs.length);
+    assert.equal(captured.length, ['swap', 'add', 'remove', 'launch-contribute', 'launch-refund'].includes(d.operation) ? d.userInputCount : d.inputs.length);
     if (d.operation === 'lock' || d.operation === 'close') assert.equal(submittedUrl, '/submitReservesUrl');
     if (integrated) {
         assert.equal(submittedUrl, '/submitSwapUrl', 'all swaps submit directly using the buyer wallet');

@@ -13,18 +13,26 @@ namespace Povix.Dex.Controllers
     public sealed class LiquidityController : Controller
     {
         [HttpGet]
-        public ActionResult Index(string poolId)
-        { NoCache(); ViewBag.SelectedPoolId = ValidId(poolId) ? poolId : "";
+        public ActionResult Index(string poolId, string tokenId = null)
+        { NoCache(); ViewBag.SelectedLaunchTokenId = ValidId(tokenId) ? tokenId : ""; ViewBag.SelectedPoolId = ValidId(poolId) ? poolId : "";
             return View(MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel()); }
 
         [HttpGet]
-        public ActionResult Create(string tipo = null)
+        public ActionResult Create(string tipo = null, string tokenId = null)
         {
             NoCache();
             if (tipo == "token") return View("~/Views/Tokens/Create.cshtml", new CreateTokenViewModel {
                 Network = MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel() });
+            ViewBag.SelectedLaunchTokenId = ValidId(tokenId) ? tokenId : "";
             ViewBag.CreatePool = true;
             ViewBag.SelectedPoolId = "";
+            return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
+        }
+
+        [HttpGet]
+        public ActionResult Launches()
+        {
+            NoCache(); ViewBag.Launches = true; ViewBag.SelectedPoolId = "";
             return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
         }
 
@@ -39,6 +47,23 @@ namespace Povix.Dex.Controllers
             return Read(() => { Session["Povix.Dex.TokenDraftSession"] = true;
                 return MvcApplication.TokenNetwork.PreparePool(model, TokensController.DecodePublicKeys(publicKeys), changeAddress, Session.SessionID); });
         }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        public ActionResult PrepareLaunchPool(CreateLaunchPoolViewModel model, string[] publicKeys, string changeAddress)
+        {
+            if (!ModelState.IsValid) return Error("Confira o token, a meta, as quantidades e o bloco limite.", 400, "fields_invalid");
+            return Read(() => { Session["Povix.Dex.TokenDraftSession"] = true;
+                return MvcApplication.TokenNetwork.PrepareLaunchPool(model, TokensController.DecodePublicKeys(publicKeys), changeAddress, Session.SessionID); });
+        }
+        [HttpPost, ValidateAntiForgeryToken]
+        public ActionResult PrepareLaunchOperation(LaunchContributionViewModel model, string[] publicKeys, string changeAddress)
+        {
+            if (!ModelState.IsValid) return Error("Confira o lançamento e o aporte.", 400, "fields_invalid");
+            return Read(() => { Session["Povix.Dex.TokenDraftSession"] = true;
+                return MvcApplication.TokenNetwork.PrepareLaunchOperation(model, TokensController.DecodePublicKeys(publicKeys), changeAddress, Session.SessionID); });
+        }
+        [HttpPost, ValidateAntiForgeryToken]
+        public Task<ActionResult> SubmitLaunchOperation(string draftId, string[] signatures) => Submit(draftId, signatures, false, false, false, true);
 
         [HttpPost, ValidateAntiForgeryToken]
         public ActionResult PrepareLiquidityChange(LiquidityChangeViewModel model, string[] publicKeys, string changeAddress)
@@ -77,13 +102,13 @@ namespace Povix.Dex.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         public Task<ActionResult> SubmitSwap(string draftId, string[] signatures) => Submit(draftId, signatures, true);
 
-        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool reserveOperation = false, bool liquidityChange = false)
+        private async Task<ActionResult> Submit(string draftId, string[] signatures, bool swap, bool reserveOperation = false, bool liquidityChange = false, bool launchOperation = false)
         {
             NoCache();
             if (!ValidDraft(draftId) || !ValidSignatures(signatures)) return Error("Assinaturas inválidas.", 400, "signatures_invalid");
             if (MvcApplication.TokenNetwork == null) return Error("A rede está indisponível.", 503, "network_unavailable");
             try {
-                string id = liquidityChange ? await MvcApplication.TokenNetwork.SubmitLiquidityChangeAsync(draftId, signatures, Session.SessionID) : reserveOperation ? await MvcApplication.TokenNetwork.SubmitReserveOperationAsync(draftId, signatures, Session.SessionID) :
+                string id = launchOperation ? await MvcApplication.TokenNetwork.SubmitLaunchOperationAsync(draftId, signatures, Session.SessionID) : liquidityChange ? await MvcApplication.TokenNetwork.SubmitLiquidityChangeAsync(draftId, signatures, Session.SessionID) : reserveOperation ? await MvcApplication.TokenNetwork.SubmitReserveOperationAsync(draftId, signatures, Session.SessionID) :
                     swap ? await MvcApplication.TokenNetwork.SubmitSwapAsync(draftId, signatures, Session.SessionID) :
                     await MvcApplication.TokenNetwork.SubmitPoolAsync(draftId, signatures, Session.SessionID);
                 return Json(new { transactionId = id, receiptUrl = Url.Action("Details", new { id }) });

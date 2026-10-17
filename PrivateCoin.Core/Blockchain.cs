@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 20;
+        public const int ConsensusVersion = 21;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
@@ -555,7 +555,7 @@ namespace PrivateCoin.Core
                 Block block = blocks[blockIndex];
                 if (block.ConsensusVersion >= LegacySignedVersion && block.Transactions.Count == 0)
                     throw new InvalidOperationException("A new block must contain validated operations or a wallet reward.");
-                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != 18 && block.ConsensusVersion != 19 && block.ConsensusVersion != ConsensusVersion)
+                if (block.ConsensusVersion != 0 && block.ConsensusVersion != LegacySignedVersion && block.ConsensusVersion != LegacyHybridVersion && block.ConsensusVersion != LegacyWalletBatchVersion && block.ConsensusVersion != LegacyImmediateVersion && block.ConsensusVersion != SelfValidatedVersion && block.ConsensusVersion != ApprovalVersion && block.ConsensusVersion != ImmediateChangeVersion && block.ConsensusVersion != ImmediateTokenVersion && block.ConsensusVersion != LegacyImmediateTransferVersion && block.ConsensusVersion != BlockConfirmationVersion && block.ConsensusVersion != VariableBatchVersion && block.ConsensusVersion != PoolReserveVersion && block.ConsensusVersion != 18 && block.ConsensusVersion != 19 && block.ConsensusVersion != 20 && block.ConsensusVersion != ConsensusVersion)
                     throw new InvalidOperationException("Unsupported block consensus version.");
                 if (block.ConsensusVersion < latestVersion)
                     throw new InvalidOperationException("A chain cannot revert to legacy consensus.");
@@ -933,6 +933,10 @@ namespace PrivateCoin.Core
             if (transaction == null || transaction.Id != transaction.CalculateId() || (transaction.Outputs.Count == 0 && transaction.Kind != TransactionKind.TokenManage)) throw new InvalidOperationException("Invalid transaction.");
             if (transaction.TransactionApproval != null && !RequiresLockedTokenApproval(transaction))
                 throw new InvalidOperationException("Only fee-paying movements may carry an approval.");
+            if (transaction.Launch != null && !TokenLaunch.IsOperation(transaction.Kind))
+                throw new InvalidOperationException("Launch metadata is only valid on launch operations.");
+            if (consensusVersion < 21 && (transaction.Launch != null || TokenLaunch.IsOperation(transaction.Kind)))
+                throw new InvalidOperationException("Launch pools require consensus v21.");
             if (consensusVersion < 19 && (transaction.PoolParticipation != null || transaction.LiquidityChange != null ||
                 transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove))
                 throw new InvalidOperationException("Public liquidity requires consensus v19.");
@@ -956,7 +960,7 @@ namespace PrivateCoin.Core
             }
             if (transaction.Inputs.Count == 0 && !allowMint) throw new InvalidOperationException("Minting is only allowed for genesis and mining rewards.");
             if (!Enum.IsDefined(typeof(TransactionKind), transaction.Kind)) throw new InvalidOperationException("Unknown transaction kind.");
-            TokenExchange.ValidatePoolOperation(transaction, utxo);
+            TokenExchange.ValidatePoolOperation(transaction, utxo, height);
             bool poolOperation = TokenExchange.IsPoolOperation(transaction.Kind);
             bool tokenOperation = transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || transaction.Kind == TransactionKind.TokenManage || poolOperation;
             if (allowMint && (transaction.Kind != TransactionKind.Transfer || transaction.Token != null || transaction.Outputs.Any(o => o.AssetId != null)))
@@ -986,7 +990,7 @@ namespace PrivateCoin.Core
                 // Validated swaps and proportional liquidity changes may consume paired reserves
                 // without provider signatures. Free funding and closure still require ownership.
                 bool automaticReserve = consensusVersion >= 18 && (transaction.Kind == TransactionKind.LiquiditySwap || consensusVersion >= 19 &&
-                    (transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove)) && source.IsPoolReserve;
+                    (transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove) || consensusVersion >= 21 && TokenLaunch.IsStep(transaction.Kind)) && source.IsPoolReserve;
                 if (!automaticReserve || !string.IsNullOrEmpty(input.Signature))
                 {
                     if (string.IsNullOrEmpty(input.Signature)) throw new InvalidOperationException("Missing ownership signature.");
@@ -1178,7 +1182,8 @@ namespace PrivateCoin.Core
             TokenGovernance.Record(transaction, utxo);
             for (int i = 0; i < transaction.Outputs.Count; i++)
                 if (transaction.Outputs[i].Amount > 0) utxo.Add(Key(transaction.Id, i), new UnspentOutput { TransactionId = transaction.Id, OutputIndex = i, Output = transaction.Outputs[i],
-                    TransactionKind = i == 0 || (i == 1 && (transaction.Kind == TransactionKind.LiquidityPool || transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove)) ? transaction.Kind : TransactionKind.Transfer,
+                    TransactionKind = i == 0 || (i == 1 && (transaction.Kind == TransactionKind.LiquidityPool || transaction.Kind == TransactionKind.LiquiditySwap || transaction.Kind == TransactionKind.LiquidityAdd || transaction.Kind == TransactionKind.LiquidityRemove || transaction.Kind == TransactionKind.LaunchCreate || transaction.Kind == TransactionKind.LaunchContribute || transaction.Kind == TransactionKind.LaunchActivate)) ? transaction.Kind : TransactionKind.Transfer,
+                    Launch = i < 2 && transaction.Kind != TransactionKind.LaunchActivate && transaction.Kind != TransactionKind.LaunchRefund ? transaction.Launch?.Copy() : null,
                     PoolParticipation = i < 2 ? transaction.PoolParticipation?.Copy() : null,
                     PoolBurnPolicy = i < 2 ? transaction.PoolBurnPolicy?.Copy() : null,
                     ValidatorPublicKey = i == 0 ? transaction.ValidatorPublicKey : null,

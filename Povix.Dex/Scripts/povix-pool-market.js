@@ -3,7 +3,7 @@
     const app = document.getElementById('pool-market');
     if (!app) return;
     const byId = id => document.getElementById(id);
-    const operations = { pool: 'Criação', swap: 'Troca', lock: 'Bloqueio', close: 'Encerramento', add: 'Adição de liquidez', remove: 'Remoção de liquidez' };
+    const operations = { pool: 'Criação', 'launch-open': 'Abertura do lançamento', 'launch-contribute': 'Aporte no lançamento', 'launch-refund': 'Devolução do lançamento', swap: 'Troca', lock: 'Bloqueio', close: 'Encerramento', add: 'Adição de liquidez', remove: 'Remoção de liquidez' };
     const statuses = { confirmed: 'Confirmada', pending: 'Pendente', validated: 'Validada', rejected: 'Rejeitada' };
     let timer, controller, generation = 0, stopped = false;
     function atomic(value, decimals) {

@@ -59,6 +59,60 @@ namespace Povix.Dex.Services
             }
         }
 
+        public object PrepareLaunchPool(CreateLaunchPoolViewModel model, string[] publicKeys, string address, string owner)
+        {
+            lock (sync) {
+                RequireReady(); ReserveDraftSlot(owner);
+                var a = Asset(model.AssetA); var b = Asset(model.AssetB);
+                if (a.Id == "povix" || a.Id == b.Id) throw new TokenOperationException("fields_invalid", "Escolha um token de lançamento e outro ativo de captação.");
+                var key = publicKeys.FirstOrDefault(value => AddressFor(value) == address);
+                if (key == null) throw new TokenOperationException("wallet_invalid", "Selecione a carteira do criador.");
+                var tx = TokenExchange.PrepareLaunch(blockchain, pending, publicKeys, AssetId(a), AssetId(b), address,
+                    ParseAmount(model.InitialContribution, b.Decimals), ParseAmount(model.SaleTokens, a.Decimals), ParseAmount(model.LiquidityTokens, a.Decimals),
+                    ParseAmount(model.Target, b.Decimals), model.DeadlineHeight, model.AllowUserLiquidity, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
+                return AddExchangeDraft(new PreparedExchange { Transaction = tx, Operation = "pool", Owner = owner, ProviderKey = key,
+                    Address = address, AssetA = a, AssetB = b, ReserveA = tx.Outputs[0].Amount, ReserveB = tx.Outputs[1].Amount, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
+            }
+        }
+        public object PrepareLaunchOperation(LaunchContributionViewModel model, string[] publicKeys, string address, string owner)
+        {
+            lock (sync) {
+                RequireReady(); ReserveDraftSlot(owner);
+                var pool = Snapshot(model.PoolId);
+                bool refund = model.Operation == "refund";
+                if ((model.Operation != "contribute" && !refund) || pool == null || pool.ReserveA?.Launch == null ||
+                    pool.Status != (refund ? "launch_expired" : "collecting"))
+                    throw new TokenOperationException("launch_unavailable", "O lançamento não está disponível para esta operação. Atualize as reservas e o bloco limite.");
+                if (!publicKeys.Any(value => AddressFor(value) == address)) throw new TokenOperationException("wallet_invalid", "Selecione sua carteira.");
+                long amount = refund ? 0 : ParseAmount(model.Amount, pool.AssetB.Decimals);
+                var tx = TokenExchange.PrepareLaunchStep(blockchain, pending, publicKeys, pool.ReserveA, pool.ReserveB, pool.ProviderKey,
+                    address, amount, refund, GetSelectedFee(model.FeePriority, model.FeeAtomic), PoolInputKeys());
+                return AddExchangeDraft(new PreparedExchange { Transaction = tx, Operation = refund ? "launch-refund" : "launch-contribute", Owner = owner,
+                    PoolId = pool.Id, ReserveId = pool.Transaction.Id, ProviderKey = pool.ProviderKey, Address = address,
+                    AssetA = pool.AssetA, AssetB = pool.AssetB, ReserveA = pool.ReserveA.Output.Amount, ReserveB = pool.ReserveB.Output.Amount,
+                    Amount = amount, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
+            }
+        }
+        public async Task<string> SubmitLaunchOperationAsync(string draftId, string[] signatures, string owner)
+        {
+            Transaction tx;
+            lock (sync) {
+                var prior = submitted.FirstOrDefault(item => item.DraftId == draftId && (item.Exchange?.Operation == "launch-contribute" || item.Exchange?.Operation == "launch-refund"));
+                if (prior != null) return PriorExchange(draftId, prior.Exchange.Operation, signatures).Transaction.Id;
+                RequireReady(); PreparedExchange draft;
+                if (!exchangeDrafts.TryGetValue(draftId ?? "", out draft) || (draft.Operation != "launch-contribute" && draft.Operation != "launch-refund"))
+                    throw new TokenOperationException("draft_missing", "Prepare novamente a operação de lançamento.");
+                draft = ExchangeDraft(draftId, owner, draft.Operation);
+                var pool = Snapshot(draft.PoolId);
+                if (pool == null || pool.Transaction.Id != draft.ReserveId ||
+                    pool.Status != (draft.Operation == "launch-refund" ? "launch_expired" : "collecting"))
+                    throw new TokenOperationException("pool_changed", "As reservas ou o prazo mudaram. Revise novamente.");
+                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.UserInputCount);
+                tx = AcceptExchange(draftId, draft, signatures);
+            }
+            await Relay(tx).ConfigureAwait(false); return tx.Id;
+        }
+
         public object PrepareLiquidityChange(LiquidityChangeViewModel model, string[] publicKeys, string address, string owner)
         {
             lock (sync)
@@ -230,7 +284,7 @@ namespace Povix.Dex.Services
                     Outputs = tx.Outputs.Select((output, index) => {
                         var asset = output.AssetId == null ? NativeAsset() : output.AssetId == record.Exchange.AssetA.Id ? record.Exchange.AssetA : record.Exchange.AssetB;
                         return new ExchangeOutputViewModel { Amount = output.Amount, Symbol = asset.Symbol, Decimals = asset.Decimals, Address = output.OneTimeAddress,
-                            Purpose = index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
+                            Purpose = tx.Kind == TransactionKind.LaunchRefund ? "Devolução do lançamento" : tx.Kind == TransactionKind.LaunchActivate && index >= 2 && index < 2 + tx.Launch.Contributions.Count ? "Tokens comprados no lançamento" : index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
                                 tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ? "Reserva bloqueada da pool" : "Reserva da pool antiga (sem bloqueio)" :
                                 record.Exchange.Operation == "remove" && index < 4 ? "Liquidez retirada pela carteira" :
                                 record.Exchange.Operation == "swap" && index == 2 ? "Recebimento da troca" : "Troco da carteira" };
@@ -255,7 +309,7 @@ namespace Povix.Dex.Services
         private SubmittedToken PriorExchange(string id, string operation, string[] signatures)
         {
             var prior = submitted.FirstOrDefault(item => item.DraftId == id && item.Exchange?.Operation == operation);
-            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take((operation == "swap" || operation == "add" || operation == "remove") ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
+            if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take((operation == "swap" || operation == "add" || operation == "remove" || operation == "launch-contribute" || operation == "launch-refund") ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
                     .Select(input => input.Signature).SequenceEqual(signatures)))
                 throw new TokenOperationException("signatures_invalid", "As assinaturas não correspondem ao envio já aceito.");
             return prior;
@@ -318,32 +372,34 @@ namespace Povix.Dex.Services
             Transaction current;
             bool rootConfirmed = confirmed.TryGetValue(id, out current);
             if (!rootConfirmed) current = root.Transaction;
+            var launch = current.Launch;
             if (rootConfirmed)
             {
                 while (true)
                 {
                     var next = confirmed.Values.FirstOrDefault(tx =>
                         (tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityClose ||
-                            tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ||
+                            tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove || TokenLaunch.IsStep(tx.Kind) ||
                             submitted.Any(item => item.Transaction.Id == tx.Id && (item.Exchange?.Operation == "lock" || item.Exchange?.Operation == "swap") && item.Exchange.PoolId == id)) &&
                         tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex == 0) &&
                         tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex == 1));
                     if (next == null) break;
-                    current = next;
-                    if (current.Kind == TransactionKind.LiquidityClose) break;
+                    current = next; if (current.Launch != null) launch = current.Launch;
+                    if (current.Kind == TransactionKind.LiquidityClose || current.Kind == TransactionKind.LaunchRefund) break;
                 }
             }
             string address = AddressFor(root.Exchange.ProviderKey);
             var outputs = blockchain.GetUnspentOutputs(new[] { address }).Where(item => item.TransactionId == current.Id && item.OutputIndex < 2).ToArray();
             var blocking = pending.FirstOrDefault(tx => tx.Inputs.Any(input => input.TransactionId == current.Id && input.OutputIndex < 2));
-            bool closed = current.Kind == TransactionKind.LiquidityClose;
+            bool closed = current.Kind == TransactionKind.LiquidityClose || current.Kind == TransactionKind.LaunchRefund;
+            bool collecting = current.Kind == TransactionKind.LaunchCreate || current.Kind == TransactionKind.LaunchContribute;
             bool locked = !closed && outputs.Length == 2 && outputs.All(output => output.IsPoolReserve);
             bool reservesReady = rootConfirmed && outputs.Length == 2 && blocking == null && !closed;
             bool closureRenounced = CreatorRenounced(root.Exchange.AssetA.Id, root.Exchange.ProviderKey) ||
                 CreatorRenounced(root.Exchange.AssetB.Id, root.Exchange.ProviderKey);
             bool otherProviders = current.PoolParticipation != null && current.PoolParticipation.Shares.Keys.Any(holder => holder != address);
-            bool canManage = reservesReady && (!locked || !closureRenounced && !otherProviders);
-            bool available = reservesReady && locked;
+            bool canManage = reservesReady && !collecting && (!locked || !closureRenounced && !otherProviders);
+            bool available = reservesReady && locked && !collecting;
             string status, reason, message;
             if (!rootConfirmed) {
                 var creation = pending.FirstOrDefault(tx => tx.Id == id);
@@ -356,7 +412,7 @@ namespace Povix.Dex.Services
                 blocking = null;
             } else if (closed) {
                 status = "closed"; reason = "pool_closed";
-                message = "Pool encerrada. As duas reservas foram devolvidas ao saldo livre da carteira provedora.";
+                message = current.Kind == TransactionKind.LaunchRefund ? "Lançamento encerrado: aportes devolvidos aos participantes e tokens devolvidos ao criador." : "Pool encerrada. As duas reservas foram devolvidas ao saldo livre da carteira provedora.";
                 blocking = null;
             } else if (outputs.Length != 2) {
                 blocking = blockchain.Blocks.Reverse().SelectMany(block => block.Transactions)
@@ -368,6 +424,11 @@ namespace Povix.Dex.Services
                 bool swap = submitted.Any(item => item.Transaction.Id == blocking.Id && item.Exchange?.Operation == "swap");
                 status = "busy"; reason = swap ? "swap_pending" : "reserve_transaction_pending";
                 message = (swap ? "Uma troca" : "Uma movimentação das reservas") + " aguarda confirmação na transação " + blocking.Id + ". Aguarde a atualização da rede.";
+            } else if (collecting) {
+                bool expired = blockchain.Blocks.Count >= current.Launch.DeadlineHeight;
+                status = expired ? "launch_expired" : "collecting"; reason = expired ? "launch_deadline" : "launch_target_pending";
+                message = expired ? "Meta não atingida no bloco limite. Qualquer carteira pode pagar a taxa para devolver todos os aportes aos seus donos." :
+                    "Em captação. Negociações bloqueadas até a meta; o último aporte entrega os tokens e abre a pool após confirmação.";
             } else if (!locked) {
                 status = "unlocked"; reason = "legacy_reserves_unlocked";
                 message = "Esta pool antiga ainda não tem bloqueio na blockchain. O provedor deve bloquear as reservas antes de trocar.";
@@ -375,7 +436,7 @@ namespace Povix.Dex.Services
                 status = "available"; reason = "confirmed_reserves";
                 message = "Reservas bloqueadas na blockchain e disponíveis para troca. Transferências comuns não podem movimentá-las.";
             }
-            return new PoolSnapshot { Id = id, RewardMode = root.Exchange.RewardMode ?? "fees", LoyaltyPolicy = root.Exchange.LoyaltyPolicy, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
+            return new PoolSnapshot { Id = id, Launch = launch, RewardMode = root.Exchange.RewardMode ?? "fees", LoyaltyPolicy = root.Exchange.LoyaltyPolicy, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
                 AssetA = root.Exchange.AssetA, AssetB = root.Exchange.AssetB, Available = available, Locked = locked, CanManage = canManage,
                 ClosureRenounced = closureRenounced,
                 Status = status, StatusReason = reason, StatusMessage = message, BlockingTransactionId = blocking?.Id,
@@ -392,6 +453,7 @@ namespace Povix.Dex.Services
                 .SelectMany(id => new[] { id + ":0", id + ":1" }).Concat(locked.Select(output => output.TransactionId + ":" + output.OutputIndex)), StringComparer.Ordinal);
         }
         private static object PoolResponse(PoolSnapshot pool) => new {
+            launch = LaunchResponse(pool.Launch),
             rewardMode = pool.RewardMode, loyaltyPolicy = LoyaltyPolicyResponse(pool.LoyaltyPolicy),
             burnEnabled = pool.Transaction.PoolBurnEnabled, burnPolicy = PoolBurnResponse(pool.Transaction.PoolBurnPolicy), allowUserLiquidity = pool.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(pool.Transaction.PoolParticipation),
@@ -402,6 +464,7 @@ namespace Povix.Dex.Services
             managementMessage = pool.ClosureRenounced ? "Renúncia do criador: encerramento bloqueado neste DEX. As reservas permanecem destinadas às trocas." : "",
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
+            launch = LaunchResponse(draft.Transaction.Launch),
             rewardMode = draft.RewardMode ?? "fees", loyaltyPolicy = LoyaltyPolicyResponse(draft.LoyaltyPolicy),
             burnEnabled = draft.Transaction.BurnEnabled, burnPolicy = PoolBurnResponse(draft.Transaction.BurnPolicy), allowUserLiquidity = draft.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(draft.Transaction.PoolParticipation),
@@ -437,6 +500,10 @@ namespace Povix.Dex.Services
         }
         private static object PoolBurnResponse(PoolBurnPolicy policy) => policy == null ? null : new {
             basisPoints = policy.BasisPoints, fixedAAtomic = Atomic(policy.FixedA), fixedBAtomic = Atomic(policy.FixedB) };
+        private static object LaunchResponse(LaunchPoolState state) => state == null ? null : new {
+            targetAtomic = Atomic(state.Target), saleTokensAtomic = Atomic(state.SaleTokens), totalTokensAtomic = Atomic(state.TotalTokens),
+            raisedAtomic = Atomic(state.Raised), deadlineHeight = state.DeadlineHeight, allowUserLiquidity = state.AllowUserLiquidity,
+            contributors = state.Contributions.OrderBy(item => item.Key, StringComparer.Ordinal).Select(item => new { address = item.Key, amountAtomic = Atomic(item.Value) }).ToArray() };
         private static object LoyaltyPolicyResponse(PoolLoyaltyPolicy policy) => policy == null ? null : new {
             feeBasisPoints = policy.FeeBasisPoints, minimumReserveAtomic = Atomic(policy.MinimumReserveAtomic), earlyExit = policy.EarlyExit,
             status = "configured", periodUnits = new[] { "days", "months", "years" } };
@@ -468,6 +535,7 @@ namespace Povix.Dex.Services
         {
             public string Id, ProviderKey, Status, StatusReason, StatusMessage, BlockingTransactionId, RewardMode;
             public Transaction Transaction;
+            public LaunchPoolState Launch;
             public TokenDefinition AssetA, AssetB;
             public PoolLoyaltyPolicy LoyaltyPolicy;
             public UnspentOutput ReserveA, ReserveB;
