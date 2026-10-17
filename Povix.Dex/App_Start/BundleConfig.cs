@@ -8,7 +8,7 @@ namespace Povix.Dex
         // For more information on bundling, visit https://go.microsoft.com/fwlink/?LinkId=301862
         public static void RegisterBundles(BundleCollection bundles)
         {
-            bundles.Add(new Bundle("~/bundles/povix-styles").Include("~/Content/Site.css"));
+            bundles.Add(new Bundle("~/bundles/povix-styles").Include("~/Content/Site.css", "~/Content/povix-pools.css"));
 
             // Plain bundles preserve the modern wallet scripts without legacy minification.
             // Scripts.Url versions the combined wallet and page code by their contents,
