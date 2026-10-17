@@ -14,6 +14,9 @@ namespace Povix.Dex.Controllers
     public sealed class TokensController : Controller
     {
         [HttpGet]
+        public ActionResult Index() { NoCache(); return View(); }
+
+        [HttpGet]
         public ActionResult Create()
         {
             NoCache();

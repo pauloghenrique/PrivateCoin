@@ -1,5 +1,12 @@
 # Regressão do cadastro e da movimentação de tokens
 
+## Lista de tokens e menu
+
+Execute `node Tests/PovixDexTokenListUiRegression.js` após instalar o `jsdom@26`
+em `work/liquidity-tools`, conforme o comando abaixo. Verifica o menu **Token**,
+lista por carteira, metadados como texto seguro, links de edição, renúncia,
+falha de atualização, respostas antigas após desconexão e carteira sem tokens.
+
 ## Políticas de tokens e administração (v20 em rascunho)
 
 A regressão também cobre queima automática percentual e fixa, débito adicional,

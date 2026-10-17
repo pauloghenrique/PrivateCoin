@@ -1,5 +1,13 @@
 # Tokens, pools de liquidez e trocas no Povix.Dex
 
+O item **Token** do menu abre `/tokens`, com os tokens confirmados criados pela
+carteira conectada. A página reúne os botões **Criar token** e **Editar token**,
+mostra nome, símbolo, identificador e quantidade inicial, e permite abrir o perfil
+de um token específico. Perfis com edição renunciada são identificados na lista.
+Trocar ou desconectar a carteira limpa a consulta anterior. **Atualizar lista**
+refaz a consulta sem perder a última lista da mesma carteira quando a rede falha.
+Os acessos diretos de criação e edição foram substituídos por **Token** no menu.
+
 A tela `/tokens/criar`, também acessível por `/liquidez/criar?tipo=token`, cadastra
 tokens de usuários com suas próprias políticas no `PrivateCoin.Core`. O separador
 **Criar pool** mantém a operação de liquidez em `/liquidez/criar`. A página

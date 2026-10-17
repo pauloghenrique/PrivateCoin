@@ -1,0 +1,17 @@
+@{ ViewBag.Title = "Token"; }
+<main id="token-list-app" data-tokens-url="@Url.Action("WalletTokens", "TokenProfiles")" data-edit-url="@Url.Action("Index", "TokenProfiles")">
+    <div class="page-intro token-list-intro">
+        <div><span class="eyebrow">SEUS ATIVOS NA REDE POVIX</span><h1>Token</h1><p>Consulte os tokens criados pela carteira conectada e gerencie seus perfis.</p></div>
+        <div class="token-list-actions"><a class="button button-primary" href="@Url.Action("Create", "Tokens")">Criar token</a><a class="button" href="@Url.Action("Index", "TokenProfiles")">Editar token</a></div>
+    </div>
+    <form id="token-list-csrf" hidden>@Html.AntiForgeryToken()</form>
+    <div id="token-list-message" class="notice" role="alert" hidden></div>
+    <section aria-labelledby="token-list-heading">
+        <div class="token-list-heading"><h2 id="token-list-heading">Tokens criados</h2><button id="token-list-refresh" type="button" class="text-button" disabled>Atualizar lista</button></div>
+        <p id="token-list-state" class="muted-text" role="status" aria-live="polite">Conecte sua carteira para consultar os tokens criados.</p>
+        <button id="token-list-connect" type="button" data-wallet-open class="button">Conectar carteira</button>
+        <ul id="token-list" class="token-catalogue" aria-label="Tokens criados pela carteira" hidden></ul>
+    </section>
+    <noscript><p class="notice">Ative o JavaScript para consultar os tokens da sua carteira.</p></noscript>
+</main>
+@section scripts { <script src="@Scripts.Url("~/bundles/povix-token-list")"></script> }

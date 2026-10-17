@@ -380,3 +380,15 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
     .pool-create-steps { gap:12px; font-size:11px; }
     .pool-create-steps span { width:24px; height:24px; }
 }
+
+/* Token catalogue and page actions. */
+.token-list-intro { display:flex; justify-content:space-between; align-items:center; gap:24px; }
+.token-list-actions { display:flex; flex-wrap:wrap; gap:12px; flex-shrink:0; }
+.token-list-actions > .button:not(.button-primary) { border:1px solid var(--line); color:var(--ink); }
+.token-list-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.token-catalogue { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; padding:0; list-style:none; margin:20px 0; }
+.token-catalogue-item { padding:24px; min-width:0; overflow-wrap:anywhere; }
+.token-catalogue-item h3 { margin:0 0 10px; font-size:18px; }
+.token-catalogue-item p { line-height:1.7; }
+.token-catalogue-id { font:11px/1.8 Consolas,monospace; color:var(--muted); overflow-wrap:anywhere; }
+@media (max-width:720px) { .token-list-intro { align-items:flex-start; flex-direction:column; } .token-catalogue { grid-template-columns:minmax(0,1fr); } }
