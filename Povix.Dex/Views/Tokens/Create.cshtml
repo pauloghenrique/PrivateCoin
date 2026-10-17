@@ -3,7 +3,6 @@
 @{ ViewBag.Title = "Criar token"; }
 <main id="token-app" data-network-url="@Url.Action("NetworkStatus", "Tokens")" data-balance-url="@Url.Action("Balance", "Tokens")"
       data-prepare-url="@Url.Action("Prepare", "Tokens")" data-submit-url="@Url.Action("Submit", "Tokens")" data-network-id="@Model.Network.NetworkId">
-    <nav class="creation-tabs" aria-label="Tipo de criação"><a href="@Url.Action("Create", "Liquidity", new { tipo = "token" })" aria-current="page">Criar token</a><a href="@Url.Action("Create", "Liquidity")">Criar pool</a><a href="@Url.Action("Manage", "Tokens")">Administrar token</a></nav>
     <div class="page-intro"><span class="eyebrow">SEU ATIVO, NA REDE POVIX</span><h1>Crie seu token.</h1><p>Defina os detalhes, assine com sua carteira e acompanhe o registro na blockchain.</p></div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span><span class="network-strip-end">Regras próprias para seu novo token</span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
