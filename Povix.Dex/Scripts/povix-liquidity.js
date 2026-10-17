@@ -435,7 +435,7 @@
                 const reserves = node('dl', 'pool-item-reserves');
                 for (const [token, amount] of [[pool.assetA, pool.reserveAAtomic], [pool.assetB, pool.reserveBAtomic]]) {
                     const reserve = node('div', '');
-                    reserve.append(node('dt', '', token.symbol),
+                    reserve.append(node('dt', '', 'Reserva de ' + token.symbol),
                         node('dd', '', atomicText(amount, token.decimals) + ' ' + token.symbol));
                     reserves.append(reserve);
                 }
@@ -457,10 +457,11 @@
                     button.type = 'button';
                     button.addEventListener('click', () => manageReserves(pool)); actions.append(button);
                 }
-                details.append(price);
+                const policy = node('div', 'pool-card-policy', pool.allowUserLiquidity ? 'Liquidez aberta a outros usuários' : 'Liquidez exclusiva do criador');
                 if (pool.statusMessage) details.append(node('p', 'pool-item-message', pool.statusMessage));
                 if (pool.managementMessage) details.append(node('p', 'pool-item-message', pool.managementMessage));
-                entry.append(heading, status, reserves, actions, details); byId('pool-list').appendChild(entry);
+                const top = node('div', 'pool-card-top'); top.append(heading, status);
+                entry.append(top, reserves, price, policy, details, actions); byId('pool-list').appendChild(entry);
             });
             filterPoolList();
             if (byId('user-liquidity-pool') && !draft) options('user-liquidity-pool', pools.filter(pool => pool.allowUserLiquidity), pool => pool.assetA.symbol + '/' + pool.assetB.symbol + ' · ' + pool.poolId.slice(0, 12), 'Selecione uma pool');
