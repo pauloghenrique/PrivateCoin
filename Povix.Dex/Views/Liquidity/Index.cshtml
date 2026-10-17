@@ -12,6 +12,48 @@
     </div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
+    @if (creating)
+    {
+        <section class="card token-form token-guide" aria-labelledby="token-guide-title">
+            <span class="eyebrow">PREPARE SEU TOKEN</span>
+            <h2 id="token-guide-title">Informações e opções do token</h2>
+            <p>A pool utiliza dois ativos já existentes. Para lançar um novo token, crie-o primeiro e aguarde a confirmação na blockchain antes de selecionar os ativos abaixo.</p>
+            <p><a class="button button-primary" href="@Url.Action("Create", "Tokens")">Criar token →</a> <a class="text-button" href="@Url.Action("Index", "TokenProfiles")">Editar perfil do token</a></p>
+            <details>
+                <summary>Nome, símbolo, quantidade e carteira de recebimento</summary>
+                <dl class="review-list">
+                    <div><dt>Nome do token</dt><dd>Até 64 caracteres. É registrado publicamente na blockchain.</dd></div>
+                    <div><dt>Símbolo</dt><dd>De 1 a 10 letras de A a Z. O identificador do token distingue símbolos iguais.</dd></div>
+                    <div><dt>Quantidade inicial</dt><dd>Positiva e fixa. Toda a oferta é criada de uma vez e enviada ao endereço escolhido.</dd></div>
+                    <div><dt>Casas decimais</dt><dd>De 0 a 8. Definem as frações permitidas; a quantidade deve caber no limite de unidades atômicas da rede.</dd></div>
+                    <div><dt>Carteira de recebimento</dt><dd>Endereço POVIX de 64 caracteres. Use um endereço salvo na sua carteira para depois movimentar os tokens.</dd></div>
+                </dl>
+            </details>
+            <details>
+                <summary>Descrição, logo, site e redes sociais</summary>
+                <p>Após a confirmação da criação, o perfil local assinado permite editar nome de exibição, símbolo, descrição de até 1.000 caracteres e site de até 300 caracteres. Essas informações não substituem o registro original na blockchain.</p>
+                <p>Logo e campos específicos para redes sociais ainda não estão disponíveis. O perfil pode incluir um site oficial com seus links.</p>
+            </details>
+            <details>
+                <summary>Configurações avançadas e disponibilidade na rede</summary>
+                <dl class="review-list">
+                    <div><dt>Oferta fixa ou emissão adicional</dt><dd>A criação atual usa oferta fixa, sem emissão adicional.</dd></div>
+                    <div><dt>Limite máximo de oferta</dt><dd>Igual à quantidade total definida na criação; não há um teto adicional configurável.</dd></div>
+                    <div><dt>Queima</dt><dd>Não há opção de queima de tokens no fluxo atual.</dd></div>
+                    <div><dt>Pausa de transferências</dt><dd>Não há controle administrativo de pausa disponível.</dd></div>
+                    <div><dt>Permissões de administração</dt><dd>O criador assina as alterações do perfil local. Pode renunciar permanentemente à edição e ao encerramento das pools deste token que administra nesta instalação do DEX. Isso não concede poderes de emissão ou pausa. Não há configuração de administração por múltiplas assinaturas nesta tela.</dd></div>
+                    <div><dt>Distribuição com bloqueio e liberação gradual</dt><dd>Não há distribuição programada nem liberação gradual de tokens disponível na criação.</dd></div>
+                    <div><dt>Privacidade</dt><dd>O fluxo atual não oferece escolha para ocultar participantes ou valores. Nome, símbolo e dados da transação são públicos na blockchain.</dd></div>
+                </dl>
+            </details>
+            <details>
+                <summary>O que conferir antes de confirmar</summary>
+                <p>Na revisão da criação do token, confira nome, símbolo, oferta total, casas decimais, endereço de recebimento, taxa em POVIX e troco. A quantidade, a precisão e os dados originais registrados na blockchain não podem ser alterados pelo perfil local.</p>
+                <p>A senha e as chaves privadas ficam no navegador. A assinatura e o envio precisam ser seguidos da confirmação em um bloco validado pela rede.</p>
+                <p>Na revisão da pool, confira os dois ativos, as reservas, o preço inicial, as taxas e a permissão para usuários adicionarem e removerem liquidez. Essa permissão é permanente para a pool.</p>
+            </details>
+        </section>
+    }
     <div class="liquidity-grid">
         <div id="pool-management-fee" class="liquidity-setup" hidden="@(!creating)">
 

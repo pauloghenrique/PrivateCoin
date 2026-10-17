@@ -323,3 +323,15 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #wallet-menu .wallet-form { display:grid; grid-template-columns:1fr; }
 #wallet-menu [hidden] { display:none !important; }
 #wallet-message { color:var(--muted); font-size:13px; }
+#liquidity-app .token-guide { margin-bottom: 24px; }
+#liquidity-app .token-guide > p { line-height: 1.7; }
+#liquidity-app .token-guide details { padding: 16px 0; border-top: 1px solid var(--line); }
+#liquidity-app .token-guide summary { cursor: pointer; font-weight: 600; line-height: 1.6; }
+#liquidity-app .token-guide summary:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; }
+#liquidity-app .token-guide details p { font-size: 13px; line-height: 1.8; }
+#liquidity-app .token-guide .review-list > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); line-height: 1.8; }
+#liquidity-app .token-guide dd { text-align: left; }
+@media (max-width: 600px) {
+    #liquidity-app .token-guide .review-list > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    #liquidity-app .token-guide > p > a { margin-bottom: 8px; }
+}
