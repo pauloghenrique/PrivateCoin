@@ -86,10 +86,10 @@
             <div id="sign-actions" hidden><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
         </section></aside>
     </div>
-    <section hidden="@creating" class="card token-form liquidity-pools"><h2>Pools da carteira conectada</h2><div class="pool-list-tools">
+    <section hidden="@creating" class="card token-form liquidity-pools"><div class="pool-list-heading"><div><span class="eyebrow">SUA LIQUIDEZ</span><h2>Meus pools</h2><p>Acompanhe suas reservas e gerencie cada par em um só lugar.</p></div><span class="pool-wallet-badge">Seus pools</span></div><div class="pool-list-tools">
         <div><label for="pool-search">Buscar pool</label><input id="pool-search" type="search" placeholder="Par, token ou identificador" autocomplete="off" /></div>
         <div><label for="pool-status-filter">Status</label><select id="pool-status-filter"><option value="all">Todos os status</option><option value="available">Disponíveis</option><option value="waiting">Aguardando confirmação</option><option value="closed">Encerradas</option><option value="other">Outros status</option></select></div>
         <span id="pool-result-count" role="status" aria-live="polite"></span>
-    </div><div class="pool-list-columns" aria-hidden="true"><span>Pool / status</span><span>Reservas</span><span>Ações</span></div><div id="pool-list" class="transfer-history-list pool-items"></div><p id="pool-filter-empty" class="pool-filter-empty" hidden>Nenhuma pool corresponde à busca ou ao status escolhido.</p><p id="pools-empty" class="muted-text">Conecte sua carteira para consultar suas pools.</p></section>
+    </div><div class="pool-list-columns" aria-hidden="true"><span>Par de ativos</span><span>Situação</span><span>Reservas do pool</span><span>Gerenciar</span></div><div id="pool-list" class="transfer-history-list pool-items"></div><p id="pool-filter-empty" class="pool-filter-empty" hidden>Nenhuma pool corresponde à busca ou ao status escolhido.</p><p id="pools-empty" class="muted-text">Conecte sua carteira para consultar suas pools.</p></section>
 </main>
 @section scripts { <script src="@Scripts.Url("~/bundles/povix-liquidity")"></script> }
