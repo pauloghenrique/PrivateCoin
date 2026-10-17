@@ -162,6 +162,7 @@
     <Content Include="favicon.ico" />
     <Content Include="Global.asax" />
     <Content Include="Content\Site.css" />
+    <Content Include="Content\povix-pools.css" />
     <Content Include="Scripts\povix-token-wallet.js" />
     <Content Include="Scripts\povix-wallet-menu.js" />
     <Content Include="Scripts\povix-token-profile.js" />
