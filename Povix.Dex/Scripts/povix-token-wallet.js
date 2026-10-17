@@ -247,6 +247,25 @@
         if (result <= 0n || result >= rOut) throw new Error('Liquidez insuficiente para esta quantidade.');
         return result.toString();
     }
+    function normalizePoolBurn(policy, a, b) {
+        if (policy == null) return null;
+        const rate = policy.basisPoints, fixedA = String(policy.fixedAAtomic), fixedB = String(policy.fixedBAtomic);
+        if (!Number.isInteger(rate) || rate < 0 || rate > 10000 || !/^[0-9]+$/.test(fixedA) || !/^[0-9]+$/.test(fixedB) ||
+            BigInt(fixedA) > 9223372036854775807n || BigInt(fixedB) > 9223372036854775807n ||
+            rate > 0 && (BigInt(fixedA) !== 0n || BigInt(fixedB) !== 0n) || rate === 0 && BigInt(fixedA) === 0n && BigInt(fixedB) === 0n ||
+            a.id === 'povix' && BigInt(fixedA) !== 0n || b.id === 'povix' && BigInt(fixedB) !== 0n) throw new Error('Regra de queima da pool inválida.');
+        return { basisPoints: rate, fixedAAtomic: BigInt(fixedA).toString(), fixedBAtomic: BigInt(fixedB).toString() };
+    }
+    function quotePoolSwap(reserveIn, reserveOut, amount, assetA, assetB, inputSide, policy) {
+        const rules = normalizePoolBurn(policy, assetA, assetB), gross = BigInt(quoteExchange(reserveIn, reserveOut, amount)), value = BigInt(amount);
+        function burn(side, quantity) {
+            if (!rules || [assetA, assetB][side].id === 'povix') return 0n;
+            return rules.basisPoints > 0 ? quantity * BigInt(rules.basisPoints) / 10000n : BigInt(side === 0 ? rules.fixedAAtomic : rules.fixedBAtomic);
+        }
+        const inputBurn = burn(inputSide, value), outputBurn = burn(1 - inputSide, gross);
+        if (outputBurn >= gross || value + inputBurn > 9223372036854775807n) throw new Error('A queima consome todo o recebimento ou supera o limite do token.');
+        return { grossReceiveAtomic: gross.toString(), receiveAtomic: (gross - outputBurn).toString(), inputBurnAtomic: inputBurn.toString(), outputBurnAtomic: outputBurn.toString(), inputDebitAtomic: (value + inputBurn).toString() };
+    }
     async function verifyExchangeDraft(draft, expected, networkId) {
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
@@ -263,6 +282,9 @@
             if (!actual || !wanted || actual.id !== wanted.id || actual.name !== wanted.name || actual.symbol !== wanted.symbol || actual.decimals !== wanted.decimals ||
                 !(actual.id === 'povix' || id(actual.id)) || !Number.isInteger(actual.decimals) || actual.decimals < 0 || actual.decimals > 8) fail();
         }
+        const burnRules = normalizePoolBurn(draft.burnPolicy, draft.assetA, draft.assetB);
+        const wantedBurn = normalizePoolBurn(expected.burnPolicy, expected.assetA, expected.assetB);
+        if (Boolean(draft.burnEnabled) !== Boolean(expected.burnEnabled) || Boolean(draft.burnEnabled) !== Boolean(burnRules) || JSON.stringify(burnRules) !== JSON.stringify(wantedBurn)) fail();
         if (draft.assetA.id === draft.assetB.id || !atomic(draft.reserveAAtomic) || !atomic(draft.reserveBAtomic) ||
             draft.reserveAAtomic !== expected.reserveAAtomic || draft.reserveBAtomic !== expected.reserveBAtomic ||
             BigInt(draft.reserveAAtomic) <= 0n || BigInt(draft.reserveBAtomic) <= 0n) fail();
@@ -347,12 +369,15 @@
                     draft.amountAtomic !== '0' || draft.minimumReceiveAtomic !== '0' || draft.receiveAtomic !== '0' || draft.inputSide !== 0) fail();
                 wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
             } else {
-                const amount = BigInt(draft.amountAtomic), receive = BigInt(quoteExchange(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount));
-                if (draft.receiveAtomic !== receive.toString() || receive < BigInt(draft.minimumReceiveAtomic)) fail();
-                wantedOutputs.push(output(draft.assetA.id, draft.inputSide === 0 ? a + amount : a - receive, draft.providerAddress),
-                    output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - receive, draft.providerAddress),
+                const amount = BigInt(draft.amountAtomic), quote = quotePoolSwap(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount,
+                    draft.assetA, draft.assetB, draft.inputSide, burnRules);
+                const receive = BigInt(quote.receiveAtomic), gross = BigInt(quote.grossReceiveAtomic);
+                if (draft.receiveAtomic !== quote.receiveAtomic || receive < BigInt(draft.minimumReceiveAtomic) ||
+                    String(draft.inputBurnAtomic || '0') !== quote.inputBurnAtomic || String(draft.outputBurnAtomic || '0') !== quote.outputBurnAtomic) fail();
+                wantedOutputs.push(output(draft.assetA.id, draft.inputSide === 0 ? a + amount : a - gross, draft.providerAddress),
+                    output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - gross, draft.providerAddress),
                     output(draft.inputSide === 0 ? draft.assetB.id : draft.assetA.id, receive, draft.changeAddress));
-                addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, amount);
+                addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, quote.inputDebitAtomic);
             }
         } else fail();
         for (const assetId of Array.from(new Set([...spends.keys(), ...totals.keys()])).sort((x, y) => x === 'povix' ? -1 : y === 'povix' ? 1 : x.localeCompare(y))) {
@@ -370,7 +395,10 @@
         if (draft.transactionKind !== kind) fail();
         payload += '|fee:' + draft.feeAtomic + '|kind:' + kind + '|validator:|reward:|owned:|assets-v1|';
         draft.outputs.forEach(item => { payload += field(item.assetId === 'povix' ? null : item.assetId); });
-        if (draft.operation === 'swap') payload += '|pool-swap-v1|' + draft.inputSide + '|' + draft.amountAtomic;
+        if (draft.operation === 'swap') {
+            payload += '|pool-swap-v1|' + draft.inputSide + '|' + draft.amountAtomic;
+            if (BigInt(draft.inputBurnAtomic || '0') > 0n || BigInt(draft.outputBurnAtomic || '0') > 0n) payload += '|pool-burn-v1|' + draft.inputBurnAtomic + '|' + draft.outputBurnAtomic;
+        }
         if (draft.operation === 'close') expectedShares = null;
         if (Boolean(draft.allowUserLiquidity) !== Boolean(expectedShares)) fail();
         if (expectedShares) {
@@ -378,6 +406,7 @@
             payload += '|pool-participation-v1|' + canonical(expectedShares);
         } else if (draft.participation) fail();
         if (['add', 'remove'].includes(draft.operation)) payload += '|pool-change-v1|' + draft.changeAddress + '|' + draft.sharesAtomic;
+        if (burnRules) payload += '|pool-burn-enabled-v1|' + burnRules.basisPoints + ':' + burnRules.fixedAAtomic + ':' + burnRules.fixedBAtomic;
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) fail();
         return true;
     }
@@ -525,7 +554,7 @@
         isUnlocked() { return Boolean(active); },
         publicKeys() { return Array.from(requireWallet().keys.values(), item => toBase64(encoder.encode(item.publicXml))); },
         addresses() { return Array.from(requireWallet().keys.keys()); },
-        createAddress, verifyDraft, verifyManagementDraft, verifyTransferDraft, verifyExchangeDraft, quoteExchange, parseSupply, formatAtomic,
+        createAddress, verifyDraft, verifyManagementDraft, verifyTransferDraft, verifyExchangeDraft, quoteExchange, quotePoolSwap, parseSupply, formatAtomic,
         async authorizeProfile(draft, expected, networkId) {
             const creator = requireWallet().keys.get(expected.creatorAddress);
             if (!creator || draft.networkId !== networkId || draft.creatorAddress !== expected.creatorAddress ||

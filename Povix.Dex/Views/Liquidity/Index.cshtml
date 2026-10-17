@@ -58,6 +58,19 @@
                         <small>Cadastro das regras: a reserva ainda não é debitada ou separada e não há pagamento de bônus nem bloqueio por prazo ativo.</small>
                     </fieldset>
                     </section>
+                    <section class="pool-settings"><h2>Queima nas trocas</h2>
+                        <label class="checkbox-label"><input id="pool-burn-enabled" type="checkbox" /> Aplicar uma taxa própria de queima nesta pool</label>
+                        <fieldset id="pool-burn-fields" hidden disabled>
+                            <label for="pool-burn-mode">Modalidade</label><select id="pool-burn-mode"><option value="percent">Percentual por token negociado</option><option value="fixed">Valor fixo por ativo</option></select>
+                            <div id="pool-burn-percent-field"><label for="pool-burn-percent">Taxa de queima (%)</label><input id="pool-burn-percent" maxlength="6" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?" /></div>
+                            <div id="pool-burn-fixed-fields" hidden>
+                                <label for="pool-burn-fixed-a">Queima fixa no primeiro ativo</label><input id="pool-burn-fixed-a" maxlength="30" inputmode="decimal" value="0" />
+                                <label for="pool-burn-fixed-b">Queima fixa no segundo ativo</label><input id="pool-burn-fixed-b" maxlength="30" inputmode="decimal" value="0" />
+                            </div>
+                            <small>Percentual de 0,01% a 100%, com duas casas, arredondado para baixo na precisão de cada token. No modo fixo, informe zero para isentar um ativo e um valor positivo para ao menos um token. POVIX nunca sofre queima.</small>
+                        </fieldset>
+                        <small>Opção desabilitada por padrão e permanente após criar a pool. Taxa independente da queima de transferências dos tokens. Nas trocas, a entrada é cobrada além do valor enviado à pool e a saída é descontada antes do recebimento. O mínimo a receber considera o valor líquido. Não se aplica a aportes ou retiradas. A taxa de 0,30% da pool e a taxa da rede em POVIX permanecem separadas.</small>
+                    </section>
                     <section class="pool-permissions"><h2>Participação de usuários</h2>
                     <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
                     <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>

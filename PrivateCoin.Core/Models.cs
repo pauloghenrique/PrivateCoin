@@ -29,6 +29,26 @@ namespace PrivateCoin.Core
     {
         [DataMember(Order = 1)] public int InputSide { get; set; }
         [DataMember(Order = 2)] public long Amount { get; set; }
+        [DataMember(Order = 3, EmitDefaultValue = false)] public long InputBurn { get; set; }
+        [DataMember(Order = 4, EmitDefaultValue = false)] public long OutputBurn { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PoolBurnPolicy
+    {
+        [DataMember(Order = 1)] public int BasisPoints { get; set; }
+        [DataMember(Order = 2)] public long FixedA { get; set; }
+        [DataMember(Order = 3)] public long FixedB { get; set; }
+        public PoolBurnPolicy Copy() => new PoolBurnPolicy { BasisPoints = BasisPoints, FixedA = FixedA, FixedB = FixedB };
+        internal string Canonical() => BasisPoints.ToString(CultureInfo.InvariantCulture) + ":" + FixedA.ToString(CultureInfo.InvariantCulture) + ":" + FixedB.ToString(CultureInfo.InvariantCulture);
+        public TokenPolicy ForAsset(int side) => new TokenPolicy { AutoBurnBasisPoints = BasisPoints, AutoBurnFixedAtomic = side == 0 ? FixedA : FixedB };
+        internal void Validate(string a, string b)
+        {
+            if (BasisPoints < 0 || BasisPoints > 10000 || FixedA < 0 || FixedB < 0 ||
+                BasisPoints > 0 && (FixedA != 0 || FixedB != 0) || BasisPoints == 0 && FixedA == 0 && FixedB == 0 ||
+                a == null && FixedA != 0 || b == null && FixedB != 0)
+                throw new InvalidOperationException("Invalid pool burn policy; POVIX cannot be burned.");
+        }
     }
 
     [DataContract]
@@ -174,6 +194,8 @@ namespace PrivateCoin.Core
         [DataMember(Order = 16, EmitDefaultValue = false)] public TokenCommand TokenCommand { get; set; }
         [DataMember(Order = 17, EmitDefaultValue = false)] public List<TokenAuthorization> TokenAuthorizations { get; set; }
         [DataMember(Order = 18, EmitDefaultValue = false)] public TokenTransferTerms TokenTransferTerms { get; set; }
+        [DataMember(Order = 19, EmitDefaultValue = false)] public PoolBurnPolicy PoolBurnPolicy { get; set; }
+        public bool PoolBurnEnabled => PoolBurnPolicy != null;
 
         internal string SigningPayload()
         {
@@ -204,6 +226,9 @@ namespace PrivateCoin.Core
             if (LiquiditySwap != null)
                 value.Append("|pool-swap-v1|").Append(LiquiditySwap.InputSide.ToString(CultureInfo.InvariantCulture))
                     .Append('|').Append(LiquiditySwap.Amount.ToString(CultureInfo.InvariantCulture));
+            if (LiquiditySwap != null && (LiquiditySwap.InputBurn != 0 || LiquiditySwap.OutputBurn != 0))
+                value.Append("|pool-burn-v1|").Append(LiquiditySwap.InputBurn.ToString(CultureInfo.InvariantCulture))
+                    .Append('|').Append(LiquiditySwap.OutputBurn.ToString(CultureInfo.InvariantCulture));
             if (PoolParticipation != null) value.Append("|pool-participation-v1|").Append(PoolParticipation.Canonical());
             if (LiquidityChange != null) value.Append("|pool-change-v1|").Append(LiquidityChange.Address)
                 .Append('|').Append(LiquidityChange.Shares.ToString(CultureInfo.InvariantCulture));
@@ -214,6 +239,7 @@ namespace PrivateCoin.Core
             if (Outputs.Any(output => output.UnlockHeight != 0))
                 value.Append("|token-locks-v1|").Append(string.Join(",", Outputs.Select(output => output.UnlockHeight.ToString(CultureInfo.InvariantCulture))));
             if (TokenTransferTerms != null) value.Append("|token-transfer-burn-v1|").Append(TokenTransferTerms.Canonical());
+            if (PoolBurnEnabled) value.Append("|pool-burn-enabled-v1|").Append(PoolBurnPolicy.Canonical());
             return value.ToString();
         }
 
@@ -276,6 +302,8 @@ namespace PrivateCoin.Core
 
     public sealed class UnspentOutput
     {
+        public PoolBurnPolicy PoolBurnPolicy { get; internal set; }
+        public bool PoolBurnEnabled => PoolBurnPolicy != null;
         internal TokenRuntime TokenRuntime { get; set; }
         public string TransactionId { get; internal set; }
         public int OutputIndex { get; internal set; }

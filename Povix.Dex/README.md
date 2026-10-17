@@ -32,6 +32,17 @@ Valores pequenos cujo percentual é inferior a uma unidade atômica queimam zero
 O valor fixo é cobrado mesmo em envios pequenos; saldo insuficiente para envio e
 queima impede a preparação. A revisão do Desktop mostra o débito e a queima.
 
+Na criação da pool, **Queima nas trocas** permite uma regra própria e opcional:
+percentual de 0,01% a 100% ou valor fixo por ativo (zero isenta aquele ativo).
+A opção começa desabilitada e fica imutável após a criação. Não herda nem acumula
+a taxa de transferência direta dos tokens. POVIX nunca é queimado.
+Nos swaps, o comprador paga a queima da entrada além do aporte à reserva; a queima
+da saída é descontada do pagamento bruto da reserva. Cotação, revisão e mínimo a
+receber usam o valor líquido. Depósitos, retiradas e encerramento não queimam.
+A taxa AMM de 0,30% e a taxa da rede em POVIX continuam separadas.
+A regra e os valores de queima são assinados e conferidos pelo consenso; a oferta
+só diminui na confirmação e é reconstruída ao reiniciar o nó.
+
 Somente `TokenTransfer` é tributada. Criação, emissão adicional, queima manual e
 operações de liquidez (incluindo swaps) não sofrem essa cobrança. Taxas de pool e
 taxa de rede em POVIX continuam separadas. O Core exige termos de transferência

@@ -20,7 +20,7 @@ class Element {
     get('exchange-priority').value = '2';
     const events = {};
     let unlocked = true; const preparedSwaps = [];
-    const wallet = { isUnlocked: () => unlocked, hasSavedWallet: () => false, publicKeys: () => [], addresses: () => ['address'], formatAtomic: value => value, parseSupply: value => { if (!value) throw Error(); return '100'; }, quoteExchange: () => '200', lock: () => { unlocked = false; } };
+    const wallet = { isUnlocked: () => unlocked, hasSavedWallet: () => false, publicKeys: () => [], addresses: () => ['address'], formatAtomic: value => value, parseSupply: value => { if (!value) throw Error(); return '100'; }, quotePoolSwap: () => ({ receiveAtomic: '200', inputDebitAtomic: '100', inputBurnAtomic: '0', outputBurnAtomic: '0' }), lock: () => { unlocked = false; } };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'), {
         document: { getElementById: get, createElement: () => new Element(), addEventListener(name, fn) { events[name] = fn; } }, window: { PovixTokenWallet: wallet },
         fetch: async (url, options) => {

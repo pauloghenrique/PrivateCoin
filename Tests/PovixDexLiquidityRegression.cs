@@ -104,7 +104,7 @@ internal static partial class PovixDexRegression
                         Check(poolOverdrawRejected, "ordinary DEX transfers cannot fund their amount from confirmed pool reserves");
                         ExerciseOrdinaryDexOperations(directory, service, chain, peer, received, provider, batches, validators, poolId, tokenA.Token.Id);
                         var secondDraft = ExchangeData(service.PreparePool(new CreatePoolViewModel { AssetA = tokenA.Token.Id, AssetB = tokenB.Token.Id,
-                            AmountA = "50", AmountB = "100", FeeAtomic = 2 }, PublicKeys(provider), address, "second-pool"));
+                            AmountA = "50", AmountB = "100", FeeAtomic = 2, BurnEnabled = true, BurnMode = "fixed", BurnFixedA = "0.01", BurnFixedB = "0.01" }, PublicKeys(provider), address, "second-pool"));
                         var secondSignatures = BrowserExchange(directory, nodeExecutable, service, secondDraft, provider, false);
                         string secondPool = service.SubmitPoolAsync((string)secondDraft["draftId"], secondSignatures, "second-pool").GetAwaiter().GetResult();
                         Wait(() => { lock (received) return received.ContainsKey(secondPool); }, "token/token liquidity reaches the peer");
@@ -176,9 +176,9 @@ internal static partial class PovixDexRegression
                         Transaction tokensSwap; lock (received) tokensSwap = received[tokensSwapId];
                         batches.Confirm(chain, new[] { tokensSwap }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
                         Wait(() => service.GetExchangeReceipt(tokensSwapId).Status == "confirmed", "token/token swap confirms atomically");
-                        Check(chain.IsValid() && chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == oldA - 100 &&
+                        Check(chain.IsValid() && chain.GetTokenBalance(new[] { buyerAddress }, tokenA.Token.Id) == oldA - 101 &&
                             chain.GetTokenBalance(new[] { buyerAddress }, tokenB.Token.Id) == oldB + long.Parse((string)tokensDraft["receiveAtomic"]) &&
-                            chain.GetBalance(new[] { buyerAddress }) == oldNative - 2, "token/token swaps conserve both token supplies and use POVIX only for the fee");
+                            chain.GetBalance(new[] { buyerAddress }) == oldNative - 2, "token/token swap debits the pool burn and uses POVIX only for the network fee");
                         var ownNativeSwap = SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
                             batches, validators, new SwapViewModel { PoolId = poolId, InputSide = 0, Amount = "0,05", MinimumReceive = "3", FeeAtomic = 2 }, "own-native");
                         ownNativeSwap = SwapWithSelectedWallet(directory, nodeExecutable, service, chain, peer, received, provider,
@@ -513,7 +513,8 @@ internal static partial class PovixDexRegression
         batches.Confirm(chain, new[] { tx }, validators); peer.BroadcastChainAsync(chain.Blocks).GetAwaiter().GetResult();
         Wait(() => service.GetExchangeReceipt(id).Status == "confirmed", "same-wallet swap confirms without a separate provider request");
         Check(chain.IsValid() && chain.GetBalance(addresses) == native - tx.Fee &&
-            balances.All(item => chain.GetTokenBalance(addresses, item.Key) == item.Value), "same-wallet swaps conserve all tokens and deduct only the network fee from the total wallet balance");
+            balances.All(item => chain.GetTokenBalance(addresses, item.Key) == item.Value -
+                (tx.Outputs[tx.LiquiditySwap.InputSide].AssetId == item.Key ? tx.LiquiditySwap.InputBurn : tx.Outputs[1 - tx.LiquiditySwap.InputSide].AssetId == item.Key ? tx.LiquiditySwap.OutputBurn : 0)), "same-wallet swaps deduct the exact pool burns and native network fee");
         Check((string)ExchangePool(service, model.PoolId)["reserveTransactionId"] == id && (bool)ExchangePool(service, model.PoolId)["available"], "pool tracks confirmed reserves after a same-wallet swap");
         return tx;
     }

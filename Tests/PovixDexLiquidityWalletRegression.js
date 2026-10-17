@@ -23,10 +23,21 @@ const d = fixture.draft;
     w.setInterval = (callback, delay) => { intervals.push({ callback, delay }); return intervals.length; };
     w.eval(fs.readFileSync('Povix.Dex/Scripts/povix-token-wallet.js', 'utf8'));
     const wallet = w.PovixTokenWallet;
+    const native = { id: 'povix' }, token = { id: 'a'.repeat(64) };
+    const percent = { basisPoints: 1000, fixedAAtomic: '0', fixedBAtomic: '0' };
+    const ownQuote = wallet.quotePoolSwap('1000', '1000', '100', native, token, 0, percent);
+    assert.equal(ownQuote.inputBurnAtomic, '0'); assert.equal(ownQuote.outputBurnAtomic, '9');
+    assert.equal(ownQuote.receiveAtomic, '81'); assert.equal(ownQuote.inputDebitAtomic, '100');
+    const reverseQuote = wallet.quotePoolSwap('1000', '1000', '100', native, token, 1, percent);
+    assert.equal(reverseQuote.inputBurnAtomic, '10'); assert.equal(reverseQuote.outputBurnAtomic, '0');
+    assert.equal(reverseQuote.inputDebitAtomic, '110');
+    assert.equal(wallet.quotePoolSwap('1000', '1000', '100', native, token, 0, null).receiveAtomic, '90');
+    assert.throws(() => wallet.quotePoolSwap('1000', '1000', '100', native, token, 0, { ...percent, fixedAAtomic: '1' }));
+    assert.throws(() => wallet.quotePoolSwap('1000', '1000', '100', native, token, 0, { ...percent, basisPoints: 10000 }));
     const recordText = JSON.stringify(fixture.wallet);
     await wallet.importFile({ size: Buffer.byteLength(recordText), arrayBuffer: async () => new TextEncoder().encode(recordText).buffer }, 'dex-test-password-only');
     const previousPool = fixture.catalogue.pools.find(pool => pool.poolId === d.poolId);
-    const expected = { loyaltyPolicy: d.loyaltyPolicy, rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
+    const expected = { burnEnabled: d.burnEnabled, burnPolicy: d.burnPolicy, loyaltyPolicy: d.loyaltyPolicy, rewardMode: d.rewardMode, allowUserLiquidity: d.allowUserLiquidity, participation: previousPool?.participation, sharesAtomic: d.sharesAtomic, operation: d.operation, assetA: d.assetA, assetB: d.assetB, reserveAAtomic: d.reserveAAtomic,
         reserveBAtomic: d.reserveBAtomic, feeAtomic: d.feeAtomic, changeAddress: d.changeAddress, poolId: d.poolId,
         reserveTransactionId: d.reserveTransactionId, providerAddress: d.providerAddress, inputSide: d.inputSide,
         amountAtomic: d.amountAtomic, minimumReceiveAtomic: d.minimumReceiveAtomic };
@@ -40,6 +51,9 @@ const d = fixture.draft;
         draft => { draft.assetA.id = draft.assetB.id; },
         draft => { draft.feeAtomic = '0'; }, draft => { draft.transactionKind = 4; }])
         await assert.rejects(wallet.verifyExchangeDraft(bad(alteration), expected, fixture.networkId));
+    await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.burnEnabled = !Boolean(draft.burnEnabled); }), expected, fixture.networkId));
+    if (d.burnEnabled) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.burnPolicy.basisPoints = 9999; }), expected, fixture.networkId));
+    if (d.operation === 'swap' && d.burnEnabled) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.outputBurnAtomic = '0'; }), expected, fixture.networkId));
     if (d.operation === 'pool') await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.rewardMode = d.rewardMode === 'loyalty' ? 'fees' : 'loyalty'; }), expected, fixture.networkId));
     if (d.operation === 'pool' && d.loyaltyPolicy) for (const mutation of [policy => { policy.feeBasisPoints++; }, policy => { policy.minimumReserveAtomic = '1'; }, policy => { policy.earlyExit = policy.earlyExit === 'locked' ? 'forfeit' : 'locked'; }]) await assert.rejects(wallet.verifyExchangeDraft(bad(draft => mutation(draft.loyaltyPolicy)), expected, fixture.networkId));
     if (d.allowUserLiquidity) {
@@ -47,7 +61,7 @@ const d = fixture.draft;
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.allowUserLiquidity = false; }), expected, fixture.networkId));
     }
     if (d.operation === 'swap') {
-        assert.equal(wallet.quoteExchange(d.inputSide === 0 ? d.reserveAAtomic : d.reserveBAtomic, d.inputSide === 0 ? d.reserveBAtomic : d.reserveAAtomic, d.amountAtomic), d.receiveAtomic);
+        assert.equal(wallet.quotePoolSwap(d.inputSide === 0 ? d.reserveAAtomic : d.reserveBAtomic, d.inputSide === 0 ? d.reserveBAtomic : d.reserveAAtomic, d.amountAtomic, d.assetA, d.assetB, d.inputSide, d.burnPolicy).receiveAtomic, d.receiveAtomic);
         await assert.rejects(wallet.verifyExchangeDraft(bad(draft => { draft.inputs[draft.userInputCount].outputIndex = 2; }), expected, fixture.networkId));
         await assert.rejects(wallet.verifyExchangeDraft(d, { ...expected, minimumReceiveAtomic: String(BigInt(d.receiveAtomic) + 1n) }, fixture.networkId));
     }
@@ -75,7 +89,7 @@ const d = fixture.draft;
             }
         }
         else if (url === '/prepareLiquidityUrl') { preparations++; result = d; assert.equal(body.get('Shares'), d.sharesAtomic); assert.equal(body.get('Operation'), d.operation); }
-        else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); if (d.operation === 'pool') assert.equal(body.get('RewardMode'), d.rewardMode || 'fees'); }
+        else if (url === '/preparePoolUrl' || url === '/prepareSwapUrl') { preparations++; result = d; assert.equal(body.get('FeeAtomic'), d.feeAtomic); if (d.operation === 'pool') { assert.equal(body.get('RewardMode'), d.rewardMode || 'fees'); assert.equal(body.get('BurnEnabled'), String(Boolean(d.burnEnabled))); if (d.burnEnabled) { assert.equal(body.get('BurnMode'), d.burnPolicy.basisPoints ? 'percent' : 'fixed'); } } }
         else if (url === '/prepareReservesUrl') {
             preparations++; result = d; assert.equal(body.get('feeAtomic'), d.feeAtomic);
             assert.equal(body.get('operation'), d.operation); assert.equal(body.get('poolId'), d.poolId);
@@ -138,6 +152,14 @@ const d = fixture.draft;
             byId('pool-loyalty-minimum').value = wallet.formatAtomic(d.loyaltyPolicy.minimumReserveAtomic, 8);
             byId('pool-loyalty-exit').value = d.loyaltyPolicy.earlyExit;
         } else assert.equal(byId('pool-loyalty-policy').hidden, true);
+        assert.equal(byId('pool-burn-enabled').checked, false, 'pool burn is opt-in');
+        byId('pool-burn-enabled').checked = Boolean(d.burnEnabled);
+        if (d.burnEnabled) {
+            byId('pool-burn-mode').value = d.burnPolicy.basisPoints ? 'percent' : 'fixed';
+            byId('pool-burn-percent').value = wallet.formatAtomic(d.burnPolicy.basisPoints, 2);
+            byId('pool-burn-fixed-a').value = wallet.formatAtomic(d.burnPolicy.fixedAAtomic, d.assetA.decimals);
+            byId('pool-burn-fixed-b').value = wallet.formatAtomic(d.burnPolicy.fixedBAtomic, d.assetB.decimals);
+        }
         byId('pool-user-liquidity').checked = Boolean(d.allowUserLiquidity);
         byId('pool-asset-a').value = d.assetA.id; byId('pool-asset-b').value = d.assetB.id;
         byId('pool-amount-a').value = wallet.formatAtomic(d.reserveAAtomic, d.assetA.decimals);
