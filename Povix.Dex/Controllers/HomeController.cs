@@ -12,6 +12,8 @@ namespace Povix.Dex.Controllers
         {
             Response.Cache.SetCacheability(HttpCacheability.NoCache);
             Response.Cache.SetNoStore();
+            ViewBag.InitialCatalogue = new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(
+                MvcApplication.TokenNetwork?.GetExchangeCatalogue(new string[0]));
             return View();
         }
 
