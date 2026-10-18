@@ -562,12 +562,16 @@ e clientes devem ser atualizados juntos. O hash dos fontes do Core continua
 a integrar a identidade da rede conforme a configuração existente.
 
 
-## Lançamento inicial nativo — consenso v22
+## Lançamento inicial nativo — consenso v23
 
 As regras executáveis e os exemplos de uso estão em [docs/povix-initial-launch.md](docs/povix-initial-launch.md).
 A confirmação da 1ª carteira completa os 600 POVIX gratuitos e cria automaticamente
-a pool com 359.400 POVIX na reserva. A mesma operação emite 1.000.000 de USDC local
-e 1.000.000 de USDT local para a 1ª carteira recompensada.
+a pool com 359.400 POVIX na reserva. A primeira carteira recebe 100 USDC locais e 1.000.000 de USDT local.
+Cada uma das primeiras 10.000 identidades registradas recebe 100 USDC, incluindo
+a primeira, sem ultrapassar 1.000.000 USDC emitidos. O crédito depende da confirmação
+do registro e não se repete ao reabrir ou recuperar a mesma identidade. Após o limite,
+novos registros continuam sem crédito USDC. A nova regra altera o genesis e requer
+nós/DEX/Desktop compatíveis com v23; não migra saldos da cadeia anterior.
 Esses tokens têm seis casas decimais, IDs reservados e oferta fixa, sem ponte,
 lastro externo, emissão adicional, pausa ou queima administrativa.
 O par automático usa **USDC local**; USDT local continua transferível como ativo separado.

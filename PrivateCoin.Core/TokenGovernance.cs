@@ -158,7 +158,17 @@ namespace PrivateCoin.Core
                 foreach (var token in InitialLaunch.FundingTokens())
                     utxo[Key(token.Id)] = new UnspentOutput { TransactionId = Key(token.Id), OutputIndex = -1,
                         Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
-                        TokenRuntime = new TokenRuntime { Token = token, Supply = token.Supply, Issued = token.Supply } };
+                        TokenRuntime = new TokenRuntime { Token = token, Supply = token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply, Issued = token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply } };
+            if (tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null && tx.Outputs.Count == 2) {
+                var prior = State(utxo, InitialLaunch.UsdcTokenId);
+                long supply = checked(prior.Supply + InitialLaunch.WalletUsdcReward);
+                long issued = checked(prior.Issued + InitialLaunch.WalletUsdcReward);
+                if (issued > InitialLaunch.FundingTokenSupply) throw new InvalidOperationException("USDC distribution cap exceeded.");
+                utxo[Key(InitialLaunch.UsdcTokenId)] = new UnspentOutput { TransactionId = Key(InitialLaunch.UsdcTokenId), OutputIndex = -1,
+                    Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
+                    TokenRuntime = new TokenRuntime { Token = prior.Token, Supply = supply, Issued = issued,
+                        Paused = prior.Paused, Revision = prior.Revision } };
+            }
             TokenRuntime next = null;
             if (tx.Token != null && tx.Kind == TransactionKind.TokenCreate)
                 next = new TokenRuntime { Token = tx.Token, Supply = tx.Token.Supply, Issued = tx.Token.Supply };
