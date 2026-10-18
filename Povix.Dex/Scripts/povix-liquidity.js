@@ -11,6 +11,12 @@
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const integrated = app.dataset.integrated === 'true';
     const managing = app.dataset.mode === 'manage';
+    function visiblePool(pool) {
+        if (pool.nativeInitialLaunch) return true;
+        if (managing) return wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress);
+        return app.dataset.mode !== 'launch' || Boolean(pool.launch);
+    }
+
     let swapDirection = integrated ? '1' : null;
     const swapSide = () => integrated ? swapDirection : byId('swap-side').value;
     const preferredPool = /^[0-9a-f]{64}$/.test(app.dataset.poolId || '') ? app.dataset.poolId : null;
@@ -520,7 +526,7 @@
                 options('pool-asset-b', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o segundo ativo');
                 options('swap-pool', pools, item => item.assetA.symbol + '/' + item.assetB.symbol + ' · ' + item.poolId.slice(0, 12) + ' · ' + (poolStates[item.status] || 'Indisponível'), 'Selecione uma pool');
             }
-            const visiblePools = managing ? pools.filter(pool => wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress)) : app.dataset.mode === 'launch' ? pools.filter(pool => pool.launch) : pools;
+            const visiblePools = pools.filter(visiblePool);
             byId('pool-list').replaceChildren(); byId('pools-empty').hidden = visiblePools.length > 0;
             if (managing) byId('pools-empty').textContent = wallet.isUnlocked() ? 'Nenhuma pool criada por esta carteira.' : 'Conecte sua carteira para consultar suas pools.';
             visiblePools.forEach(pool => {
@@ -550,9 +556,10 @@
                     reserves.append(reserve);
                 }
                 const price = node('p', 'pool-item-price');
-                try { price.textContent = priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
+                try { price.textContent = pool.nativeInitialLaunch && pool.status === 'collecting' ? 'Lançamento inicial: 6 POVIX por 1 USDC local' : priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
                 catch (_) { price.textContent = 'Preço: indisponível.'; }
                 const details = node('details', 'pool-item-details');
+                if (pool.nativeInitialLaunch) details.append(node('p', '', pool.statusMessage));
                 details.append(node('summary', '', 'Detalhes da pool'),
                     node('p', '', 'Recompensa: ' + (pool.rewardMode === 'loyalty' ? 'Bônus por permanência (configuração, sem pagamento ativo)' : 'Participação nas taxas')),
                     node('p', '', 'Liquidez de usuários: ' + (pool.allowUserLiquidity ? 'habilitada' : 'desabilitada')),
