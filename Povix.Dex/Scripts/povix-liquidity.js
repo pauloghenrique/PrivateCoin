@@ -422,8 +422,9 @@
             const quote = nativeCollecting(pool) ? { receiveAtomic: String(600000000n - BigInt(fee())), inputDebitAtomic: '1000000' } : wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
             const receive = quote.receiveAtomic;
             if (BigInt(receive) < BigInt(minimumReceiveAtomic)) throw new Error('O mínimo a receber supera a cotação atual.');
-            const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map(nativeCollecting(pool) ? [] : [['povix', BigInt(feeAtomic)]]);
-            funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(quote.inputDebitAtomic)); ensureFunds(funds);
+            // Preparation validates current UTXOs and the fee source. A cached catalogue
+            // balance must not demand native coins before the node prepares the purchase.
+            const feeAtomic = fee(), changeAddress = wallet.addresses()[0];
             const wanted = { ...wantedFromPool(pool), operation: 'swap', initialLaunchPurchase: nativeCollecting(pool), inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, InputAssetId: input.id, OutputAssetId: output.id, Amount: byId('swap-amount').value,
                 MinimumReceive: byId('swap-minimum').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });

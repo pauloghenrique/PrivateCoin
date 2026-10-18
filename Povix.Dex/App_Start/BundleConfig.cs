@@ -21,7 +21,7 @@ namespace Povix.Dex
             bundles.Add(new Bundle("~/bundles/povix-token-management").Include("~/Scripts/povix-token-management.js"));
             bundles.Add(new Bundle("~/bundles/povix-token-profile").Include(
                 "~/Scripts/povix-token-profile.js"));
-            bundles.Add(new Bundle("~/bundles/povix-liquidity").Include(
+            bundles.Add(new Bundle("~/bundles/povix-liquidity-v24").Include(
                 "~/Scripts/povix-liquidity.js"));
             bundles.Add(new Bundle("~/bundles/povix-token-status").Include("~/Scripts/povix-token-status.js"));
 
