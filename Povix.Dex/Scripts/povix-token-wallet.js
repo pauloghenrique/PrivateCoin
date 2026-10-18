@@ -37,6 +37,14 @@
             byte => byte.toString(16).padStart(2, '0')).join('');
     }
     function base64url(base64) { return base64.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_'); }
+    function rsaInteger(base64) {
+        // JWK Base64urlUInt requires the shortest unsigned representation.
+        // Desktop RSA XML stores private parameters padded to a fixed width.
+        const bytes = fromBase64(base64);
+        let first = 0;
+        while (first < bytes.length - 1 && bytes[first] === 0) first++;
+        return base64url(toBase64(bytes.subarray(first)));
+    }
     function xmlParts(xml) {
         if (typeof xml !== 'string' || xml.length > 5000) throw new Error('Chave de carteira inválida.');
         const fields = {};
@@ -52,8 +60,8 @@
     async function importKey(xml) {
         const p = xmlParts(xml);
         const publicXml = '<RSAKeyValue><Modulus>' + p.Modulus + '</Modulus><Exponent>' + p.Exponent + '</Exponent></RSAKeyValue>';
-        const jwk = { kty: 'RSA', n: base64url(p.Modulus), e: base64url(p.Exponent), d: base64url(p.D),
-            p: base64url(p.P), q: base64url(p.Q), dp: base64url(p.DP), dq: base64url(p.DQ), qi: base64url(p.InverseQ), ext: false };
+        const jwk = { kty: 'RSA', n: rsaInteger(p.Modulus), e: rsaInteger(p.Exponent), d: rsaInteger(p.D),
+            p: rsaInteger(p.P), q: rsaInteger(p.Q), dp: rsaInteger(p.DP), dq: rsaInteger(p.DQ), qi: rsaInteger(p.InverseQ), ext: false };
         const key = await crypto.subtle.importKey('jwk', jwk, algorithm, false, ['sign']);
         const verificationKey = await crypto.subtle.importKey('jwk', { kty: 'RSA', n: jwk.n, e: jwk.e, ext: false }, algorithm, false, ['verify']);
         const challenge = encoder.encode('Povix.Dex local wallet validation');
