@@ -53,14 +53,10 @@ internal static class PrivateCoinInitialLaunchRegression
             string p = provider.CreateReceiveAddress(), b = buyer.CreateReceiveAddress(), l = last.CreateReceiveAddress(), a1 = v1.CreateReceiveAddress(), a2 = v2.CreateReceiveAddress();
             var chain = new Blockchain();
             string q = Hash(InitialLaunch.ProviderPublicKey);
-            foreach (var address in new[] { b, l, a1, a2, Hash("fifth-wallet") }) chain.AddBlock(new[] { chain.CreateWalletCreationTransaction(address, new Transaction[0]) });
-            var earlyChain = new Blockchain(Copy(chain.Blocks.ToArray()));
-            for (int i = 5; i < 99; i++) chain.AddBlock(new[] { chain.CreateWalletCreationTransaction(Hash("initial-wallet-" + i), new Transaction[0]) });
-            Check(!chain.GetInitialLaunchStatus().Created && chain.GetTokens().Count == 0, "pool and local funding tokens do not exist before wallet 100 is confirmed");
+            Check(!chain.GetInitialLaunchStatus().Created && chain.GetTokens().Count == 0, "no pool or funding tokens exist before the first confirmed wallet");
             var creation = chain.CreateWalletCreationTransaction(p, new Transaction[0]);
             Check(creation.Kind == TransactionKind.InitialLaunchCreate && !chain.GetInitialLaunchStatus().Created && creation.Inputs.Count == 0 && creation.Fee == 0,
-                "wallet 100 prepares the automatic bootstrap without approval fees or a manual pool action");
-            Reject(() => earlyChain.ValidatePendingTransactions(new[] { creation }), "launch cannot precede the complete 600 POVIX distribution");
+                "wallet 1 prepares the automatic bootstrap without approval fees or a manual pool action");
             var bad = Copy(creation); bad.Outputs[2].Amount++; bad.Id = LegacyConsensusFixture.Id(bad);
             Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "cannot overissue the local funding tokens");
             bad = Copy(creation); bad.Outputs[1].AssetId = Hash("fake-USDC"); bad.Id = LegacyConsensusFixture.Id(bad);
@@ -68,18 +64,31 @@ internal static class PrivateCoinInitialLaunchRegression
             var skipped = new Transaction { Kind = TransactionKind.WalletCreate, TimestampUtcTicks = DateTime.UtcNow.Ticks,
                 Outputs = new List<TransactionOutput> { new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = p } } };
             skipped.Id = LegacyConsensusFixture.Id(skipped);
-            Reject(() => chain.ValidatePendingTransactions(new[] { skipped }), "wallet 100 cannot omit the automatic pool creation");
+            Reject(() => chain.ValidatePendingTransactions(new[] { skipped }), "wallet 1 cannot omit the automatic pool creation");
             chain.AddBlock(new[] { creation });
             Check(chain.GetInitialLaunchStatus().Created && chain.GetInitialLaunchStatus().FundingAssetId == InitialLaunch.UsdcTokenId,
-                "confirmation of wallet 100 automatically creates the native POVIX/local-USDC pool");
-            var empty = chain.CreateWalletCreationTransaction(Hash("wallet-101"), new Transaction[0]);
-            Check(empty.Outputs[0].Amount == 0 && chain.GetBalance(new[] { p }) == 6 * Blockchain.OneCoin, "100 wallets receive 600 POVIX; wallet 101 receives zero");
+                "confirmation of wallet 1 automatically creates the native POVIX/local-USDC pool");
+            var empty = chain.CreateWalletCreationTransaction(b, new Transaction[0]);
+            Check(empty.Outputs[0].Amount == 0 && chain.GetBalance(new[] { p }) == 600 * Blockchain.OneCoin, "only the first wallet receives 600 POVIX; the second receives zero");
             chain.AddBlock(new[] { empty });
-            chain.AddBlock(new[] { v1.CreateStakeLockTransaction(chain, new Transaction[0], a1, Blockchain.OneCoin, 0) });
-            chain.AddBlock(new[] { v2.CreateStakeLockTransaction(chain, new Transaction[0], a2, Blockchain.OneCoin, 0) });
+            foreach (var address in new[] { l, a1, a2 })
+            {
+                var registration = chain.CreateWalletCreationTransaction(address, new Transaction[0]);
+                Check(registration.Outputs[0].Amount == 0, "later wallets register without issuing additional POVIX");
+                chain.AddBlock(new[] { registration });
+            }
+            Reject(() => chain.CreateWalletCreationTransaction(p, new Transaction[0]), "the first wallet cannot register again for another reward");
+            Reject(() => provider.CreateSponsoredStakeLockTransaction(chain, new Transaction[0], Public(provider, p), Blockchain.OneCoin), "sponsorship cannot bypass ordinary staking rules for the holder's own key");
+            var sponsored = provider.CreateSponsoredStakeLockTransaction(chain, new Transaction[0], v1.ExportPrivateKeys().First(), Blockchain.OneCoin);
+            Check(sponsored.ValidatorPublicKey == Public(v1, a1), "sponsored collateral serializes only the canonical public validator key");
+            chain.AddBlock(new[] { sponsored });
+            chain.AddBlock(new[] { provider.CreateSponsoredStakeLockTransaction(chain, new Transaction[0], Public(v2, a2), Blockchain.OneCoin) });
+            Check(chain.GetActiveValidators().Count == 2, "the initial holder can fund two independent validators without issuing extra coins");
             var validators = new[] { v1.CreateValidatorStake(a1, Blockchain.OneCoin), v2.CreateValidatorStake(a2, Blockchain.OneCoin) };
             using (var batch = new ValidationBatchFixture(chain))
             {
+                foreach (var address in new[] { b, l })
+                    batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], address, 6 * Blockchain.OneCoin, 1) }, validators);
                 Check(chain.GetInitialLaunchStatus().Created && chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply, "one initial launch issues exactly 359400 POVIX into escrow");
                 Check(chain.GetTokens().Count == 2 && InitialLaunch.FundingTokens().All(token => chain.GetTokenRuntime(token.Id).Supply == InitialLaunch.FundingTokenSupply && chain.GetTokenBalance(new[] { p }, token.Id) == token.Supply), "USDC and USDT each issue exactly one million local units");
                 Check(chain.GetTokenBalances(new[] { p }).Count == 2, "local funding tokens appear in the wallet token catalogue");
