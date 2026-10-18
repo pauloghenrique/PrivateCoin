@@ -450,7 +450,7 @@ namespace Povix.Dex.Services
                 status = "available"; reason = "confirmed_reserves";
                 message = "Reservas bloqueadas na blockchain e disponíveis para troca. Transferências comuns não podem movimentá-las.";
             }
-            return new PoolSnapshot { Id = id, Launch = launch, RewardMode = root.Exchange.RewardMode ?? "fees", LoyaltyPolicy = root.Exchange.LoyaltyPolicy, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
+            return new PoolSnapshot { Id = id, NativeInitialLaunch = root.Transaction.Kind == TransactionKind.InitialLaunchCreate, Launch = launch, RewardMode = root.Exchange.RewardMode ?? "fees", LoyaltyPolicy = root.Exchange.LoyaltyPolicy, Transaction = current, ProviderKey = root.Exchange.ProviderKey,
                 AssetA = root.Exchange.AssetA, AssetB = root.Exchange.AssetB, Available = available, Locked = locked, CanManage = canManage,
                 ClosureRenounced = closureRenounced,
                 Status = status, StatusReason = reason, StatusMessage = message, BlockingTransactionId = blocking?.Id,
@@ -467,7 +467,7 @@ namespace Povix.Dex.Services
                 .SelectMany(id => new[] { id + ":0", id + ":1" }).Concat(locked.Select(output => output.TransactionId + ":" + output.OutputIndex)), StringComparer.Ordinal);
         }
         private static object PoolResponse(PoolSnapshot pool) => new {
-            launch = LaunchResponse(pool.Launch),
+            launch = LaunchResponse(pool.Launch), nativeInitialLaunch = pool.NativeInitialLaunch,
             rewardMode = pool.RewardMode, loyaltyPolicy = LoyaltyPolicyResponse(pool.LoyaltyPolicy),
             burnEnabled = pool.Transaction.PoolBurnEnabled, burnPolicy = PoolBurnResponse(pool.Transaction.PoolBurnPolicy), allowUserLiquidity = pool.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(pool.Transaction.PoolParticipation),
@@ -548,6 +548,7 @@ namespace Povix.Dex.Services
         }
         private sealed class PoolSnapshot
         {
+            public bool NativeInitialLaunch;
             public string Id, ProviderKey, Status, StatusReason, StatusMessage, BlockingTransactionId, RewardMode;
             public Transaction Transaction;
             public LaunchPoolState Launch;

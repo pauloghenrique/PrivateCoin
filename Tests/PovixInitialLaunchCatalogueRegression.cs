@@ -31,7 +31,8 @@ class PovixInitialLaunchCatalogueRegression
         if (pools.Length != 1) throw new Exception("Automatic native pool was not discovered from the chain");
         var pool = (Dictionary<string, object>)pools[0];
         if ((string)pool["status"] != "collecting" || (bool)pool["available"] || (bool)pool["canManage"]) throw new Exception("Collecting native pool must not trade or close");
+        if (!(bool)pool["nativeInitialLaunch"]) throw new Exception("Automatic launch must be identified for public visibility");
         if (((object[])result["assets"]).Length != 3) throw new Exception("Native plus two local funding assets expected");
-        Console.WriteLine("3 native-launch DEX catalogue checks passed");
+        Console.WriteLine("4 native-launch DEX catalogue checks passed");
     }
 }
