@@ -9,7 +9,8 @@
         if (className) node.className = className;
         return node;
     }
-    const visiblePool = pool => pool.available === true || pool.nativeInitialLaunch === true;
+    const launchingPool = pool => pool.available !== true && pool.status === 'collecting';
+    const visiblePool = pool => pool.available === true || launchingPool(pool);
     function reserveText(value, asset) {
         const amount = BigInt(value), scale = 10n ** BigInt(asset.decimals);
         const fraction = (amount % scale).toString().padStart(asset.decimals, '0').replace(/0+$/, '');
@@ -17,7 +18,8 @@
     }
     function render() {
         const query = byId('dex-search').value.trim().toLocaleLowerCase('pt-BR');
-        const rows = byId('dex-token-list'); rows.replaceChildren();
+        const rows = byId('dex-token-list'), launches = byId('dex-launch-list');
+        rows.replaceChildren(); launches.replaceChildren();
         pools.filter(visiblePool).forEach(pool => {
             const pair = pool.assetA.symbol + '/' + pool.assetB.symbol;
             if (![pair, pool.assetA.name, pool.assetB.name, pool.assetA.id, pool.assetB.id, pool.poolId]
@@ -36,19 +38,22 @@
             reserves.append(element('div', reserveText(pool.reserveAAtomic, pool.assetA)),
                 element('small', reserveText(pool.reserveBAtomic, pool.assetB)));
             const action = element('td', '');
-            if (pool.nativeInitialLaunch) {
-                action.append(element('div', pool.available ? 'Negociação aberta' : pool.status === 'collecting' ? 'Em captação · 6 POVIX por 1 USDC local' : pool.statusMessage || 'Aguardando disponibilidade'));
+            if (launchingPool(pool) || pool.nativeInitialLaunch) {
+                action.append(element('div', pool.available ? 'Negociação aberta' : launchingPool(pool) ? (pool.nativeInitialLaunch ? 'Em captação · 6 POVIX por 1 USDC local' : 'Em captação') : pool.statusMessage || 'Aguardando disponibilidade'));
             }
             const link = element('a', pool.available ? 'Negociar ↗' : 'Ver pool ↗', 'button button-secondary');
             const url = new URL(app.dataset.marketUrl, window.location.href);
             url.searchParams.set('poolId', pool.poolId);
             link.href = url.href; action.append(link);
-            row.append(identity, id, reserves, action); rows.append(row);
+            row.append(identity, id, reserves, action); (launchingPool(pool) ? launches : rows).append(row);
         });
-        byId('dex-result-count').textContent = rows.children.length + ' pool(s) encontrada(s)';
+        byId('dex-result-count').textContent = rows.children.length + ' pool(s) lançada(s) encontrada(s)';
+        byId('dex-launch-count').textContent = launches.children.length + ' pool(s) em lançamento encontrada(s)';
         if (!loading) {
-            byId('dex-status').textContent = rows.children.length ? '' : pools.some(visiblePool) ? 'Nenhuma pool corresponde à busca.' : 'Nenhuma pool encontrada na rede.';
+            byId('dex-status').textContent = rows.children.length ? '' : pools.some(pool => pool.available === true) ? 'Nenhuma pool lançada corresponde à busca.' : 'Nenhuma pool lançada disponível na rede.';
             byId('dex-status').hidden = rows.children.length > 0;
+            byId('dex-launch-status').textContent = launches.children.length ? '' : pools.some(launchingPool) ? 'Nenhuma pool em lançamento corresponde à busca.' : 'Nenhuma pool em lançamento na rede.';
+            byId('dex-launch-status').hidden = launches.children.length > 0;
         }
     }
     function updateCatalogue(data) {
@@ -64,7 +69,9 @@
     async function refresh() {
         if (loading) return;
         loading = true; byId('dex-refresh').disabled = true;
-        byId('dex-status').hidden = false; byId('dex-status').textContent = 'Consultando o catálogo da rede…';
+        ['dex-status', 'dex-launch-status'].forEach(id => {
+            byId(id).hidden = false; byId(id).textContent = 'Consultando o catálogo da rede…';
+        });
         try {
             const body = new URLSearchParams({ __RequestVerificationToken: app.querySelector('[name="__RequestVerificationToken"]').value });
             const response = await fetch(app.dataset.catalogueUrl, { method: 'POST', body, credentials: 'same-origin', cache: 'no-store' });
@@ -73,8 +80,10 @@
             updateCatalogue(data);
             loading = false; render();
         } catch (_) {
-            byId('dex-status').hidden = false;
-            byId('dex-status').textContent = pools.length ? 'Não foi possível atualizar. Exibindo o último catálogo consultado. Tente novamente.' : 'Não foi possível consultar a rede. Clique em Atualizar para tentar novamente.';
+            ['dex-status', 'dex-launch-status'].forEach(id => {
+                byId(id).hidden = false;
+                byId(id).textContent = pools.length ? 'Não foi possível atualizar. Exibindo o último catálogo consultado. Tente novamente.' : 'Não foi possível consultar a rede. Clique em Atualizar para tentar novamente.';
+            });
         } finally { loading = false; byId('dex-refresh').disabled = false; }
     }
     byId('dex-search').addEventListener('input', render);

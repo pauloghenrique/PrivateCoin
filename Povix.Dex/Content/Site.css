@@ -290,6 +290,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .dex-metrics strong { display: block; font-size: 27px; margin-top: 6px; font-weight: 600; }
 .dex-metrics em { vertical-align: middle; font-style: normal; font-size: 10px; padding: 4px 8px; border-radius: 4px; color: var(--green); background: var(--soft-green); }
 .dex-list { overflow: hidden; }
+.dex-launches { margin-bottom: 32px; }
 .dex-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px; }
 .dex-list-heading h2 { font-size: 25px; margin: 5px 0; }
 .dex-list-heading p { color: var(--muted); font-size: 12px; }
