@@ -26,7 +26,17 @@ namespace Povix.Dex.Controllers
             ViewBag.SelectedLaunchTokenId = ValidId(tokenId) ? tokenId : "";
             ViewBag.CreatePool = true;
             ViewBag.SelectedPoolId = "";
-            return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
+            return View("Create", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
+        }
+
+        [HttpGet]
+        public ActionResult CreateLaunch(string tokenId = null)
+        {
+            NoCache();
+            ViewBag.CreateLaunchPool = true;
+            ViewBag.SelectedLaunchTokenId = ValidId(tokenId) ? tokenId : "";
+            ViewBag.SelectedPoolId = "";
+            return View("CreateLaunch", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
         }
 
         [HttpPost, ValidateAntiForgeryToken]

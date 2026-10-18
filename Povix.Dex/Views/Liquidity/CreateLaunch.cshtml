@@ -1,0 +1,4 @@
+@model Povix.Dex.Models.TokenNetworkViewModel
+@{ ViewBag.Title = "Criar pool de lançamento"; }
+@Html.Partial("_PoolPage", Model)
+@section scripts { <script src="@Scripts.Url("~/bundles/povix-liquidity-v24")"></script> }

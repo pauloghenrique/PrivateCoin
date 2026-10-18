@@ -54,3 +54,5 @@
     .pool-list-tools > div { flex:1; min-width:150px; }
     #pool-result-count { width:100%; padding:0; }
 }
+
+.pool-create-choices { display: flex; flex-wrap: wrap; gap: 12px; }
