@@ -88,8 +88,8 @@ namespace PrivateCoin.Core
 
         internal static void ValidateEnvelope(Transaction tx, IDictionary<string, UnspentOutput> utxo, int version)
         {
-            if (version < 24 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
-                throw new InvalidOperationException("Initial POVIX launch requires consensus v24.");
+            if (version < 25 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
+                throw new InvalidOperationException("Initial POVIX launch requires consensus v25.");
             if (tx.InitialLaunchIdentity != null && tx.Kind != TransactionKind.InitialLaunchPurchase)
                 throw new InvalidOperationException("Only an initial launch purchase may carry its wallet identity proof.");
             for (int i = 0; i < tx.Outputs.Count; i++)

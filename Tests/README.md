@@ -693,3 +693,12 @@ pela suíte de consenso do lançamento, incluindo rejeição de crédito bruto s
 desconto e abertura com as mesmas reservas finais. Após a meta, o AMM continua
 cobrando a taxa separadamente. A alteração muda o genesis e requer rede v24;
 não migra automaticamente a cadeia anterior.
+
+
+## Compra de lançamento sem aprovação de validadores (v25)
+
+A suíte do lançamento inclui compra confirmada com AddBlock sem
+TransactionApproval, restauração da cadeia, verificações de assinatura e
+limites preservadas, além da rejeição de compras v25 em blocos v24. A fixture
+do mercado também minera a compra aceita sem aprovações e verifica seu recibo
+confirmado. Transferências e negociações AMM mantêm aprovação dos validadores.

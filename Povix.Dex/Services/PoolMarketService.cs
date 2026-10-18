@@ -49,7 +49,7 @@ namespace Povix.Dex.Services
                     var prior = submitted.FirstOrDefault(item => item.Transaction.Id == record.Exchange.PreviousReserveId)?.Transaction;
                     long a = prior?.Outputs[0].Amount ?? 0, b = prior?.Outputs[1].Amount ?? 0;
                     history.Add(new MarketMovement { Id = tx.Id, Operation = record.Exchange.Operation,
-                        Status = queued == null ? "rejected" : blockchain.HasValidTransactionApproval(queued, pending) ? "validated" : "pending",
+                        Status = queued == null ? "rejected" : Blockchain.IsSelfValidatedOperation(queued) || blockchain.HasValidTransactionApproval(queued, pending) ? "validated" : "pending",
                         Time = UnixTime(tx.TimestampUtcTicks), ReserveA = tx.Outputs[0].Amount, ReserveB = tx.Outputs[1].Amount,
                         DeltaA = record.Exchange.Operation == "close" ? -a : tx.Outputs[0].Amount - a,
                         DeltaB = record.Exchange.Operation == "close" ? -b : tx.Outputs[1].Amount - b });

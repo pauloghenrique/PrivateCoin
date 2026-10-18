@@ -114,7 +114,11 @@ internal static class PrivateCoinInitialLaunchRegression
                 Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "buyer cannot redirect the purchase to another identity");
                 bad = Copy(purchase); bad.InitialLaunchIdentity.Signature = Sign(provider, p, Encoding.UTF8.GetBytes((string)typeof(Transaction).GetMethod("SigningPayload", Hidden).Invoke(bad, null))); bad.Id = LegacyConsensusFixture.Id(bad);
                 Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "funding signatures cannot substitute for wallet identity authorization");
-                batch.Confirm(chain, new[] { purchase }, validators);
+                Check(Blockchain.IsSelfValidatedOperation(purchase) && !Blockchain.RequiresLockedTokenApproval(purchase), "launch purchase requires no validator approval");
+                long nativeBefore = Utxo(chain).Values.Where(item => item.Output.AssetId == null).Sum(item => item.Output.Amount);
+                chain.AddBlock(new[] { purchase });
+                Check(nativeBefore - Utxo(chain).Values.Where(item => item.Output.AssetId == null).Sum(item => item.Output.Amount) == purchase.Fee, "approval-free launch fee has no validator payout and reduces native UTXOs");
+                Check(purchase.TransactionApproval == null && new Blockchain(Copy(chain.Blocks.ToArray())).IsValid(), "unsigned launch block confirms and replays without validator votes");
                 Check(chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply - InitialLaunch.PurchaseAmount && chain.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount - purchase.Fee, "first buyer owns six locked POVIX and sale reserve decreases by six");
                 Check(!chain.GetSpendableOutputs(new[] { b }, new Transaction[0]).Any(item => item.TransactionId == purchase.Id && item.OutputIndex == 2), "locked purchase is excluded from spendable balances");
                 Check(WalletBalanceSummary.Read(chain, buyer, new Transaction[0]).LaunchLocked == InitialLaunch.PurchaseAmount - purchase.Fee, "desktop displays locked launch balance separately");
@@ -145,7 +149,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 var final = Complete(finalDraft, last, l);
                 bad = Copy(final); bad.PoolParticipation.LockedShares--; Resign(bad, last, bad.Inputs.Count - 2);
                 Reject(() => Apply(bad, CloneUtxo(boundary)), "last buyer cannot reduce the principal lock");
-                Reject(() => Apply(final, CloneUtxo(boundary), 23), "v23 blocks cannot accept the v24 net-fee launch purchase");
+                Reject(() => Apply(final, CloneUtxo(boundary), 24), "v24 blocks cannot accept the v25 approval-free launch purchase");
                 Apply(final, boundary);
                 Check(boundary[final.Id + ":0"].Output.Amount == InitialLaunch.PrincipalSupply && boundary[final.Id + ":1"].Output.Amount == InitialLaunch.MaximumPurchases * InitialLaunch.FundingUnit && !boundary[final.Id + ":0"].InitialLaunchCollecting, "purchase 29950 atomically opens exactly 179700 POVIX against 29950 funding units");
                 Apply(spend, CloneUtxo(boundary)); Check(true, "earlier purchase becomes spendable exactly at activation");

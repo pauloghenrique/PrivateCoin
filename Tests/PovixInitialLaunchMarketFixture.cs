@@ -61,6 +61,9 @@ class PovixInitialLaunchMarketFixture
                 if(prior==null) throw new Exception("Accepted purchase retry not idempotent");
                 request.Amount="1";
                 try { service.PrepareSwap(request,new[]{key},address,"test"); throw new Exception("Second pending purchase accepted"); } catch(TokenOperationException) {}
+                chain.AddBlock(new[]{accepted});
+                if(accepted.TransactionApproval!=null || !new Blockchain(chain.Blocks).IsValid()) throw new Exception("Launch purchase requires validator approval or fails replay");
+                if(service.GetExchangeReceipt(accepted.Id).Status!="confirmed") throw new Exception("Confirmed approval-free receipt missing");
                 Console.WriteLine("DEX purchase acceptance, identity signature, locked receipt, persistence, retry and pending duplicate checks passed");
             } finally { if(File.Exists(cache)) File.Delete(cache); if(File.Exists(cache+".bak")) File.Delete(cache+".bak"); }
 
