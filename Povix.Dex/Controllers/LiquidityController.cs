@@ -29,13 +29,6 @@ namespace Povix.Dex.Controllers
             return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
         }
 
-        [HttpGet]
-        public ActionResult Launches()
-        {
-            NoCache(); ViewBag.Launches = true; ViewBag.SelectedPoolId = "";
-            return View("Index", MvcApplication.TokenNetwork?.GetNetwork() ?? new TokenNetworkViewModel());
-        }
-
         [HttpPost, ValidateAntiForgeryToken]
         public ActionResult Catalogue(string[] publicKeys) => Read(() => MvcApplication.TokenNetwork.GetExchangeCatalogue(
             publicKeys == null || publicKeys.Length == 0 ? new string[0] : TokensController.DecodePublicKeys(publicKeys)));
