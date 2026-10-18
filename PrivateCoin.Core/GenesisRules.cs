@@ -72,7 +72,7 @@ namespace PrivateCoin.Core
         {
             return new GenesisRules
             {
-                SchemaVersion = 3,
+                SchemaVersion = 4,
                 WalletUsdcRewardAtomicUnits = InitialLaunch.WalletUsdcReward,
                 UsdcRewardedWalletLimit = InitialLaunch.UsdcRewardedWalletLimit,
                 InitialLaunchReserveAtomicUnits = InitialLaunch.ReserveSupply,
@@ -101,7 +101,7 @@ namespace PrivateCoin.Core
                 PoolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints,
                 BlockProductionRule = "Produce a nonempty eligible batch at the operation limit or after the wait from first local observation. The local monotonic wait is not remotely verifiable consensus.",
                 BlockValidationRule = "Every block requires proof of work, valid ordered operations, supply and UTXO conservation. Wallet and collateral operations are self-validated. Transfers, tokens and pools require signed collateral-backed approvals; stake blocks require the globally eligible validator set, deterministic creator selection and signed votes. Fork choice uses cumulative required work.",
-                InitialDistributionRule = "No premine in genesis. The first registered wallet receives 600 POVIX once; later registrations receive zero. The first rewarded registration automatically issues 359400 POVIX into an ownerless local-USDC launch escrow; one purchase of 6 per registered wallet identity for one protocol-defined local USDC unit (six decimals). The first 10000 registered wallet identities each receive 100 local USDC, including the first; total USDC issuance is capped at 1000000 units and advances only on registration. The first wallet receives 1000000 local USDT. Purchased outputs unlock at 29950 purchases, leaving 179700 POVIX and all funding in permanently locked principal liquidity. No bridge or external backing is implied.",
+                InitialDistributionRule = "No premine in genesis. The first registered wallet receives 600 POVIX once; later registrations receive zero. The first rewarded registration automatically issues 359400 POVIX into an ownerless local-USDC launch escrow; one gross purchase of 6 per registered wallet identity for one protocol-defined local USDC unit (six decimals), deducting the native transaction fee from those 6 POVIX before assigning the locked net receipt; no preexisting native balance is needed. The first 10000 registered wallet identities each receive 100 local USDC, including the first; total USDC issuance is capped at 1000000 units and advances only on registration. The first wallet receives 1000000 local USDT. Purchased outputs unlock at 29950 purchases, leaving 179700 POVIX and all funding in permanently locked principal liquidity. No bridge or external backing is implied.",
                 ImplementationHash = implementationHash,
                 CoreConfigurationManifest = CoreConfiguration.Manifest
             };

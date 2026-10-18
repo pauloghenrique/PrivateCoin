@@ -87,7 +87,7 @@ internal static class PrivateCoinInitialLaunchRegression
             var validators = new[] { v1.CreateValidatorStake(a1, Blockchain.OneCoin), v2.CreateValidatorStake(a2, Blockchain.OneCoin) };
             using (var batch = new ValidationBatchFixture(chain))
             {
-                foreach (var address in new[] { b, l })
+                foreach (var address in new[] { l })
                     batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], address, 6 * Blockchain.OneCoin, 1) }, validators);
                 Check(chain.GetInitialLaunchStatus().Created && chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply, "one initial launch issues exactly 359400 POVIX into escrow");
                 Check(chain.GetTokens().Count == 2 && InitialLaunch.FundingTokens().All(token => chain.GetTokenRuntime(token.Id).Supply == (token.Id == InitialLaunch.UsdcTokenId ? 5 * InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply) && chain.GetTokenBalance(new[] { p }, token.Id) == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply)), "USDC distributes 100 per registered identity while USDT issues one million");
@@ -100,7 +100,12 @@ internal static class PrivateCoinInitialLaunchRegression
                 var status = chain.GetInitialLaunchStatus();
                 var reserves = chain.GetUnspentOutputs(new[] { q }).Where(item => item.TransactionId == status.ReserveTransactionId && item.OutputIndex < 2).OrderBy(item => item.OutputIndex).ToArray();
                 Check(reserves.Length == 2 && reserves[1].Output.Amount == 0 && reserves.All(item => item.InitialLaunchCollecting), "zero funding reserve is paired and locked before the first purchase");
+                Check(chain.GetBalance(new[] { b }) == 0, "launch buyer starts with zero POVIX");
                 var purchase = buyer.CreateInitialLaunchPurchase(chain, new Transaction[0], b, b, 1);
+                Check(purchase.Outputs[2].Amount == InitialLaunch.PurchaseAmount - purchase.Fee && purchase.Inputs.Count == 3,
+                    "purchase funds only USDC and deducts fee from the six-POVIX receipt");
+                bad = Copy(purchase); bad.Outputs[2].Amount = InitialLaunch.PurchaseAmount; Resign(bad, buyer, bad.Inputs.Count - 2);
+                Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "purchase cannot omit the fee deduction");
                 bad = Copy(purchase); bad.Outputs[1].Amount--; bad.Outputs.Last(item => item.AssetId == InitialLaunch.UsdcTokenId).Amount++; Resign(bad, buyer, bad.Inputs.Count - 2);
                 Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "purchase must deposit exactly one local funding unit");
                 bad = Copy(purchase); bad.Outputs[2].InitialLaunchLocked = false; Resign(bad, buyer, bad.Inputs.Count - 2);
@@ -110,11 +115,11 @@ internal static class PrivateCoinInitialLaunchRegression
                 bad = Copy(purchase); bad.InitialLaunchIdentity.Signature = Sign(provider, p, Encoding.UTF8.GetBytes((string)typeof(Transaction).GetMethod("SigningPayload", Hidden).Invoke(bad, null))); bad.Id = LegacyConsensusFixture.Id(bad);
                 Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "funding signatures cannot substitute for wallet identity authorization");
                 batch.Confirm(chain, new[] { purchase }, validators);
-                Check(chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply - InitialLaunch.PurchaseAmount && chain.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount, "first buyer owns six locked POVIX and sale reserve decreases by six");
+                Check(chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply - InitialLaunch.PurchaseAmount && chain.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount - purchase.Fee, "first buyer owns six locked POVIX and sale reserve decreases by six");
                 Check(!chain.GetSpendableOutputs(new[] { b }, new Transaction[0]).Any(item => item.TransactionId == purchase.Id && item.OutputIndex == 2), "locked purchase is excluded from spendable balances");
-                Check(WalletBalanceSummary.Read(chain, buyer, new Transaction[0]).LaunchLocked == InitialLaunch.PurchaseAmount, "desktop displays locked launch balance separately");
+                Check(WalletBalanceSummary.Read(chain, buyer, new Transaction[0]).LaunchLocked == InitialLaunch.PurchaseAmount - purchase.Fee, "desktop displays locked launch balance separately");
                 var restored = new Blockchain(Copy(chain.Blocks.ToArray()));
-                Check(restored.IsValid() && restored.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount, "serialization and full-chain replay preserve escrow, supply and wallet locks");
+                Check(restored.IsValid() && restored.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount - purchase.Fee, "serialization and full-chain replay preserve escrow, supply and wallet locks");
                 Reject(() => chain.ValidatePendingTransactions(new[] { buyer.CreateInitialLaunchPurchase(chain, new Transaction[0], b, b, 1) }), "registered wallet cannot buy twice");
                 var utxo = Utxo(chain);
                 var locked = utxo[purchase.Id + ":2"];
@@ -140,7 +145,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 var final = Complete(finalDraft, last, l);
                 bad = Copy(final); bad.PoolParticipation.LockedShares--; Resign(bad, last, bad.Inputs.Count - 2);
                 Reject(() => Apply(bad, CloneUtxo(boundary)), "last buyer cannot reduce the principal lock");
-                Reject(() => Apply(final, CloneUtxo(boundary), 21), "v21 blocks cannot introduce the v22 initial launch");
+                Reject(() => Apply(final, CloneUtxo(boundary), 23), "v23 blocks cannot accept the v24 net-fee launch purchase");
                 Apply(final, boundary);
                 Check(boundary[final.Id + ":0"].Output.Amount == InitialLaunch.PrincipalSupply && boundary[final.Id + ":1"].Output.Amount == InitialLaunch.MaximumPurchases * InitialLaunch.FundingUnit && !boundary[final.Id + ":0"].InitialLaunchCollecting, "purchase 29950 atomically opens exactly 179700 POVIX against 29950 funding units");
                 Apply(spend, CloneUtxo(boundary)); Check(true, "earlier purchase becomes spendable exactly at activation");
@@ -157,7 +162,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 var add = Complete(addDraft, last); Apply(add, boundary);
                 Check(boundary[add.Id + ":0"].PoolParticipation.LockedShares == InitialLaunch.PrincipalSupply, "additional liquidity cannot alter the locked principal shares");
                 var swapA = boundary[add.Id + ":0"]; var swapB = boundary[add.Id + ":1"];
-                var feeSource = boundary.Values.First(item => item.OutputIndex >= 0 && item.Output.OneTimeAddress == b && item.Output.AssetId == null && !item.Output.InitialLaunchLocked);
+                var feeSource = boundary.Values.First(item => item.OutputIndex >= 0 && item.Output.OneTimeAddress == b && item.Output.AssetId == null && !item.IsPoolReserve);
                 var tokenSource = boundary.Values.First(item => item.OutputIndex >= 0 && item.Output.OneTimeAddress == b && item.Output.AssetId == InitialLaunch.UsdcTokenId);
                 long amount = InitialLaunch.FundingUnit;
                 long receive = TokenExchange.Quote(swapB.Output.Amount, swapA.Output.Amount, amount);

@@ -138,8 +138,8 @@
         const pool = selectedPool();
         updatePrices(pool);
         const collecting = nativeCollecting(pool);
-        if (collecting && !draft) { swapDirection = '1'; byId('swap-side').value = '1'; byId('swap-amount').value = '1'; byId('swap-minimum').value = '6'; }
-        if (byId('market-fee-help')) byId('market-fee-help').textContent = collecting ? 'A compra de lançamento cobra somente a taxa da rede em POVIX. Os 6 POVIX recebidos ficam bloqueados até a meta.' : 'Paga em POVIX. A taxa da pool de 0,30% permanece nas reservas.';
+        if (collecting && !draft) { swapDirection = '1'; byId('swap-side').value = '1'; byId('swap-amount').value = '1'; byId('swap-minimum').value = atomicText(String(600000000n - BigInt(fee())), 8); }
+        if (byId('market-fee-help')) byId('market-fee-help').textContent = collecting ? 'A taxa da rede é descontada dos 6 POVIX brutos. O valor líquido fica bloqueado até a meta. Não exige saldo POVIX anterior.' : 'Paga em POVIX. A taxa da pool de 0,30% permanece nas reservas.';
         byId('swap-amount').readOnly = collecting;
         byId('swap-minimum').readOnly = collecting;
         byId('swap-side').disabled = collecting || !editing || !unlocked;
@@ -166,7 +166,7 @@
         }
         try {
             if (!pool) throw new Error();
-            if (nativeCollecting(pool)) { byId('swap-estimate').textContent = '1 USDC local → 6 POVIX bloqueados até a meta. Uma participação por identidade. Taxa da rede em POVIX; sem taxa AMM nesta compra.'; return; }
+            if (nativeCollecting(pool)) { byId('swap-estimate').textContent = '1 USDC local → 6 POVIX bloqueados até a meta. Uma participação por identidade. A taxa da rede é descontada dos 6 POVIX; não exige saldo POVIX anterior.'; return; }
             const side = Number(swapSide()), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
             const amount = wallet.parseSupply(byId('swap-amount').value, input.decimals);
             const quote = wallet.quotePoolSwap(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount, pool.assetA, pool.assetB, side, pool.burnPolicy);
@@ -222,7 +222,7 @@
             addReview('Bloco limite', String(result.launch.deadlineHeight));
             addReview('Abertura', 'Captação integral na liquidez da carteira criadora; compradores recebem tokens proporcionais.');
         }
-        if (result.initialLaunchPurchase) addReview('Lançamento inicial', '1 USDC local por 6 POVIX bloqueados até a meta de 179.700 POVIX na reserva. Uma participação por identidade.');
+        if (result.initialLaunchPurchase) addReview('Lançamento inicial', '1 USDC local por 6 POVIX brutos menos a taxa da rede. O líquido fica bloqueado até a meta de 179.700 POVIX na reserva. Uma participação por identidade.');
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
@@ -233,7 +233,7 @@
         byId('sign-exchange').textContent = result.operation === 'lock' ? 'Confirmar bloqueio das reservas' : result.operation === 'close' ? 'Confirmar encerramento da pool' :
             result.operation === 'add' ? 'Confirmar e adicionar liquidez' : result.operation === 'remove' ? 'Confirmar e remover liquidez' :
             result.operation === 'pool' ? 'Confirmar e criar pool' : 'Confirmar troca';
-        if (result.initialLaunchPurchase) { byId('review-title').textContent = 'Compra do lançamento'; byId('sign-exchange').textContent = 'Confirmar compra de 6 POVIX bloqueados'; }
+        if (result.initialLaunchPurchase) { byId('review-title').textContent = 'Compra do lançamento'; byId('sign-exchange').textContent = 'Confirmar compra com taxa descontada'; }
         if (result.launch) byId('sign-exchange').textContent = result.transactionKind === 16 ? 'Assinar devolução dos aportes' : result.transactionKind === 15 ? 'Assinar aporte e abrir negociação' : result.transactionKind === 13 ? 'Assinar e criar lançamento' : 'Assinar aporte no lançamento';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -419,10 +419,10 @@
             if (!pool.available && !nativeCollecting(pool)) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
             const inputSide = Number(selectedSide), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
-            const quote = nativeCollecting(pool) ? { receiveAtomic: '600000000', inputDebitAtomic: '1000000' } : wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
+            const quote = nativeCollecting(pool) ? { receiveAtomic: String(600000000n - BigInt(fee())), inputDebitAtomic: '1000000' } : wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
             const receive = quote.receiveAtomic;
             if (BigInt(receive) < BigInt(minimumReceiveAtomic)) throw new Error('O mínimo a receber supera a cotação atual.');
-            const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map([['povix', BigInt(feeAtomic)]]);
+            const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map(nativeCollecting(pool) ? [] : [['povix', BigInt(feeAtomic)]]);
             funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(quote.inputDebitAtomic)); ensureFunds(funds);
             const wanted = { ...wantedFromPool(pool), operation: 'swap', initialLaunchPurchase: nativeCollecting(pool), inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, InputAssetId: input.id, OutputAssetId: output.id, Amount: byId('swap-amount').value,

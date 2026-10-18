@@ -88,8 +88,8 @@ namespace PrivateCoin.Core
 
         internal static void ValidateEnvelope(Transaction tx, IDictionary<string, UnspentOutput> utxo, int version)
         {
-            if (version < 23 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
-                throw new InvalidOperationException("Initial POVIX launch requires consensus v23.");
+            if (version < 24 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
+                throw new InvalidOperationException("Initial POVIX launch requires consensus v24.");
             if (tx.InitialLaunchIdentity != null && tx.Kind != TransactionKind.InitialLaunchPurchase)
                 throw new InvalidOperationException("Only an initial launch purchase may carry its wallet identity proof.");
             for (int i = 0; i < tx.Outputs.Count; i++)
@@ -144,9 +144,9 @@ namespace PrivateCoin.Core
             UnspentOutput registration;
             if (!utxo.TryGetValue(RegistrationPrefix + identity, out registration) || !registration.WalletRegistration || registration.InitialLaunchPurchased)
                 throw new InvalidOperationException("Each registered wallet identity may purchase only once.");
-            if (tx.Outputs.Count < 3 || tx.Outputs[2].AssetId != null || tx.Outputs[2].Amount != PurchaseAmount ||
+            if (tx.Outputs.Count < 3 || tx.Outputs[2].AssetId != null || tx.Outputs[2].Amount != PurchaseAmount - tx.Fee ||
                 tx.Outputs[2].OneTimeAddress != identity || !tx.Outputs[2].InitialLaunchLocked)
-                throw new InvalidOperationException("Six locked POVIX must be assigned to the signing registered wallet.");
+                throw new InvalidOperationException("The six-POVIX purchase minus the fee must be assigned to the signing registered wallet.");
             using (var rsa = new RSACryptoServiceProvider())
             {
                 rsa.PersistKeyInCsp = false;
@@ -202,13 +202,14 @@ namespace PrivateCoin.Core
                 reserveA.Output.OneTimeAddress != Crypto.Sha256(providerKey) || reserveB.Output.OneTimeAddress != Crypto.Sha256(providerKey) ||
                 reserveA.Output.Amount <= InitialLaunch.PrincipalSupply)
                 throw new InvalidOperationException("The initial launch reserves are unavailable.");
+            if (fee >= InitialLaunch.PurchaseAmount) throw new ArgumentOutOfRangeException(nameof(fee));
             var queue = pending.ToArray(); var keys = Keys(publicKeys, address, fee);
             if (!keys.ContainsKey(Crypto.Sha256(identityPublicKey))) throw new InvalidOperationException("Use this wallet's original registered identity.");
             var selected = new List<UnspentOutput>();
             var outputs = new List<TransactionOutput> { Output(null, reserveA.Output.Amount - InitialLaunch.PurchaseAmount, reserveA.Output.OneTimeAddress),
                 Output(reserveB.Output.AssetId, checked(reserveB.Output.Amount + InitialLaunch.FundingUnit), reserveB.Output.OneTimeAddress),
-                new TransactionOutput { Amount = InitialLaunch.PurchaseAmount, OneTimeAddress = Crypto.Sha256(identityPublicKey), InitialLaunchLocked = true } };
-            Fund(chain, queue, keys, new Dictionary<string, long> { { reserveB.Output.AssetId, InitialLaunch.FundingUnit } }, address, fee, selected, outputs,
+                new TransactionOutput { Amount = InitialLaunch.PurchaseAmount - fee, OneTimeAddress = Crypto.Sha256(identityPublicKey), InitialLaunchLocked = true } };
+            Fund(chain, queue, keys, new Dictionary<string, long> { { reserveB.Output.AssetId, InitialLaunch.FundingUnit } }, address, 0, selected, outputs,
                 new HashSet<string>(new[] { Key(reserveA), Key(reserveB) }));
             int count = selected.Count; selected.Add(reserveA); selected.Add(reserveB); keys[Crypto.Sha256(providerKey)] = providerKey;
             var draft = Build(selected, keys, outputs, count, fee, TransactionKind.InitialLaunchPurchase,
