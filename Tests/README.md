@@ -665,3 +665,20 @@ Aplica os 10.000 créditos pelo validador real de consenso e verifica o milhão
 acumulado, duplicidade, crédito pendente indisponível, última recompensa,
 rejeição de valores adulterados e registro sem crédito após esgotar o limite.
 O teste completo de blocos do lançamento cobre restauração e negociação.
+
+
+## Compra inicial pela tela Liquidity/Market
+
+Com Core e Models/Services do DEX compilados:
+
+```sh
+mcs -out:work/LaunchMarketFixture.exe -r:work/Povix.Dex.Services.dll -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Runtime.Serialization -r:System.Web.Extensions -r:System.ComponentModel.DataAnnotations Tests/PovixInitialLaunchMarketFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release:work mono work/LaunchMarketFixture.exe work/launch-market
+node Tests/PovixInitialLaunchMarketWalletRegression.js work/launch-market
+node Tests/PovixDexBuySellUiRegression.js
+```
+
+Verifica preparação real de compra fixa, rejeição de venda/quantidade incorreta,
+payloads reais da primeira e última compra, identidade, bloqueio, reservas e
+transição da interface da captação para compra/venda. A fixture simula apenas
+a prontidão do nó para preparar, sem abrir sockets, enviar ou minerar transações.

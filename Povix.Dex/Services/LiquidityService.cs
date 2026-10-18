@@ -162,6 +162,26 @@ namespace Povix.Dex.Services
                 RequireReady(); ReserveDraftSlot(owner);
                 var pool = Snapshot(model.PoolId);
                 if (pool == null) throw new TokenOperationException("pool_unavailable", "A pool não foi encontrada nesta instalação do DEX.");
+                if (pool.NativeInitialLaunch && pool.Status == "collecting") {
+                    if (model.InputSide != 1 || model.InputAssetId != pool.AssetB.Id || model.OutputAssetId != pool.AssetA.Id ||
+                        ParseAmount(model.Amount, pool.AssetB.Decimals) != InitialLaunch.FundingUnit ||
+                        ParseAmount(model.MinimumReceive, pool.AssetA.Decimals) != InitialLaunch.PurchaseAmount)
+                        throw new TokenOperationException("launch_fixed_rate", "No lançamento, troque exatamente 1 USDC local por 6 POVIX bloqueados.");
+                    var registrations = blockchain.Blocks.SelectMany(block => block.Transactions)
+                        .Where(operation => operation.WalletDistributionId == null && (operation.Kind == TransactionKind.WalletCreate || operation.Kind == TransactionKind.InitialLaunchCreate))
+                        .Select(operation => operation.Outputs[operation.Kind == TransactionKind.InitialLaunchCreate ? 4 : 0].OneTimeAddress).ToArray();
+                    var purchased = blockchain.Blocks.SelectMany(block => block.Transactions).Concat(pending)
+                        .Where(operation => operation.Kind == TransactionKind.InitialLaunchPurchase).Select(operation => operation.InitialLaunchIdentity.PublicKey).ToArray();
+                    string identity = publicKeys.FirstOrDefault(key => registrations.Contains(AddressFor(key)) && !purchased.Contains(key));
+                    if (identity == null) throw new TokenOperationException("launch_identity", "Use uma carteira registrada que ainda não participou do lançamento.");
+                    var launchTx = TokenExchange.PrepareInitialLaunchPurchase(blockchain, pending, publicKeys, pool.ReserveA, pool.ReserveB,
+                        pool.ProviderKey, identity, address, GetSelectedFee(model.FeePriority, model.FeeAtomic));
+                    return AddExchangeDraft(new PreparedExchange { Transaction = launchTx, Operation = "swap", InitialLaunchIdentityKey = identity,
+                        Owner = owner, ProviderKey = pool.ProviderKey, PoolId = pool.Id, ReserveId = pool.Transaction.Id,
+                        Address = address, AssetA = pool.AssetA, AssetB = pool.AssetB, ReserveA = pool.ReserveA.Output.Amount,
+                        ReserveB = pool.ReserveB.Output.Amount, InputSide = 1, Amount = InitialLaunch.FundingUnit,
+                        MinimumReceive = InitialLaunch.PurchaseAmount, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
+                }
                 if (!pool.Available) throw new TokenOperationException(pool.Status == "pending" || pool.Status == "validated" ? "pool_unconfirmed" :
                     pool.Status == "busy" ? "pool_reserved" : "pool_unavailable", pool.StatusMessage,
                     pool.Status == "pending" || pool.Status == "validated" || pool.Status == "busy");
@@ -258,7 +278,7 @@ namespace Povix.Dex.Services
                 RequireReady();
                 var draft = ExchangeDraft(draftId, owner, "swap");
                 RequireCurrentReserves(draft);
-                VerifyExchangeSignatures(draft.Transaction, signatures, 0, draft.Transaction.UserInputCount);
+                VerifyExchangeSignatures(draft.Transaction, draft.InitialLaunchIdentityKey == null ? signatures : signatures.Take(signatures.Length - 1).ToArray(), 0, draft.Transaction.UserInputCount);
                 tx = AcceptExchange(draftId, draft, signatures);
             }
             await Relay(tx).ConfigureAwait(false); return tx.Id;
@@ -284,7 +304,7 @@ namespace Povix.Dex.Services
                     Outputs = tx.Outputs.Select((output, index) => {
                         var asset = output.AssetId == null ? NativeAsset() : output.AssetId == record.Exchange.AssetA.Id ? record.Exchange.AssetA : record.Exchange.AssetB;
                         return new ExchangeOutputViewModel { Amount = output.Amount, Symbol = asset.Symbol, Decimals = asset.Decimals, Address = output.OneTimeAddress,
-                            Purpose = tx.Kind == TransactionKind.LaunchRefund ? "Devolução do lançamento" : tx.Kind == TransactionKind.LaunchActivate && index >= 2 && index < 2 + tx.Launch.Contributions.Count ? "Tokens comprados no lançamento" : index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
+                            Purpose = tx.Kind == TransactionKind.InitialLaunchPurchase && index == 2 ? "POVIX bloqueados até a meta do lançamento" : tx.Kind == TransactionKind.LaunchRefund ? "Devolução do lançamento" : tx.Kind == TransactionKind.LaunchActivate && index >= 2 && index < 2 + tx.Launch.Contributions.Count ? "Tokens comprados no lançamento" : index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
                                 tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ? "Reserva bloqueada da pool" : "Reserva da pool antiga (sem bloqueio)" :
                                 record.Exchange.Operation == "remove" && index < 4 ? "Liquidez retirada pela carteira" :
                                 record.Exchange.Operation == "swap" && index == 2 ? "Recebimento da troca" : "Troco da carteira" };
@@ -295,7 +315,8 @@ namespace Povix.Dex.Services
         private Transaction AcceptExchange(string id, PreparedExchange draft, string[] signatures)
         {
             if (pending.Count >= MaximumPending) throw new TokenOperationException("pending_limit", "A fila está cheia. Repita o mesmo envio mais tarde.", true);
-            var tx = draft.Transaction.Complete(signatures);
+            var tx = draft.Transaction.Complete(draft.InitialLaunchIdentityKey == null ? signatures : signatures.Take(signatures.Length - 1),
+                draft.InitialLaunchIdentityKey == null ? null : signatures.Last());
             try { blockchain.ValidatePendingTransactions(pending.Concat(new[] { tx })); }
             catch (Exception error) when (IsInvalidData(error))
             { throw new TokenOperationException("funding_unavailable", "As entradas foram gastas ou reservadas, ou a transação foi rejeitada. Atualize e prepare novamente."); }
@@ -310,7 +331,7 @@ namespace Povix.Dex.Services
         {
             var prior = submitted.FirstOrDefault(item => item.DraftId == id && item.Exchange?.Operation == operation);
             if (prior != null && (signatures == null || !prior.Transaction.Inputs.Take((operation == "swap" || operation == "add" || operation == "remove" || operation == "launch-contribute" || operation == "launch-refund") ? prior.Transaction.Inputs.Count - 2 : prior.Transaction.Inputs.Count)
-                    .Select(input => input.Signature).SequenceEqual(signatures)))
+                    .Select(input => input.Signature).Concat(prior.Transaction.InitialLaunchIdentity == null ? new string[0] : new[] { prior.Transaction.InitialLaunchIdentity.Signature }).SequenceEqual(signatures)))
                 throw new TokenOperationException("signatures_invalid", "As assinaturas não correspondem ao envio já aceito.");
             return prior;
         }
@@ -352,7 +373,7 @@ namespace Povix.Dex.Services
             }
         }
         private bool CurrentReserves(PreparedExchange draft)
-        { var pool = Snapshot(draft.PoolId); return pool != null && pool.Available && pool.Transaction.Id == draft.ReserveId; }
+        { var pool = Snapshot(draft.PoolId); return pool != null && (draft.InitialLaunchIdentityKey != null ? pool.NativeInitialLaunch && pool.Status == "collecting" : pool.Available) && pool.Transaction.Id == draft.ReserveId; }
         private void RequireCurrentReserves(PreparedExchange draft)
         { if (!CurrentReserves(draft)) throw new TokenOperationException("pool_changed", "As reservas da pool mudaram ou estão ocupadas. Prepare outra troca."); }
 
@@ -479,6 +500,7 @@ namespace Povix.Dex.Services
             blockingTransactionId = pool.BlockingTransactionId, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
         private static object DraftResponse(string id, PreparedExchange draft) => new {
             launch = LaunchResponse(draft.Transaction.Launch),
+            initialLaunchPurchase = draft.InitialLaunchIdentityKey != null, initialLaunchIdentityKey = draft.InitialLaunchIdentityKey,
             rewardMode = draft.RewardMode ?? "fees", loyaltyPolicy = LoyaltyPolicyResponse(draft.LoyaltyPolicy),
             burnEnabled = draft.Transaction.BurnEnabled, burnPolicy = PoolBurnResponse(draft.Transaction.BurnPolicy), allowUserLiquidity = draft.Transaction.PoolParticipation != null,
             participation = ParticipationResponse(draft.Transaction.PoolParticipation),
@@ -492,7 +514,7 @@ namespace Povix.Dex.Services
             inputs = draft.Transaction.Inputs.Select((input, index) => new { transactionId = input.TransactionId, outputIndex = input.OutputIndex,
                 address = draft.Transaction.Sources[index].Output.OneTimeAddress, assetId = draft.Transaction.Sources[index].Output.AssetId ?? "povix",
                 amountAtomic = Atomic(draft.Transaction.Sources[index].Output.Amount) }).ToArray(),
-            outputs = draft.Transaction.Outputs.Select(output => new { assetId = output.AssetId ?? "povix", amountAtomic = Atomic(output.Amount), address = output.OneTimeAddress }).ToArray(),
+            outputs = draft.Transaction.Outputs.Select(output => new { assetId = output.AssetId ?? "povix", amountAtomic = Atomic(output.Amount), address = output.OneTimeAddress, initialLaunchLocked = output.InitialLaunchLocked }).ToArray(),
             signingPayload = Convert.ToBase64String(draft.Transaction.SigningPayload), timestampUtcTicks = Atomic(draft.Transaction.TimestampUtcTicks),
             networkId = Blockchain.NetworkId, consensusVersion = Blockchain.ConsensusVersion, expiresUtc = draft.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture),
             poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
@@ -539,7 +561,7 @@ namespace Povix.Dex.Services
         private sealed class PreparedExchange
         {
             public UnsignedTokenExchange Transaction;
-            public string Operation, Owner, ProviderKey, PoolId, ReserveId, Address, RewardMode;
+            public string Operation, Owner, ProviderKey, PoolId, ReserveId, Address, RewardMode, InitialLaunchIdentityKey;
             public TokenDefinition AssetA, AssetB;
             public PoolLoyaltyPolicy LoyaltyPolicy;
             public long ReserveA, ReserveB, Amount, MinimumReceive;

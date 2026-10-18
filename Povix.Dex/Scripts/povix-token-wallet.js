@@ -202,6 +202,11 @@
         payload += field(draft.tokenId) + field(draft.name) + field(draft.symbol) + '|' + draft.decimals + '|' + draft.supplyAtomic;
         if (policy) payload += '|token-policy-v1|' + draft.policyCanonical;
         if (locks.some(height => height !== 0)) payload += '|token-locks-v1|' + locks.concat(hasChange ? [0] : []).join(',');
+        if (initial) {
+            if (draft.outputs.some((item, index) => Boolean(item.initialLaunchLocked) !== (index === 2))) fail();
+            payload += '|initial-launch-identity-v1|' + field(draft.initialLaunchIdentityKey);
+            payload += '|initial-launch-locks-v1|' + draft.outputs.map((item, index) => index === 2 ? '1' : '0').join(',');
+        }
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) throw new Error('O conteúdo para assinatura difere da revisão.');
         if (!Number.isFinite(Date.parse(draft.expiresUtc)) || Date.parse(draft.expiresUtc) <= Date.now()) throw new Error('A preparação expirou. Prepare novamente.');
         return true;
@@ -245,6 +250,11 @@
             seen.add(address); payload += field(publicKey);
         }
         if (expected.operation === 'burn' ? seen.size !== 0 : seen.size !== token.requiredSignatures) throw new Error('Número incorreto de assinaturas administrativas.');
+        if (initial) {
+            if (draft.outputs.some((item, index) => Boolean(item.initialLaunchLocked) !== (index === 2))) fail();
+            payload += '|initial-launch-identity-v1|' + field(draft.initialLaunchIdentityKey);
+            payload += '|initial-launch-locks-v1|' + draft.outputs.map((item, index) => index === 2 ? '1' : '0').join(',');
+        }
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) throw new Error('O conteúdo da operação difere da revisão.');
         return true;
     }
@@ -290,18 +300,20 @@
             if (!actual || !wanted || actual.id !== wanted.id || actual.name !== wanted.name || actual.symbol !== wanted.symbol || actual.decimals !== wanted.decimals ||
                 !(actual.id === 'povix' || id(actual.id)) || !Number.isInteger(actual.decimals) || actual.decimals < 0 || actual.decimals > 8) fail();
         }
+        const initial = draft.initialLaunchPurchase === true;
+        if (initial !== Boolean(expected.initialLaunchPurchase) || initial && draft.operation !== 'swap') fail();
         const burnRules = normalizePoolBurn(draft.burnPolicy, draft.assetA, draft.assetB);
         const wantedBurn = normalizePoolBurn(expected.burnPolicy, expected.assetA, expected.assetB);
         if (Boolean(draft.burnEnabled) !== Boolean(expected.burnEnabled) || Boolean(draft.burnEnabled) !== Boolean(burnRules) || JSON.stringify(burnRules) !== JSON.stringify(wantedBurn)) fail();
         if (draft.assetA.id === draft.assetB.id || !atomic(draft.reserveAAtomic) || !atomic(draft.reserveBAtomic) ||
             draft.reserveAAtomic !== expected.reserveAAtomic || draft.reserveBAtomic !== expected.reserveBAtomic ||
-            BigInt(draft.reserveAAtomic) <= 0n || BigInt(draft.reserveBAtomic) <= 0n) fail();
+            BigInt(draft.reserveAAtomic) <= 0n || (BigInt(draft.reserveBAtomic) <= 0n && !initial)) fail();
         const allowed = new Set(['povix', draft.assetA.id, draft.assetB.id]), seen = new Set(), totals = new Map();
         let payload = draft.timestampUtcTicks;
         draft.inputs.forEach((input, index) => {
             const key = input.transactionId + ':' + input.outputIndex;
             if (!id(input.transactionId) || !id(input.address) || !Number.isSafeInteger(input.outputIndex) || input.outputIndex < 0 ||
-                !allowed.has(input.assetId) || !atomic(input.amountAtomic) || BigInt(input.amountAtomic) <= 0n || seen.has(key)) fail();
+                !allowed.has(input.assetId) || !atomic(input.amountAtomic) || (BigInt(input.amountAtomic) <= 0n && !(initial && index === draft.userInputCount + 1 && input.amountAtomic === '0')) || seen.has(key)) fail();
             seen.add(key); payload += '|' + key;
             const owned = !['swap', 'add', 'remove', 'launch-contribute', 'launch-refund'].includes(draft.operation) || index < draft.userInputCount;
             if (owned && !wallet.keys.has(input.address)) fail();
@@ -345,6 +357,7 @@
         const launchTerms = value => [value.targetAtomic, value.saleTokensAtomic, value.totalTokensAtomic, value.deadlineHeight, value.allowUserLiquidity ? '1' : '0'].join('|');
         let expectedShares = null, launchEncoding = null;
 
+        if (initial && a - 600000000n === 17970000000000n) { expectedShares = new Map(); expectedShares.lockedShares = 17970000000000n; }
         if (draft.operation === 'pool') {
             if (!['fees', 'loyalty'].includes(draft.rewardMode || 'fees') || (draft.rewardMode || 'fees') !== (expected.rewardMode || 'fees')) fail();
             const policy = draft.loyaltyPolicy, wantedPolicy = expected.loyaltyPolicy;
@@ -434,6 +447,17 @@
                     draft.amountAtomic !== '0' || draft.minimumReceiveAtomic !== '0' || draft.receiveAtomic !== '0' || draft.inputSide !== 0) fail();
                 wantedOutputs.push(output(draft.assetA.id, a, draft.providerAddress), output(draft.assetB.id, b, draft.providerAddress));
             } else {
+                if (initial) {
+                    const usdc = 'd0c0ff968d7093a5b3e4b9a617112e66e4d62d5765833d0852387b5ea7d1ab98';
+                    const identity = await sha256(draft.initialLaunchIdentityKey || '');
+                    if (draft.providerAddress !== '7a2358946042363fc99d76aa983c6dd9806afb0f2c2b35064fc6c4e8b64aa974' || draft.assetA.id !== 'povix' || draft.assetB.id !== usdc || draft.inputSide !== 1 ||
+                        draft.amountAtomic !== '1000000' || draft.minimumReceiveAtomic !== '600000000' || draft.receiveAtomic !== '600000000' ||
+                        a <= 17970000000000n || a > 35940000000000n || (35940000000000n - a) % 600000000n !== 0n ||
+                        b !== (35940000000000n - a) / 600000000n * 1000000n || burnRules ||
+                        !wallet.keys.has(identity) || wallet.keys.get(identity).publicXml !== draft.initialLaunchIdentityKey) fail();
+                    wantedOutputs.push(output('povix', a - 600000000n, draft.providerAddress), output(usdc, b + 1000000n, draft.providerAddress), output('povix', 600000000n, identity));
+                    addSpend(usdc, 1000000n);
+                } else {
                 const amount = BigInt(draft.amountAtomic), quote = quotePoolSwap(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount,
                     draft.assetA, draft.assetB, draft.inputSide, burnRules);
                 const receive = BigInt(quote.receiveAtomic), gross = BigInt(quote.grossReceiveAtomic);
@@ -443,6 +467,7 @@
                     output(draft.assetB.id, draft.inputSide === 1 ? b + amount : b - gross, draft.providerAddress),
                     output(draft.inputSide === 0 ? draft.assetB.id : draft.assetA.id, receive, draft.changeAddress));
                 addSpend(draft.inputSide === 0 ? draft.assetA.id : draft.assetB.id, quote.inputDebitAtomic);
+                }
             }
         } else fail();
         for (const assetId of Array.from(new Set([...spends.keys(), ...totals.keys()])).sort((x, y) => x === 'povix' ? -1 : y === 'povix' ? 1 : x.localeCompare(y))) {
@@ -456,12 +481,12 @@
             if (!atomic(item.amountAtomic) || BigInt(item.amountAtomic) <= 0n || item.amountAtomic !== wanted.amountAtomic || item.address !== wanted.address || item.assetId !== wanted.assetId) fail();
             payload += '|' + item.amountAtomic + ':' + item.address;
         });
-        const kind = launchEncoding ? draft.transactionKind : { pool: 7, swap: 8, lock: 7, close: 9, add: 10, remove: 11 }[draft.operation];
+        const kind = launchEncoding ? draft.transactionKind : { pool: 7, swap: initial ? 18 : 8, lock: 7, close: 9, add: 10, remove: 11 }[draft.operation];
         if (!launchEncoding && draft.launch) fail();
         if (draft.transactionKind !== kind) fail();
         payload += '|fee:' + draft.feeAtomic + '|kind:' + kind + '|validator:|reward:|owned:|assets-v1|';
         draft.outputs.forEach(item => { payload += field(item.assetId === 'povix' ? null : item.assetId); });
-        if (draft.operation === 'swap') {
+        if (draft.operation === 'swap' && !initial) {
             payload += '|pool-swap-v1|' + draft.inputSide + '|' + draft.amountAtomic;
             if (BigInt(draft.inputBurnAtomic || '0') > 0n || BigInt(draft.outputBurnAtomic || '0') > 0n) payload += '|pool-burn-v1|' + draft.inputBurnAtomic + '|' + draft.outputBurnAtomic;
         }
@@ -474,6 +499,11 @@
         if (['add', 'remove'].includes(draft.operation)) payload += '|pool-change-v1|' + draft.changeAddress + '|' + draft.sharesAtomic;
         if (burnRules) payload += '|pool-burn-enabled-v1|' + burnRules.basisPoints + ':' + burnRules.fixedAAtomic + ':' + burnRules.fixedBAtomic;
         if (launchEncoding) payload += '|pool-launch-v1|' + launchEncoding;
+        if (initial) {
+            if (draft.outputs.some((item, index) => Boolean(item.initialLaunchLocked) !== (index === 2))) fail();
+            payload += '|initial-launch-identity-v1|' + field(draft.initialLaunchIdentityKey);
+            payload += '|initial-launch-locks-v1|' + draft.outputs.map((item, index) => index === 2 ? '1' : '0').join(',');
+        }
         if (toBase64(encoder.encode(payload)) !== draft.signingPayload) fail();
         return true;
     }
