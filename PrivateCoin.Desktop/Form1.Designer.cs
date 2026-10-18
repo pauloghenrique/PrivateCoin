@@ -33,7 +33,6 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Label networkConnectionLabel;
         private System.Windows.Forms.Button tokensButton;
         private System.Windows.Forms.Button walletFolderButton;
-        private System.Windows.Forms.Button registerWalletButton;
         private System.Windows.Forms.Label initialLaunchLabel;
 
         protected override void Dispose(bool disposing)
@@ -75,7 +74,6 @@ namespace PrivateCoin.Desktop
             this.networkConnectionLabel = CreateValueLabel("●  Desconectado");
             this.tokensButton = CreateButton("Ver tokens", false);
             this.walletFolderButton = CreateButton("Pasta da carteira", false);
-            this.registerWalletButton = CreateButton("Registrar carteira", false);
             this.initialLaunchLabel = CreateMutedLabel("Primeira carteira: 600 POVIX e pool automática.");
 
             var header = new HeroPanel();
@@ -92,7 +90,6 @@ namespace PrivateCoin.Desktop
             header.Controls.AddRange(new System.Windows.Forms.Control[] { brandMark, brand, subtitle, security });
 
             var walletCard = CreateCard(24, 112, 640, 358, "Carteira", "Gerencie seus fundos e faça transferências");
-            registerWalletButton.SetBounds(178, 14, 154, 28);
             tokensButton.SetBounds(492, 14, 120, 28);
             walletFolderButton.SetBounds(342, 14, 140, 28);
             AddFieldLabel(walletCard, "CARTEIRA ATIVA", 24, 72, 220);
@@ -120,8 +117,7 @@ namespace PrivateCoin.Desktop
             createTransactionButton.SetBounds(438, 320, 174, 32);
             walletCard.Controls.AddRange(new System.Windows.Forms.Control[] { walletComboBox, balanceLabel, walletNameTextBox,
                 createWalletButton, recoverWalletButton, receiveAddressTextBox, copyAddressButton, newAddressButton,
-                destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton, tokensButton, walletFolderButton, registerWalletButton });
-            registerWalletButton.BringToFront();
+                destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton, tokensButton, walletFolderButton });
             tokensButton.BringToFront();
             walletFolderButton.BringToFront();
 
@@ -164,7 +160,6 @@ namespace PrivateCoin.Desktop
             startNodeButton.Click += new System.EventHandler(this.StartNodeButtonClick);
             connectButton.Click += new System.EventHandler(this.ConnectButtonClick);
             walletComboBox.SelectedIndexChanged += new System.EventHandler(this.WalletComboBoxSelectedIndexChanged);
-            registerWalletButton.Click += new System.EventHandler(this.RegisterWalletButtonClick);
             createWalletButton.Click += new System.EventHandler(this.CreateWalletButtonClick);
             recoverWalletButton.Click += new System.EventHandler(this.RecoverWalletButtonClick);
             newAddressButton.Click += new System.EventHandler(this.NewAddressButtonClick);
@@ -175,8 +170,6 @@ namespace PrivateCoin.Desktop
             tokensButton.Click += new System.EventHandler(this.TokensButtonClick);
             walletFolderButton.Click += new System.EventHandler(this.WalletFolderButtonClick);
             connectButton.Enabled = false;
-            registerWalletButton.Enabled = false;
-            toolTip.SetToolTip(registerWalletButton, "Registrar a carteira selecionada na rede. Somente a primeira carteira confirmada recebe 600 POVIX e cria a pool automaticamente.");
             toolTip.SetToolTip(copyAddressButton, "Copiar endereço para a área de transferência");
             toolTip.SetToolTip(newAddressButton, "Gerar um novo endereço descartável");
             toolTip.SetToolTip(tokensButton, "Ver os tokens com saldo da carteira selecionada e enviar para outro endereço");

@@ -23,7 +23,6 @@ namespace PrivateCoin.Desktop
         private bool persistenceAvailable = true;
         private bool miningInProgress;
         private bool updateCheckInProgress;
-        private bool registrationInProgress;
         private readonly BlockProductionScheduler blockScheduler = new BlockProductionScheduler();
         private readonly Timer blockProductionTimer;
 
@@ -249,35 +248,6 @@ namespace PrivateCoin.Desktop
             });
         }
 
-        private async void RegisterWalletButtonClick(object sender, EventArgs e)
-        {
-            if (registrationInProgress) return;
-            NamedWallet selected = SelectedWallet;
-            if (selected == null) return;
-            registrationInProgress = true;
-            registerWalletButton.Enabled = false;
-            Transaction registration = null;
-            try
-            {
-                // The selected wallet is visible to UI callbacks; keep key creation on
-                // this thread instead of mutating its key dictionary in a worker.
-                UseWaitCursor = true;
-                registration = ExecuteNetworkOperation(() => WalletRegistration.Prepare(blockchain, selected.Wallet, SnapshotPending()));
-                receiveAddressTextBox.Text = selected.Wallet.OwnedOneTimeAddresses.LastOrDefault() ?? string.Empty;
-                QueueWalletRegistration(registration);
-                UpdateChainSummary();
-                Log("Carteira “" + selected.Name + "”: " + WalletRegistration.Describe(registration), true);
-                if (peerNode != null) await peerNode.BroadcastAsync(registration);
-                BeginInvoke(new Action(StartAutomaticMining));
-            }
-            catch (Exception error)
-            {
-                bool queued = registration != null && SnapshotPending().Any(tx => tx.Id == registration.Id);
-                Log((queued ? "Registro salvo e aguardando retransmissão; não repita a operação. " : "Não foi possível concluir o registro: ") + error.Message, false);
-            }
-            finally { UseWaitCursor = false; registrationInProgress = false; UpdateWalletSummary(); }
-        }
-
         private async void RecoverWalletButtonClick(object sender, EventArgs e)
         {
             string name;
@@ -459,7 +429,7 @@ namespace PrivateCoin.Desktop
 
         private void UpdatePeerStatus()
         {
-            UpdateRegistrationControls();
+            UpdateInitialLaunchStatus();
             PeerNode node = peerNode;
             int connectedPeers = node == null ? 0 : node.ConnectedPeerCount;
             bool connected = connectedPeers > 0;
@@ -884,7 +854,7 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             RefreshValidatorState();
-            UpdateRegistrationControls();
+            UpdateInitialLaunchStatus();
             NamedWallet selected = SelectedWallet;
             WalletBalanceSummary balance = WalletBalanceSummary.Read(blockchain, selected?.Wallet, SnapshotPending());
             long lockedStake = selected == null ? 0 : selected.LockedStake;
@@ -910,14 +880,9 @@ namespace PrivateCoin.Desktop
             unlockStakeButton.Enabled = selected != null && selected.IsValidator && !collateralPending;
         }
 
-        private void UpdateRegistrationControls()
+        private void UpdateInitialLaunchStatus()
         {
             var queue = SnapshotPending();
-            bool registered = WalletRegistration.HasRegistration(blockchain, SelectedWallet?.Wallet, queue);
-            bool confirmed = WalletRegistration.HasRegistration(blockchain, SelectedWallet?.Wallet, new Transaction[0]);
-            registerWalletButton.Text = confirmed ? "Carteira registrada" : registered ? "Registro na fila" : "Registrar carteira";
-            registerWalletButton.Enabled = persistenceAvailable && !registrationInProgress && SelectedWallet != null && !registered &&
-                networkReadiness.IsReady && IsNetworkConnected();
             initialLaunchLabel.Text = WalletRegistration.LaunchStatus(blockchain, queue);
             toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX bloqueados por 1 USDC local. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
         }
