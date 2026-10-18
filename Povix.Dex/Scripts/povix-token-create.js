@@ -11,7 +11,7 @@
     let signedSignatures = null;
     let walletDestination = null;
 
-    function message(text) { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; }
+    function message(text) { for (const id of ['app-message', 'review-error']) { const item = byId(id); if (item) { item.textContent = text || ''; item.hidden = !text; } } }
     async function post(url, values) {
         const body = new URLSearchParams({ __RequestVerificationToken: csrf });
         Object.entries(values).forEach(([key, value]) => {
@@ -118,6 +118,7 @@
         byId('precision-example').textContent = 'Menor unidade: ' + wallet.formatAtomic('1', decimals);
     }
     function resetDraft() {
+        if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
         draft = null; expected = null; signedSignatures = null;
         byId('sign-actions').hidden = true;
         byId('prepare-token').textContent = 'Revisar criação →';
@@ -219,10 +220,11 @@
             byId('sign-actions').hidden = false;
             byId('prepare-token').textContent = 'Criação preparada';
             updateReview();
-            byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            byId('transaction-review-dialog')?.showModal?.();
         } catch (error) { resetDraft(); message(error.message); }
         finally { busy = false; updateControls(); }
     });
+    byId('transaction-review-dialog')?.addEventListener('cancel', event => { event.preventDefault(); if (!busy) resetDraft(); });
     byId('edit-token').addEventListener('click', () => { resetDraft(); message(''); });
     byId('sign-token').addEventListener('click', async () => {
         if (busy || !draft || !wallet.isUnlocked() || !network?.CanCreate) return;
@@ -236,6 +238,7 @@
             // Only follow an application-local receipt URL.
             const receipt = new URL(result.receiptUrl, location.origin);
             if (receipt.origin !== location.origin) throw new Error('Endereço de comprovante inválido.');
+            if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
             location.assign(receipt.href);
         } catch (error) {
             if (error.rejected) resetDraft();

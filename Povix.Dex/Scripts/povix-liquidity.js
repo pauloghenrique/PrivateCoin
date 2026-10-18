@@ -6,7 +6,7 @@
     const csrf = byId('pool-form').querySelector('[name="__RequestVerificationToken"]').value;
     let assets = [], pools = [], network = null, draft = null, expected = null, signatures = null;
     let busy = false, refreshing = false, epoch = 0;
-    const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
+    const message = text => { for (const id of ['app-message', 'review-error']) { const item = byId(id); if (item) { item.textContent = text || ''; item.hidden = !text; } } };
     const asset = id => assets.find(item => item.id === id);
     const nativeCollecting = pool => pool?.nativeInitialLaunch === true && pool.status === 'collecting';
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
@@ -72,7 +72,8 @@
         return result;
     }
     function reset() {
-        if (managing) { byId('pool-management-review').hidden = true; byId('pool-management-fee').hidden = true; }
+        if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
+        if (managing) byId('pool-management-fee').hidden = true;
         draft = null; expected = null; signatures = null; byId('sign-actions').hidden = true;
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
     }
@@ -234,7 +235,7 @@
             result.operation === 'pool' ? 'Confirmar e criar pool' : 'Confirmar troca';
         if (result.initialLaunchPurchase) { byId('review-title').textContent = 'Compra do lançamento'; byId('sign-exchange').textContent = 'Confirmar compra com taxa descontada'; }
         if (result.launch) byId('sign-exchange').textContent = result.transactionKind === 16 ? 'Assinar devolução dos aportes' : result.transactionKind === 15 ? 'Assinar aporte e abrir negociação' : result.transactionKind === 13 ? 'Assinar e criar lançamento' : 'Assinar aporte no lançamento';
-        byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        byId('sign-actions').hidden = false; update(); byId('transaction-review-dialog')?.showModal?.();
     }
     function ensureFunds(requirements) {
         for (const [id, amount] of requirements) {
@@ -246,7 +247,7 @@
         burnEnabled: Boolean(pool.burnEnabled), burnPolicy: pool.burnPolicy, participation: pool.participation, assetA: pool.assetA, assetB: pool.assetB, reserveAAtomic: pool.reserveAAtomic, reserveBAtomic: pool.reserveBAtomic });
     async function manageReserves(pool) {
         if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate || !pool.canManage) return;
-        if (managing) { byId('pool-management-review').hidden = false; byId('pool-management-fee').hidden = false; }
+        if (managing) byId('pool-management-fee').hidden = false;
         busy = true; message(''); update();
         try {
             const operation = pool.locked ? 'close' : 'lock', feeAtomic = fee();
@@ -494,6 +495,7 @@
                 draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                 { draftId: draft.draftId, signatures });
             const receiptUrl = receipt(result.transactionId);
+            if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
             if (integrated) {
                 showReceipt(result.transactionId);
                 reset(); document.dispatchEvent(new Event('povix-pool-updated'));
@@ -503,6 +505,7 @@
         finally { busy = false; update(); if (integrated) refresh(); }
     });
     byId('edit-exchange').addEventListener('click', reset);
+    byId('transaction-review-dialog')?.addEventListener('cancel', event => { event.preventDefault(); if (!busy) reset(); });
     function filterPoolList() {
         if (!byId('pool-search')) return;
         const query = byId('pool-search').value.trim().toLocaleLowerCase('pt-BR');

@@ -15,6 +15,7 @@ const vm = require('node:vm');
             if (!nodes.has(id)) nodes.set(id, { addEventListener: (_, fn) => { node(id).click = fn; }, textContent: '' });
             return nodes.get(id);
         };
+        const reviewDialog = node('transaction-review-dialog'); reviewDialog.open = true; reviewDialog.close = () => { reviewDialog.open = false; };
         let signs = 0, verifies = 0, unlocked = true, redirected = 0;
         const submissions = [];
         const context = {
@@ -31,9 +32,11 @@ const vm = require('node:vm');
         unlocked = true; context.network.CanCreate = false; await node(button).click(); assert.equal(submissions.length, 0);
         context.network.CanCreate = true;
         await node(button).click(); assert.equal(submissions.length, 1, 'first click submits without file or checkbox');
+        assert.equal(reviewDialog.open, true, 'Temporary failure keeps the review popup open for retry');
         await node(button).click(); assert.equal(submissions.length, 2);
         assert.deepEqual(submissions[1], submissions[0], 'retry uses the same prepared transaction and signatures');
         assert.equal(signs, 1); assert(verifies > 0); assert.equal(redirected, 1); assert.equal(context.busy, false);
+        if (file !== 'povix-token-transfer.js') assert.equal(reviewDialog.open, false, 'Accepted submission closes the popup');
         for (const id of ['download-backup', 'backup-confirmed']) assert.equal(nodes.has(id), false);
     }
     for (const file of ['Tokens/Create',  'Liquidity/Index', 'Liquidity/_PoolTrading']) {
