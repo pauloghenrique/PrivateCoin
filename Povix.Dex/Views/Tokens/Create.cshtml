@@ -6,7 +6,7 @@
     <div class="page-intro"><span class="eyebrow">SEU ATIVO, NA REDE POVIX</span><h1>Crie seu token.</h1><p>Defina os detalhes, assine com sua carteira e acompanhe o registro na blockchain.</p></div>
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">@(Model.Network.CanCreate ? "Rede conectada" : "Aguardando a rede")</span><span><strong id="network-peers">@Model.Network.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Network.Height</strong></span><span class="network-strip-end">Regras próprias para seu novo token</span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
-    <div class="create-grid">
+    <div class="create-grid transaction-modal-layout">
         <div>
 
             <form id="token-form" class="card token-form">
@@ -69,8 +69,8 @@
                 <div class="form-bottom"><p id="create-hint">Desbloqueie a carteira e aguarde a conexão com a rede.</p><button id="prepare-token" type="submit" class="button button-primary" disabled>Revisar criação <span aria-hidden="true">→</span></button></div>
             </form>
         </div>
-        <aside class="review-column">
-            <section class="card review-card" aria-labelledby="review-title"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Resumo do token</h2><div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu novo token</strong><span id="review-symbol">SÍMBOLO</span></div><span id="review-policy-badge" class="small-pill">Oferta fixa</span></div>
+        <dialog id="transaction-review-dialog" class="transaction-review-dialog" aria-labelledby="review-title">
+            <section class="card review-card" aria-labelledby="review-title"><h2 id="review-title">Resumo do token</h2><p id="review-error" class="notice" role="alert" hidden></p><div class="token-identity"><span id="review-avatar" class="token-avatar">◇</span><div><strong id="review-name">Seu novo token</strong><span id="review-symbol">SÍMBOLO</span></div><span id="review-policy-badge" class="small-pill">Oferta fixa</span></div>
                 <dl class="review-list"><div><dt>Quantidade inicial</dt><dd id="review-supply">—</dd></div><div><dt>Casas decimais</dt><dd id="review-decimals">8</dd></div><div><dt>Taxa de criação</dt><dd id="review-fee">@TokenNetworkViewModel.FormatPovix(Model.Network.Fees[1]) POVIX</dd></div><div><dt>Troco em POVIX</dt><dd id="review-change">Calculado na revisão</dd></div><div class="review-destination"><dt>Endereço de destino</dt><dd id="review-destination">Informe o endereço de recebimento</dd></div></dl>
                 <dl id="review-policy" class="review-list"></dl>
                 <p id="review-destination-help" class="wallet-local-help" aria-live="polite">Use um endereço da sua carteira para receber e depois movimentar o token.</p>
@@ -79,7 +79,7 @@
                 <div id="sign-actions" hidden><button id="sign-token" type="button" class="button button-primary full-width" disabled>Confirmar transação</button><button id="edit-token" type="button" class="text-button full-width">Voltar e editar</button></div>
             </section>
             <div class="registration-note"><span aria-hidden="true">◷</span><p><strong>A confirmação vem da rede.</strong> Depois do envio, acompanhe a transação até sua inclusão em um bloco validado.</p></div>
-        </aside>
+        </dialog>
     </div>
     <noscript><div class="notice">Ative o JavaScript para desbloquear a carteira e assinar a criação localmente.</div></noscript>
 </main>

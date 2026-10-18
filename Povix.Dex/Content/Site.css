@@ -392,3 +392,11 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .token-catalogue-item p { line-height:1.7; }
 .token-catalogue-id { font:11px/1.8 Consolas,monospace; color:var(--muted); overflow-wrap:anywhere; }
 @media (max-width:720px) { .token-list-intro { align-items:flex-start; flex-direction:column; } .token-catalogue { grid-template-columns:minmax(0,1fr); } }
+
+.transaction-review-dialog { width: min(640px, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 0; border: 0; border-radius: 16px; background: var(--white); color: inherit; box-shadow: 0 24px 80px rgba(0,0,0,.3); }
+.transaction-review-dialog::backdrop { background: rgba(0,0,0,.55); }
+.transaction-review-dialog .review-card { border: 0; }
+.create-grid.transaction-modal-layout, #liquidity-app .liquidity-grid.transaction-modal-layout { grid-template-columns: minmax(0,1fr); }
+#liquidity-app .transaction-modal-layout > .liquidity-setup, #liquidity-app .transaction-modal-layout > .liquidity-operations { grid-column: auto; grid-row: auto; }
+
+#liquidity-app .transaction-modal-layout > .liquidity-setup { grid-template-columns: minmax(0,1fr); }

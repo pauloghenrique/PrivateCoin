@@ -18,7 +18,7 @@
     }
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
-    <div class="liquidity-grid">
+    <div class="liquidity-grid transaction-modal-layout">
         <div id="pool-management-fee" class="liquidity-setup" hidden="@(!creating)">
 
             <section class="card token-form liquidity-fee"><h2>Taxa da rede</h2><p>A taxa de rede é paga em POVIX pela carteira que cria a pool ou executa a troca. A taxa da pool é 0,30% e permanece nas reservas.</p>
@@ -136,10 +136,7 @@
                 <div class="form-bottom"><button id="prepare-swap" class="button button-primary" type="submit" disabled>Revisar troca →</button></div>
             </form>
         </div>
-        <aside id="pool-management-review" hidden="@(!creating)" class="review-column liquidity-review"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise sua operação</h2><p id="review-description">Quantidades, reservas, taxa e endereços serão apresentados antes da assinatura.</p>
-            <dl id="exchange-review" class="review-list"></dl>
-            <div id="sign-actions" hidden><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
-        </section></aside>
+        @Html.Partial("_TransactionReview")
     </div>
     <section hidden="@creating" class="token-form liquidity-pools"><div class="pool-list-heading"><div><span class="eyebrow">SUA LIQUIDEZ</span><h2>Seu painel de pools</h2><p>Seus pares, suas reservas. Tudo em um só lugar.</p></div><div class="pool-create-choices"><a id="create-pool" class="button button-primary" href="@Url.Action("Create")">Criar pool de liquidez</a><a id="create-launch-pool" class="button button-secondary" href="@Url.Action("CreateLaunch")">Criar pool de lançamento</a></div></div><div class="pool-list-tools">
         <div><label for="pool-search">Buscar pool</label><input id="pool-search" type="search" placeholder="Par, token ou identificador" autocomplete="off" /></div>

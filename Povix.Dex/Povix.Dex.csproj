@@ -180,6 +180,7 @@
     <Content Include="Views\Liquidity\Create.cshtml" />
     <Content Include="Views\Liquidity\CreateLaunch.cshtml" />
     <Content Include="Views\Liquidity\_PoolPage.cshtml" />
+    <Content Include="Views\Liquidity\_TransactionReview.cshtml" />
     <Content Include="Views\Liquidity\Market.cshtml" />
     <Content Include="Views\Liquidity\_PoolTrading.cshtml" />
     <Content Include="Scripts\povix-pool-market.js" />
