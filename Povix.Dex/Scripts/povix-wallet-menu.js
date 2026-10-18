@@ -18,7 +18,43 @@
         el('wallet-connect').disabled = blocked || (choices ? !el('wallet-choice').value : !el('wallet-file').files.length);
         el('wallet-lock').disabled = blocked;
     }
-    function changed() { update(); document.dispatchEvent(new Event('povix-wallet-change')); }
+    let balanceRequest = null, balanceEpoch = 0;
+    async function refreshBalance() {
+        const epoch = ++balanceEpoch;
+        if (balanceRequest) balanceRequest.abort();
+        balanceRequest = null;
+        el('wallet-balance-detail').hidden = true;
+        if (!wallet.isUnlocked()) { el('wallet-balance').textContent = '—'; return; }
+        el('wallet-balance').textContent = 'Consultando…';
+        const controller = new AbortController();
+        balanceRequest = controller;
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+            const form = el('wallet-form');
+            const body = new URLSearchParams({ __RequestVerificationToken: form.querySelector('[name="__RequestVerificationToken"]').value });
+            wallet.addresses().forEach(address => body.append('addresses', address));
+            const response = await fetch(form.dataset.balanceUrl, { method: 'POST', body, signal: controller.signal,
+                credentials: 'same-origin', cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok || !data || !/^[0-9]+$/.test(data.balanceAtomic)) throw new Error('balance');
+            if (epoch !== balanceEpoch || !wallet.isUnlocked()) return;
+            el('wallet-balance').textContent = wallet.formatAtomic(data.balanceAtomic, 8) + ' POVIX';
+            const details = [];
+            for (const [field, label] of [['confirmedAtomic', 'Confirmado'], ['launchLockedAtomic', 'Bloqueado no lançamento'],
+                ['poolReservedAtomic', 'Em pools'], ['pendingFeesAtomic', 'Taxas pendentes']]) {
+                if (/^[0-9]+$/.test(data[field] || '') && (field === 'confirmedAtomic' || BigInt(data[field]) > 0n))
+                    details.push(label + ': ' + wallet.formatAtomic(data[field], 8) + ' POVIX');
+            }
+            el('wallet-balance-detail').textContent = details.join(' · ');
+            el('wallet-balance-detail').hidden = !details.length;
+        } catch (_) {
+            if (epoch === balanceEpoch && wallet.isUnlocked()) el('wallet-balance').textContent = 'Consulta indisponível. Abra a carteira para tentar novamente.';
+        } finally {
+            clearTimeout(timer);
+            if (epoch === balanceEpoch) balanceRequest = null;
+        }
+    }
+    function changed() { update(); refreshBalance(); document.dispatchEvent(new Event('povix-wallet-change')); }
     function reset() {
         choices = null;
         el('wallet-selection').hidden = true;
@@ -31,7 +67,7 @@
     }
     window.PovixWalletMenu = { setBusy(value) { pageBusy = value; update(); } };
     document.querySelectorAll('[data-wallet-open]').forEach(link => link.addEventListener('click', event => {
-        event.preventDefault(); dialog.showModal();
+        event.preventDefault(); dialog.showModal(); refreshBalance();
     }));
     el('wallet-close').addEventListener('click', () => dialog.close());
     el('wallet-lock').addEventListener('click', () => {

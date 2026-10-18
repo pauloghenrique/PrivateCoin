@@ -1,6 +1,7 @@
             <section class="card wallet-card" aria-labelledby="wallet-title">
                 <div class="card-heading"><span class="step-icon">↗</span><div><h2 id="wallet-title">Sua carteira</h2><p>Uma conexão para todas as telas deste DEX.</p></div><span id="wallet-state" class="small-pill">Desconectada</span></div>
-                <form id="wallet-form" class="wallet-form">
+                <form id="wallet-form" class="wallet-form" data-balance-url="@Url.Action("Balance", "Tokens")">
+                    @Html.AntiForgeryToken()
                     <div><label for="wallet-file">Arquivo de carteiras</label><input id="wallet-file" type="file" accept=".dat,.povixwallet,application/json" /><small id="wallet-file-help">Escolha wallet.dat, wallets.dat ou um backup cifrado do DEX.</small></div>
                     <div id="wallet-password-field" hidden><label for="wallet-password">Senha do backup cifrado</label><input id="wallet-password" type="password" minlength="10" autocomplete="current-password" placeholder="Sua senha local" /><small>Somente backups já cifrados precisam da senha original.</small></div>
                     <div id="wallet-selection" class="wallet-selection" hidden><label for="wallet-choice">Carteira salva no arquivo</label><select id="wallet-choice" disabled><option value="">Selecione uma carteira</option></select><small id="wallet-choice-help">Escolha a carteira que deseja usar.</small></div>
