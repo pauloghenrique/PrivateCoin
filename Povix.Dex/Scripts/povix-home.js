@@ -9,10 +9,16 @@
         if (className) node.className = className;
         return node;
     }
+    const visiblePool = pool => pool.available === true || pool.nativeInitialLaunch === true;
+    function reserveText(value, asset) {
+        const amount = BigInt(value), scale = 10n ** BigInt(asset.decimals);
+        const fraction = (amount % scale).toString().padStart(asset.decimals, '0').replace(/0+$/, '');
+        return (amount / scale).toLocaleString('pt-BR') + (fraction ? ',' + fraction : '') + ' ' + asset.symbol;
+    }
     function render() {
         const query = byId('dex-search').value.trim().toLocaleLowerCase('pt-BR');
         const rows = byId('dex-token-list'); rows.replaceChildren();
-        pools.filter(pool => pool.available === true).forEach(pool => {
+        pools.filter(visiblePool).forEach(pool => {
             const pair = pool.assetA.symbol + '/' + pool.assetB.symbol;
             if (![pair, pool.assetA.name, pool.assetB.name, pool.assetA.id, pool.assetB.id, pool.poolId]
                 .some(value => String(value).toLocaleLowerCase('pt-BR').includes(query))) return;
@@ -26,16 +32,22 @@
             const id = element('td', '');
             const code = element('code', pool.poolId.slice(0, 10) + '…' + pool.poolId.slice(-6));
             code.title = pool.poolId; id.append(code);
+            const reserves = element('td', '');
+            reserves.append(element('div', reserveText(pool.reserveAAtomic, pool.assetA)),
+                element('small', reserveText(pool.reserveBAtomic, pool.assetB)));
             const action = element('td', '');
-            const link = element('a', 'Negociar ↗', 'button button-secondary');
+            if (pool.nativeInitialLaunch) {
+                action.append(element('div', pool.available ? 'Negociação aberta' : pool.status === 'collecting' ? 'Em captação · 6 POVIX por 1 USDC local' : pool.statusMessage || 'Aguardando disponibilidade'));
+            }
+            const link = element('a', pool.available ? 'Negociar ↗' : 'Ver pool ↗', 'button button-secondary');
             const url = new URL(app.dataset.marketUrl, window.location.href);
             url.searchParams.set('poolId', pool.poolId);
             link.href = url.href; action.append(link);
-            row.append(identity, id, action); rows.append(row);
+            row.append(identity, id, reserves, action); rows.append(row);
         });
         byId('dex-result-count').textContent = rows.children.length + ' pool(s) encontrada(s)';
         if (!loading) {
-            byId('dex-status').textContent = rows.children.length ? '' : pools.some(pool => pool.available === true) ? 'Nenhuma pool corresponde à busca.' : 'Nenhuma pool disponível para negociação.';
+            byId('dex-status').textContent = rows.children.length ? '' : pools.some(visiblePool) ? 'Nenhuma pool corresponde à busca.' : 'Nenhuma pool encontrada na rede.';
             byId('dex-status').hidden = rows.children.length > 0;
         }
     }
@@ -50,11 +62,11 @@
             if (!response.ok || !Array.isArray(data.pools)) throw new Error('catalogue');
             pools = data.pools;
             const pairedAssets = new Set();
-            pools.filter(pool => pool.available === true).forEach(pool => {
+            pools.filter(visiblePool).forEach(pool => {
                 pairedAssets.add(pool.assetA.id); pairedAssets.add(pool.assetB.id);
             });
             byId('dex-asset-count').textContent = pairedAssets.size;
-            byId('dex-pool-count').textContent = pools.filter(pool => pool.available === true).length;
+            byId('dex-pool-count').textContent = pools.filter(visiblePool).length;
             loading = false; render();
         } catch (_) {
             byId('dex-status').hidden = false;

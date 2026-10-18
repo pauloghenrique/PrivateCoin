@@ -8,12 +8,12 @@
         <div><span class="eyebrow">POVIX DECENTRALIZED EXCHANGE</span><h1>O mercado da sua rede.<br /><span>Explore os pares.</span></h1><p>Explore pools de tokens da blockchain POVIX e negocie com assinatura local.</p><a class="button button-primary" href="@Url.Action("Index", "Liquidity")">Explorar pools <span aria-hidden="true">↗</span></a><a class="button" href="@Url.Action("Create", "Tokens")">Criar um token →</a></div>
         <aside class="dex-network"><span class="eyebrow">UMA REDE. NOVAS POSSIBILIDADES.</span><div class="dex-orbit" aria-hidden="true"><span>P</span><i>◇</i><b>⇄</b></div><strong>Blockchain POVIX</strong><p>Seus ativos. Sua carteira. Seu controle.</p></aside>
     </section>
-    <section class="dex-metrics" aria-label="Resumo do catálogo"><div><span>Ativos em pools disponíveis</span><strong id="dex-asset-count">—</strong></div><div><span>Pools disponíveis</span><strong id="dex-pool-count">—</strong></div><div><span>Rede de negociação</span><strong>POVIX <em>Nativa</em></strong></div></section>
+    <section class="dex-metrics" aria-label="Resumo do catálogo"><div><span>Ativos em pools</span><strong id="dex-asset-count">—</strong></div><div><span>Pools da rede</span><strong id="dex-pool-count">—</strong></div><div><span>Rede de negociação</span><strong>POVIX <em>Nativa</em></strong></div></section>
     <section class="card dex-list" aria-labelledby="dex-list-title">
-        <div class="dex-list-heading"><div><span class="eyebrow">DESCUBRA O ECOSSISTEMA</span><h2 id="dex-list-title">Pools disponíveis</h2><p>Pares de tokens disponíveis para negociação.</p></div><button id="dex-refresh" class="button button-secondary" type="button">Atualizar ↻</button></div>
+        <div class="dex-list-heading"><div><span class="eyebrow">DESCUBRA O ECOSSISTEMA</span><h2 id="dex-list-title">Pools da rede</h2><p>Pares da rede e pool inicial POVIX/USDC, incluindo a fase de captação.</p></div><button id="dex-refresh" class="button button-secondary" type="button">Atualizar ↻</button></div>
         <div class="dex-tools"><div><label class="dex-search-label" for="dex-search">Buscar pool</label><input type="search" id="dex-search" placeholder="Par, token ou ID da pool" /></div></div>
         <p id="dex-status" class="dex-status" role="status" aria-live="polite">Consultando o catálogo da rede…</p>
-        <div class="dex-table-wrap"><table class="dex-table"><thead><tr><th scope="col">Par</th><th scope="col">Identificação da pool</th><th scope="col">Negociação</th></tr></thead><tbody id="dex-token-list"></tbody></table></div>
+        <div class="dex-table-wrap"><table class="dex-table"><thead><tr><th scope="col">Par</th><th scope="col">Identificação da pool</th><th scope="col">Reservas</th><th scope="col">Status e acesso</th></tr></thead><tbody id="dex-token-list"></tbody></table></div>
         <div class="dex-list-footer"><span id="dex-result-count">Aguardando catálogo</span><span>Disponibilidade conforme esta instalação do DEX.</span></div>
     </section>
     <p class="dex-disclaimer">As pools listadas não representam recomendação de investimento.</p>
