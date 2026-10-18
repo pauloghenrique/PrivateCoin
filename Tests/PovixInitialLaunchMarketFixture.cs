@@ -22,7 +22,10 @@ class PovixInitialLaunchMarketFixture
     public static void Main(string[] args) {
         var wallet=new Wallet(); string address=wallet.CreateReceiveAddress(), key;
         using(var rsa=new RSACryptoServiceProvider()) { rsa.PersistKeyInCsp=false; rsa.FromXmlString(wallet.ExportPrivateKeys().First()); key=rsa.ToXmlString(false); }
-        var chain=new Blockchain(); chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])});
+        var chain=new Blockchain(); var provider=new Wallet();
+        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(provider.CreateReceiveAddress(),new Transaction[0])});
+        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])});
+        if(chain.GetBalance(new[]{address})!=0) throw new Exception("Buyer must start with zero POVIX");
         var reserves=chain.GetUnspentOutputs(new[]{Hash(InitialLaunch.ProviderPublicKey)}).Where(item=>item.OutputIndex>=0).OrderBy(item=>item.OutputIndex).ToArray();
         var json=new JavaScriptSerializer();
         var service=(TokenNetworkService)FormatterServices.GetUninitializedObject(typeof(TokenNetworkService));
@@ -33,7 +36,7 @@ class PovixInitialLaunchMarketFixture
         var node=(PeerNode)FormatterServices.GetUninitializedObject(typeof(PeerNode));
         var peers=new ConcurrentDictionary<TcpClient,SemaphoreSlim>(); { var peer=(TcpClient)FormatterServices.GetUninitializedObject(typeof(TcpClient));
             peers.TryAdd(peer,new SemaphoreSlim(1)); Set(node,"peers",peers); Set(service,"node",node);
-            var request=new SwapViewModel {PoolId=chain.GetInitialLaunchStatus().RootTransactionId,InputSide=1,InputAssetId=InitialLaunch.UsdcTokenId,OutputAssetId="povix",Amount="1",MinimumReceive="6",FeeAtomic=1,FeePriority=1};
+            var request=new SwapViewModel {PoolId=chain.GetInitialLaunchStatus().RootTransactionId,InputSide=1,InputAssetId=InitialLaunch.UsdcTokenId,OutputAssetId="povix",Amount="1",MinimumReceive="5.99999999",FeeAtomic=1,FeePriority=1};
             var response=service.PrepareSwap(request,new[]{key},address,"test");
             File.WriteAllText(args[0]+".service.json",json.Serialize(response));
             request.InputSide=0;
@@ -53,7 +56,7 @@ class PovixInitialLaunchMarketFixture
             string cache=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString("N")+".json"); Set(service,"statePath",cache);
             try {
                 var accepted=(Transaction)typeof(TokenNetworkService).GetMethod("AcceptExchange",Flags).Invoke(service,new object[]{id,stored,signatures.ToArray()});
-                if(accepted.InitialLaunchIdentity.Signature!=signatures.Last() || !accepted.Outputs[2].InitialLaunchLocked) throw new Exception("Identity signature or lock lost during submit");
+                if(accepted.Outputs[2].Amount != InitialLaunch.PurchaseAmount - accepted.Fee || accepted.Inputs.Take(accepted.Inputs.Count-2).Any(input => input.PublicKey == InitialLaunch.ProviderPublicKey) || accepted.InitialLaunchIdentity.Signature!=signatures.Last() || !accepted.Outputs[2].InitialLaunchLocked) throw new Exception("Identity signature or lock lost during submit");
                 var prior=typeof(TokenNetworkService).GetMethod("PriorExchange",Flags).Invoke(service,new object[]{id,"swap",signatures.ToArray()});
                 if(prior==null) throw new Exception("Accepted purchase retry not idempotent");
                 request.Amount="1";
@@ -70,7 +73,7 @@ class PovixInitialLaunchMarketFixture
             Set(draft,"Transaction",unsigned); Set(draft,"Operation","swap"); Set(draft,"InitialLaunchIdentityKey",key); Set(draft,"PoolId",chain.GetInitialLaunchStatus().RootTransactionId);
             Set(draft,"ReserveId",reserves[0].TransactionId); Set(draft,"ProviderKey",InitialLaunch.ProviderPublicKey); Set(draft,"Address",address);
             Set(draft,"AssetA",new TokenDefinition {Id="povix",Name="POVIX",Symbol="POVIX",Decimals=8}); Set(draft,"AssetB",InitialLaunch.FundingTokens().First());
-            Set(draft,"ReserveA",reserves[0].Output.Amount); Set(draft,"ReserveB",reserves[1].Output.Amount); Set(draft,"InputSide",1); Set(draft,"Amount",InitialLaunch.FundingUnit); Set(draft,"MinimumReceive",InitialLaunch.PurchaseAmount); Set(draft,"ExpiresUtc",DateTime.UtcNow.AddMinutes(15));
+            Set(draft,"ReserveA",reserves[0].Output.Amount); Set(draft,"ReserveB",reserves[1].Output.Amount); Set(draft,"InputSide",1); Set(draft,"Amount",InitialLaunch.FundingUnit); Set(draft,"MinimumReceive",InitialLaunch.PurchaseAmount-1); Set(draft,"ExpiresUtc",DateTime.UtcNow.AddMinutes(15));
             var response=typeof(TokenNetworkService).GetMethod("DraftResponse",BindingFlags.NonPublic|BindingFlags.Static).Invoke(null,new[]{(object)new string('a',32),draft});
             File.WriteAllText(args[0]+(final?".final.json":".json"),json.Serialize(response));
         }

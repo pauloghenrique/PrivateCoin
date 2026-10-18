@@ -165,8 +165,8 @@ namespace Povix.Dex.Services
                 if (pool.NativeInitialLaunch && pool.Status == "collecting") {
                     if (model.InputSide != 1 || model.InputAssetId != pool.AssetB.Id || model.OutputAssetId != pool.AssetA.Id ||
                         ParseAmount(model.Amount, pool.AssetB.Decimals) != InitialLaunch.FundingUnit ||
-                        ParseAmount(model.MinimumReceive, pool.AssetA.Decimals) != InitialLaunch.PurchaseAmount)
-                        throw new TokenOperationException("launch_fixed_rate", "No lançamento, troque exatamente 1 USDC local por 6 POVIX bloqueados.");
+                        ParseAmount(model.MinimumReceive, pool.AssetA.Decimals) != InitialLaunch.PurchaseAmount - GetSelectedFee(model.FeePriority, model.FeeAtomic))
+                        throw new TokenOperationException("launch_fixed_rate", "No lançamento, troque exatamente 1 USDC local por 6 POVIX brutos, descontando a taxa da rede do recebimento bloqueado.");
                     var registrations = blockchain.Blocks.SelectMany(block => block.Transactions)
                         .Where(operation => operation.WalletDistributionId == null && (operation.Kind == TransactionKind.WalletCreate || operation.Kind == TransactionKind.InitialLaunchCreate))
                         .Select(operation => operation.Outputs[operation.Kind == TransactionKind.InitialLaunchCreate ? 4 : 0].OneTimeAddress).ToArray();
@@ -180,7 +180,7 @@ namespace Povix.Dex.Services
                         Owner = owner, ProviderKey = pool.ProviderKey, PoolId = pool.Id, ReserveId = pool.Transaction.Id,
                         Address = address, AssetA = pool.AssetA, AssetB = pool.AssetB, ReserveA = pool.ReserveA.Output.Amount,
                         ReserveB = pool.ReserveB.Output.Amount, InputSide = 1, Amount = InitialLaunch.FundingUnit,
-                        MinimumReceive = InitialLaunch.PurchaseAmount, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
+                        MinimumReceive = InitialLaunch.PurchaseAmount - launchTx.Fee, ExpiresUtc = DateTime.UtcNow.AddMinutes(15) });
                 }
                 if (!pool.Available) throw new TokenOperationException(pool.Status == "pending" || pool.Status == "validated" ? "pool_unconfirmed" :
                     pool.Status == "busy" ? "pool_reserved" : "pool_unavailable", pool.StatusMessage,

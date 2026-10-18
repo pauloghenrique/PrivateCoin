@@ -682,3 +682,14 @@ Verifica preparação real de compra fixa, rejeição de venda/quantidade incorr
 payloads reais da primeira e última compra, identidade, bloqueio, reservas e
 transição da interface da captação para compra/venda. A fixture simula apenas
 a prontidão do nó para preparar, sem abrir sockets, enviar ou minerar transações.
+
+
+## Taxa descontada no lançamento (v24)
+
+A compra inicial consome apenas USDC do comprador. A reserva reduz 6 POVIX brutos;
+a saída bloqueada recebe `6 POVIX - Fee`, e a taxa segue a distribuição normal
+da rede. O caso de carteira com zero POVIX é coberto pela fixture do mercado e
+pela suíte de consenso do lançamento, incluindo rejeição de crédito bruto sem
+desconto e abertura com as mesmas reservas finais. Após a meta, o AMM continua
+cobrando a taxa separadamente. A alteração muda o genesis e requer rede v24;
+não migra automaticamente a cadeia anterior.

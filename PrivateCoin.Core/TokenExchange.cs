@@ -281,6 +281,7 @@ namespace PrivateCoin.Core
             amounts.TryGetValue("povix", out native); amounts["povix"] = checked(native + fee);
             foreach (var requirement in amounts.OrderBy(pair => pair.Key == "povix" ? 0 : 1).ThenBy(pair => pair.Key, StringComparer.Ordinal))
             {
+                if (requirement.Value == 0) continue;
                 string asset = requirement.Key == "povix" ? null : requirement.Key;
                 var available = asset == null ? chain.GetSpendableOutputs(keys.Keys, pending) : chain.GetSpendableTokenOutputs(keys.Keys, pending, asset);
                 long total = 0;

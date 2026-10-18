@@ -25,7 +25,7 @@ class Element {
         document: { getElementById: get, createElement: () => new Element(), addEventListener(name, fn) { events[name] = fn; } }, window: { PovixTokenWallet: wallet },
         fetch: async (url, options) => {
             if (url === '/prepare-swap') { preparedSwaps.push({ side: options.body.get('InputSide'), input: options.body.get('InputAssetId'), output: options.body.get('OutputAssetId') }); return { ok: false, status: 400, json: async () => ({ error: 'Test stops before signing' }) }; }
-            return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: '10000' }], pools: [pool] } };
+            return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: pool.nativeInitialLaunch ? '0' : '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: pool.nativeInitialLaunch ? '100000000' : '10000' }], pools: [pool] } };
         },
         URL, location: { origin: 'https://example.test' }, URLSearchParams, Option: class { constructor(text, value) { this.textContent = text; this.value = value; } }, setInterval() {}, sessionStorage: { getItem: () => null }
     });
@@ -74,13 +74,18 @@ class Element {
     assert.equal(preparedSwaps.length, before, 'an invalid direction must not prepare a swap');
     get('swap-side').value = '1'; get('swap-side').handlers.change();
     pool.nativeInitialLaunch = true; pool.available = false; pool.status = 'collecting';
+    pool.assetA = {id:'povix',symbol:'POVIX',decimals:8}; pool.assetB = {id:'usdc',symbol:'USDC',decimals:6};
+    wallet.parseSupply = (value, decimals) => decimals === 6 ? '1000000' : value;
     await events['povix-wallet-change']();
     assert.equal(get('swap-buy').disabled, false);
     assert.equal(get('swap-sell').disabled, true);
     assert.equal(get('swap-amount').value, '1'); assert.equal(get('swap-amount').readOnly, true);
-    assert.equal(get('swap-minimum').value, '6'); assert.equal(get('swap-minimum').readOnly, true);
+    assert.equal(get('swap-minimum').value, '599999998'); assert.equal(get('swap-minimum').readOnly, true);
     assert.equal(get('prepare-swap').disabled, false);
     assert.match(get('swap-estimate').textContent, /bloqueados/);
+    const nativeBefore = preparedSwaps.length;
+    await get('swap-form').handlers.submit({preventDefault(){}});
+    assert.equal(preparedSwaps.length, nativeBefore + 1, 'Zero-POVIX wallet must reach native purchase preparation');
     pool.status = 'available'; pool.available = true;
     await events['povix-wallet-change']();
     assert.equal(get('swap-sell').disabled, false);

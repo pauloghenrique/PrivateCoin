@@ -163,7 +163,7 @@
     function field(value) { return '|' + (value == null ? -1 : value.length) + ':' + (value == null ? '' : value); }
     async function verifyDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
-        if (draft.networkId !== networkId || draft.consensusVersion !== 23 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 24 || draft.name !== expected.Name || draft.symbol !== expected.Symbol ||
             draft.decimals !== Number(expected.Decimals) || draft.supplyAtomic !== parseSupply(expected.Supply, Number(expected.Decimals)) ||
             draft.feeAtomic !== expected.FeeAtomic || draft.destinationAddress !== expected.DestinationAddress || (draft.changeAddress && draft.changeAddress !== changeAddress) ||
             !/^[0-9a-f]{64}$/.test(draft.tokenId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
@@ -213,7 +213,7 @@
     }
     async function verifyManagementDraft(draft, expected, networkId) {
         const current = requireWallet(), token = expected.token;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 23 || draft.tokenId !== token.tokenId ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 24 || draft.tokenId !== token.tokenId ||
             draft.operation !== expected.operation || draft.amountAtomic !== expected.amountAtomic || draft.feeAtomic !== expected.feeAtomic ||
             draft.revision !== token.revision || !/^[0-9a-f]{32}$/.test(draft.draftId) || !/^[0-9]+$/.test(draft.timestampUtcTicks) ||
             !/^[0-9]+$/.test(draft.revision) || !Array.isArray(draft.inputs) || draft.inputs.length < 1 || draft.inputs.length > 1000 ||
@@ -288,7 +288,7 @@
         const wallet = requireWallet(), id = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
         const atomic = value => typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) && BigInt(value) <= 9223372036854775807n;
         const fail = () => { throw new Error('A preparação não corresponde à pool ou à troca revisada.'); };
-        if (draft.networkId !== networkId || draft.consensusVersion !== 23 || draft.operation !== expected.operation ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 24 || draft.operation !== expected.operation ||
             !/^[0-9a-f]{32}$/.test(draft.draftId) || !atomic(draft.timestampUtcTicks) || !atomic(draft.feeAtomic) ||
             draft.feeAtomic !== expected.feeAtomic || BigInt(draft.feeAtomic) < 1n || BigInt(draft.feeAtomic) > 100000000n ||
             draft.poolFeeBasisPoints !== 30 || !id(draft.providerAddress) || !id(draft.changeAddress) ||
@@ -320,7 +320,7 @@
             if (index < draft.userInputCount) totals.set(input.assetId, (totals.get(input.assetId) || 0n) + BigInt(input.amountAtomic));
         });
         const output = (assetId, amount, address) => ({ assetId, amountAtomic: String(amount), address });
-        const spends = new Map([['povix', BigInt(draft.feeAtomic)]]), wantedOutputs = [];
+        const spends = new Map([['povix', initial ? 0n : BigInt(draft.feeAtomic)]]), wantedOutputs = [];
         const addSpend = (assetId, amount) => spends.set(assetId, (spends.get(assetId) || 0n) + BigInt(amount));
         const a = BigInt(draft.reserveAAtomic), b = BigInt(draft.reserveBAtomic);
         const participation = value => {
@@ -451,11 +451,11 @@
                     const usdc = 'd0c0ff968d7093a5b3e4b9a617112e66e4d62d5765833d0852387b5ea7d1ab98';
                     const identity = await sha256(draft.initialLaunchIdentityKey || '');
                     if (draft.providerAddress !== '7a2358946042363fc99d76aa983c6dd9806afb0f2c2b35064fc6c4e8b64aa974' || draft.assetA.id !== 'povix' || draft.assetB.id !== usdc || draft.inputSide !== 1 ||
-                        draft.amountAtomic !== '1000000' || draft.minimumReceiveAtomic !== '600000000' || draft.receiveAtomic !== '600000000' ||
+                        draft.amountAtomic !== '1000000' || draft.minimumReceiveAtomic !== String(600000000n - BigInt(draft.feeAtomic)) || draft.receiveAtomic !== draft.minimumReceiveAtomic ||
                         a <= 17970000000000n || a > 35940000000000n || (35940000000000n - a) % 600000000n !== 0n ||
                         b !== (35940000000000n - a) / 600000000n * 1000000n || burnRules ||
                         !wallet.keys.has(identity) || wallet.keys.get(identity).publicXml !== draft.initialLaunchIdentityKey) fail();
-                    wantedOutputs.push(output('povix', a - 600000000n, draft.providerAddress), output(usdc, b + 1000000n, draft.providerAddress), output('povix', 600000000n, identity));
+                    wantedOutputs.push(output('povix', a - 600000000n, draft.providerAddress), output(usdc, b + 1000000n, draft.providerAddress), output('povix', 600000000n - BigInt(draft.feeAtomic), identity));
                     addSpend(usdc, 1000000n);
                 } else {
                 const amount = BigInt(draft.amountAtomic), quote = quotePoolSwap(draft.inputSide === 0 ? a : b, draft.inputSide === 0 ? b : a, amount,
@@ -513,7 +513,7 @@
     async function verifyTransferDraft(draft, expected, networkId, changeAddress) {
         const wallet = requireWallet();
         const atomic = value => typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 9223372036854775807n;
-        if (draft.networkId !== networkId || draft.consensusVersion !== 23 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
+        if (draft.networkId !== networkId || draft.consensusVersion !== 24 || draft.tokenId !== expected.TokenId || !/^[0-9a-f]{64}$/.test(draft.tokenId) ||
             draft.name !== expected.Name || draft.symbol !== expected.Symbol || draft.decimals !== expected.Decimals ||
             draft.amountAtomic !== parseSupply(expected.Amount, expected.Decimals) || draft.destinationAddress !== expected.DestinationAddress ||
             draft.creatorAddress !== expected.CreatorAddress || !wallet.keys.has(draft.creatorAddress) ||
