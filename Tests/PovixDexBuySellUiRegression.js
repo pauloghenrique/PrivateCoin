@@ -19,13 +19,13 @@ class Element {
     get('liquidity-app').dataset = { integrated: 'true', poolId: pool.poolId, networkUrl: '/network', catalogueUrl: '/catalogue', prepareSwapUrl: '/prepare-swap', marketUrl: '/market/__id__', receiptUrl: '/receipt/__id__' };
     get('exchange-priority').value = '2';
     const events = {};
-    let unlocked = true; const preparedSwaps = [];
+    let unlocked = true, staleNativeBalance = false; const preparedSwaps = [];
     const wallet = { isUnlocked: () => unlocked, hasSavedWallet: () => false, publicKeys: () => [], addresses: () => ['address'], formatAtomic: value => value, parseSupply: value => { if (!value) throw Error(); return '100'; }, quotePoolSwap: () => ({ receiveAtomic: '200', inputDebitAtomic: '100', inputBurnAtomic: '0', outputBurnAtomic: '0' }), lock: () => { unlocked = false; } };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'), {
         document: { getElementById: get, createElement: () => new Element(), addEventListener(name, fn) { events[name] = fn; } }, window: { PovixTokenWallet: wallet },
         fetch: async (url, options) => {
             if (url === '/prepare-swap') { preparedSwaps.push({ side: options.body.get('InputSide'), input: options.body.get('InputAssetId'), output: options.body.get('OutputAssetId') }); return { ok: false, status: 400, json: async () => ({ error: 'Test stops before signing' }) }; }
-            return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: pool.nativeInitialLaunch ? '0' : '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: pool.nativeInitialLaunch ? '100000000' : '10000' }], pools: [pool] } };
+            return { ok: true, json: async () => url === '/network' ? { CanCreate: true, Fees: ['1', '2', '4'] } : { assets: [{ id: 'povix', balanceAtomic: pool.nativeInitialLaunch || staleNativeBalance ? '0' : '10000' }, { ...pool.assetA, balanceAtomic: '10000' }, { ...pool.assetB, balanceAtomic: pool.nativeInitialLaunch ? '100000000' : '10000' }], pools: [pool] } };
         },
         URL, location: { origin: 'https://example.test' }, URLSearchParams, Option: class { constructor(text, value) { this.textContent = text; this.value = value; } }, setInterval() {}, sessionStorage: { getItem: () => null }
     });
@@ -73,6 +73,12 @@ class Element {
     await get('swap-form').handlers.submit({ preventDefault() {} });
     assert.equal(preparedSwaps.length, before, 'an invalid direction must not prepare a swap');
     get('swap-side').value = '1'; get('swap-side').handlers.change();
+    staleNativeBalance = true;
+    await events['povix-wallet-change']();
+    get('swap-amount').value = '1'; get('swap-minimum').value = '0,5';
+    const beforeStale = preparedSwaps.length;
+    await get('swap-form').handlers.submit({preventDefault(){}});
+    assert.equal(preparedSwaps.length, beforeStale + 1, 'Cached zero POVIX must defer fee validation to server preparation');
     pool.nativeInitialLaunch = true; pool.available = false; pool.status = 'collecting';
     pool.assetA = {id:'povix',symbol:'POVIX',decimals:8}; pool.assetB = {id:'usdc',symbol:'USDC',decimals:6};
     wallet.parseSupply = (value, decimals) => decimals === 6 ? '1000000' : value;
