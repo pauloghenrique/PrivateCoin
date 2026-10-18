@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 22;
+        public const int ConsensusVersion = 23;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
@@ -160,6 +160,12 @@ namespace PrivateCoin.Core
                     return registration;
                 }
                 registration.Outputs.Add(new TransactionOutput { Amount = CountWalletCreationRewards() + queuedRewards < RewardedWalletLimit ? WalletCreationReward : 0, OneTimeAddress = rewardAddress });
+                var registrationUtxo = BuildUtxo();
+                foreach (var queued in OrderByFeePriority(pending))
+                    Apply(queued, registrationUtxo, false, IsValidTransactionApproval(queued, registrationUtxo, blocks), ConsensusVersion, blocks.Count);
+                long usdcReward = InitialLaunch.NextWalletUsdcReward(registrationUtxo);
+                if (usdcReward > 0) registration.Outputs.Add(new TransactionOutput { AssetId = InitialLaunch.UsdcTokenId,
+                    Amount = usdcReward, OneTimeAddress = rewardAddress });
                 registration.Id = registration.CalculateId();
                 ValidateTransactions(pending.Concat(new[] { registration }).ToList());
                 return registration;
@@ -292,7 +298,7 @@ namespace PrivateCoin.Core
             long expected = issued < DistributionSupply ? WalletCreationReward : 0;
             if (transaction.Kind == TransactionKind.WalletCreate && expected > 0 && issued == DistributionSupply - WalletCreationReward)
                 throw new InvalidOperationException("The final rewarded registration must automatically create the initial pool.");
-            if (transaction.Outputs.Count != (transaction.Kind == TransactionKind.InitialLaunchCreate ? 5 : 1) || InitialLaunch.WalletReward(transaction) != expected)
+            if ((transaction.Kind == TransactionKind.InitialLaunchCreate ? transaction.Outputs.Count != 5 : transaction.Outputs.Count < 1 || transaction.Outputs.Count > 2) || InitialLaunch.WalletReward(transaction) != expected)
                 throw new InvalidOperationException("Invalid wallet distribution amount.");
             issued = checked(issued + expected);
         }
@@ -551,7 +557,7 @@ namespace PrivateCoin.Core
                     if (transaction.WalletDistributionId != null) ValidateWalletReceipt(transaction, distributions, counted);
                     else
                     {
-                        if (transaction.Outputs == null || transaction.Outputs.Count != (transaction.Kind == TransactionKind.InitialLaunchCreate ? 5 : 1)) throw new InvalidOperationException("Invalid wallet distribution.");
+                        if (transaction.Outputs == null || (transaction.Kind == TransactionKind.InitialLaunchCreate ? transaction.Outputs.Count != 5 : transaction.Outputs.Count < 1 || transaction.Outputs.Count > 2)) throw new InvalidOperationException("Invalid wallet distribution.");
                         if (!distributionAddresses.Add(InitialLaunch.WalletAddress(transaction))) throw new InvalidOperationException("Wallet already received its distribution.");
                         ValidateWalletIssuance(transaction, ref issued);
                     }
@@ -975,12 +981,14 @@ namespace PrivateCoin.Core
             TokenGovernance.Validate(transaction, utxo, height, consensusVersion);
             if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution)
             {
-                if (allowMint != (transaction.Kind == TransactionKind.WalletDistribution) || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count != 1 ||
+                if (allowMint != (transaction.Kind == TransactionKind.WalletDistribution) || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count < 1 || transaction.Outputs.Count > 2 ||
                     (transaction.Outputs[0].Amount != WalletCreationReward && transaction.Outputs[0].Amount != 0) ||
                     (transaction.WalletDistributionId != null && transaction.Outputs[0].Amount != 0) ||
                     string.IsNullOrWhiteSpace(transaction.Outputs[0].OneTimeAddress) || transaction.Outputs[0].AssetId != null ||
                     transaction.Token != null || transaction.ValidatorPublicKey != null || transaction.ValidatorRewardAddress != null || transaction.ValidatorOwnedAddresses != null)
                     throw new InvalidOperationException("Invalid fee-free wallet registration.");
+                if (consensusVersion < 23 && transaction.Outputs.Count == 2) throw new InvalidOperationException("USDC registration rewards require consensus v23.");
+                InitialLaunch.ValidateWalletUsdcReward(transaction, utxo);
                 AddOutputs(transaction, utxo);
                 return;
             }
@@ -1066,8 +1074,8 @@ namespace PrivateCoin.Core
             }
             if (transaction.Kind == TransactionKind.TokenTransfer) TokenGovernance.ValidateTransferConservation(transaction, utxo, tokenInputs, tokenOutputs);
             if (transaction.Kind == TransactionKind.InitialLaunchCreate && (tokenInputs.Count != 0 || tokenOutputs.Count != 2 ||
-                InitialLaunch.FundingTokens().Any(token => !tokenOutputs.ContainsKey(token.Id) || tokenOutputs[token.Id] != token.Supply)))
-                throw new InvalidOperationException("Initial launch must issue exactly one million units of each local funding token.");
+                InitialLaunch.FundingTokens().Any(token => !tokenOutputs.ContainsKey(token.Id) || tokenOutputs[token.Id] != (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply))))
+                throw new InvalidOperationException("Initial launch must issue 100 local USDC and one million local USDT.");
             if (poolOperation && transaction.Kind != TransactionKind.InitialLaunchCreate &&
                 (tokenInputs.Count == 0 || tokenInputs.Count != tokenOutputs.Count ||
                  tokenInputs.Any(pair => !tokenOutputs.ContainsKey(pair.Key) || checked(tokenOutputs[pair.Key] + TokenGovernance.SwapBurn(transaction, pair.Key)) != pair.Value)))

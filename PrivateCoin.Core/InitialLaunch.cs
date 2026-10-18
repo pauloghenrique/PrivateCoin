@@ -33,6 +33,8 @@ namespace PrivateCoin.Core
         // Protocol-reserved local assets. These are not bridged or externally backed stablecoins.
         public const string UsdcTokenId = "d0c0ff968d7093a5b3e4b9a617112e66e4d62d5765833d0852387b5ea7d1ab98";
         public const string UsdtTokenId = "ab4232725e9910e3140520ca7b7c0567fb4af5aa261a712244ab0e40b03e9716";
+        public const long WalletUsdcReward = 100L * FundingUnit;
+        public const int UsdcRewardedWalletLimit = 10000;
         public const long FundingTokenSupply = 1000000L * FundingUnit;
         public static TokenDefinition[] FundingTokens() => new[] {
             new TokenDefinition { Id = UsdcTokenId, Name = "USDC local POVIX (sem ponte)", Symbol = "USDC", Decimals = FundingDecimals, Supply = FundingTokenSupply },
@@ -47,10 +49,29 @@ namespace PrivateCoin.Core
             var tx = new Transaction { Kind = TransactionKind.InitialLaunchCreate, TimestampUtcTicks = timestamp, Outputs = new List<TransactionOutput> {
                 new TransactionOutput { Amount = ReserveSupply, OneTimeAddress = provider },
                 new TransactionOutput { AssetId = UsdcTokenId, Amount = 0, OneTimeAddress = provider },
-                new TransactionOutput { AssetId = UsdcTokenId, Amount = FundingTokenSupply, OneTimeAddress = recipient },
+                new TransactionOutput { AssetId = UsdcTokenId, Amount = WalletUsdcReward, OneTimeAddress = recipient },
                 new TransactionOutput { AssetId = UsdtTokenId, Amount = FundingTokenSupply, OneTimeAddress = recipient },
                 new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = recipient } } };
             tx.Id = tx.CalculateId(); return tx;
+        }
+        internal static long NextWalletUsdcReward(IDictionary<string, UnspentOutput> utxo)
+        {
+            var state = TokenGovernance.State(utxo, UsdcTokenId);
+            return state != null && state.Issued < FundingTokenSupply ? WalletUsdcReward : 0;
+        }
+        internal static void ValidateWalletUsdcReward(Transaction tx, IDictionary<string, UnspentOutput> utxo)
+        {
+            if (tx.Kind != TransactionKind.WalletCreate || tx.WalletDistributionId != null) return;
+            if (utxo.ContainsKey(RegistrationPrefix + WalletAddress(tx)))
+                throw new InvalidOperationException("Wallet already received its registration reward.");
+            long amount = NextWalletUsdcReward(utxo);
+            if (tx.Outputs.Count != (amount > 0 ? 2 : 1)) throw new InvalidOperationException("Invalid USDC registration reward outputs.");
+            if (amount > 0) {
+                var output = tx.Outputs[1];
+                if (output.AssetId != UsdcTokenId || output.Amount != amount || output.OneTimeAddress != WalletAddress(tx) ||
+                    output.InitialLaunchLocked || output.UnlockHeight != 0)
+                    throw new InvalidOperationException("Invalid USDC registration reward.");
+            }
         }
         private const string StateKey = "@initial-launch-state";
         private const string RegistrationPrefix = "@initial-launch-wallet:";
@@ -67,8 +88,8 @@ namespace PrivateCoin.Core
 
         internal static void ValidateEnvelope(Transaction tx, IDictionary<string, UnspentOutput> utxo, int version)
         {
-            if (version < 22 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
-                throw new InvalidOperationException("Initial POVIX launch requires consensus v22.");
+            if (version < 23 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
+                throw new InvalidOperationException("Initial POVIX launch requires consensus v23.");
             if (tx.InitialLaunchIdentity != null && tx.Kind != TransactionKind.InitialLaunchPurchase)
                 throw new InvalidOperationException("Only an initial launch purchase may carry its wallet identity proof.");
             for (int i = 0; i < tx.Outputs.Count; i++)

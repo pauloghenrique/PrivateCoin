@@ -606,7 +606,7 @@ novas assinaturas válidas não podem alterar a meta, o prazo, as participaçõe
 iniciais de liquidez, os destinatários dos tokens ou os destinatários dos aportes.
 As duas suítes anteriores continuam cobrindo pools comuns e liquidez pública.
 
-## Lançamento inicial POVIX (v22)
+## Lançamento inicial POVIX (v23)
 
 Após compilar o Core em Release:
 
@@ -620,8 +620,8 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/InitialLaunchRegression.exe wor
 node Tests/PovixInitialLaunchWalletRegression.js work/initial-launch-swap.json
 ```
 
-Verifica a distribuição de 600 POVIX, emissão única da reserva e dos dois tokens
-locais de um milhão, criação automática na 1ª carteira, compra única por identidade assinada,
+Verifica a distribuição de 600 POVIX, emissão única da reserva, limite de um milhão USDC em créditos de 100 por registro
+e emissão de um milhão USDT, criação automática na 1ª carteira, compra única por identidade assinada,
 bloqueio de gasto e negociação antecipados, catálogo e saldo da carteira,
 restauração completa e contabilização. A fronteira 29.949 → 29.950 usa estado
 UTXO de teste, validado pelo mesmo `Apply` do consenso, para conferir abertura,
@@ -650,3 +650,18 @@ registro pendente sem crédito antecipado, reserva da pool fora do saldo,
 os dois tokens locais no catálogo, carteiras posteriores com zero, repetição
 bloqueada e restauração dos registros após serialização. A suíte testa a lógica
 usada pelos dois botões; não faz automação visual do Windows Forms.
+
+
+## Distribuição de USDC por registro (v23)
+
+Após compilar o Core em Release:
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Runtime.Serialization -out:work/UsdcDistribution.exe Tests/PrivateCoinUsdcDistributionRegression.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/UsdcDistribution.exe
+```
+
+Aplica os 10.000 créditos pelo validador real de consenso e verifica o milhão
+acumulado, duplicidade, crédito pendente indisponível, última recompensa,
+rejeição de valores adulterados e registro sem crédito após esgotar o limite.
+O teste completo de blocos do lançamento cobre restauração e negociação.

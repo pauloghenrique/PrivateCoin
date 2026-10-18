@@ -32,8 +32,9 @@ namespace PrivateCoin.Desktop
             long reward = Reward(tx).Amount;
             if (tx.Kind == TransactionKind.InitialLaunchCreate)
                 return "A primeira carteira receberá " + Coins(reward) + " POVIX após a confirmação. A mesma operação cria a pool com " +
-                    Coins(InitialLaunch.ReserveSupply) + " POVIX e credita 1.000.000 de USDC local e 1.000.000 de USDT local nesta carteira.";
-            return reward == 0 ? "Registro sem recompensa inicial: os 600 POVIX são exclusivos da primeira carteira confirmada." :
+                    Coins(InitialLaunch.ReserveSupply) + " POVIX e credita 100 USDC locais e 1.000.000 de USDT local nesta carteira.";
+            if (reward == 0 && tx.Outputs.Count == 2) return "Registro com 100 USDC locais, disponíveis após confirmação em bloco.";
+            return reward == 0 ? "Registro sem recompensa em POVIX: os 600 POVIX são exclusivos da primeira carteira confirmada." :
                 "Recompensa de " + Coins(reward) + " POVIX aguardando confirmação em bloco.";
         }
         internal static string LaunchStatus(Blockchain chain, IEnumerable<Transaction> pending)

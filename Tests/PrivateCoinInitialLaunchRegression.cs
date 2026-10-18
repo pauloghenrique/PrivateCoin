@@ -90,7 +90,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 foreach (var address in new[] { b, l })
                     batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], address, 6 * Blockchain.OneCoin, 1) }, validators);
                 Check(chain.GetInitialLaunchStatus().Created && chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply, "one initial launch issues exactly 359400 POVIX into escrow");
-                Check(chain.GetTokens().Count == 2 && InitialLaunch.FundingTokens().All(token => chain.GetTokenRuntime(token.Id).Supply == InitialLaunch.FundingTokenSupply && chain.GetTokenBalance(new[] { p }, token.Id) == token.Supply), "USDC and USDT each issue exactly one million local units");
+                Check(chain.GetTokens().Count == 2 && InitialLaunch.FundingTokens().All(token => chain.GetTokenRuntime(token.Id).Supply == (token.Id == InitialLaunch.UsdcTokenId ? 5 * InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply) && chain.GetTokenBalance(new[] { p }, token.Id) == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply)), "USDC distributes 100 per registered identity while USDT issues one million");
                 Check(chain.GetTokenBalances(new[] { p }).Count == 2, "local funding tokens appear in the wallet token catalogue");
                 var duplicate = Copy(creation); duplicate.TimestampUtcTicks++; duplicate.Id = LegacyConsensusFixture.Id(duplicate);
                 Reject(() => chain.ValidatePendingTransactions(new[] { duplicate }), "a second launch cannot mint more POVIX or funding tokens");

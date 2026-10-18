@@ -31,11 +31,11 @@ class PrivateCoinDesktopRegistrationRegression
             var balance = WalletBalanceSummary.Read(chain, first, empty);
             Check(balance.Available == 600 * Blockchain.OneCoin && balance.Total == 600 * Blockchain.OneCoin, "Desktop displays exactly 600 spendable POVIX without adding pool reserves");
             Check(WalletRegistration.LaunchStatus(chain, empty).Contains("Pool criada") && WalletRegistration.LaunchStatus(chain, empty).Contains("359.400"), "Desktop shows the automatically confirmed pool in collection");
-            Check(chain.GetTokenBalances(first.OwnedOneTimeAddresses).Count == 2 && chain.GetTokenBalances(first.OwnedOneTimeAddresses).All(token => token.Amount == InitialLaunch.FundingTokenSupply), "Desktop token catalogue receives both local million-unit supplies");
+            Check(chain.GetTokenBalances(first.OwnedOneTimeAddresses).Count == 2 && chain.GetTokenBalances(first.OwnedOneTimeAddresses).All(token => token.Amount == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply)), "Desktop token catalogue receives 100 USDC and one million USDT");
             string original = second.CreateReceiveAddress();
             var later = WalletRegistration.Prepare(chain, second, empty);
             Check(later.Kind == TransactionKind.WalletCreate && later.Outputs[0].Amount == 0 && later.Outputs[0].OneTimeAddress == original, "later selected wallet reuses its receiving identity and gets zero reward");
-            Check(WalletRegistration.Describe(later).StartsWith("Registro sem recompensa inicial"), "Desktop explains zero-reward registrations");
+            Check(WalletRegistration.Describe(later).StartsWith("Registro com 100 USDC"), "Desktop explains the 100-USDC registration reward");
             chain.AddBlock(new[] { later });
             Check(WalletBalanceSummary.Read(chain, second, empty).Available == 0, "second wallet remains at zero after registration");
             using (var stream = new MemoryStream())
