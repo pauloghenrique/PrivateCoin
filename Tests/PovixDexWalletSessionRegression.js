@@ -4,6 +4,22 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { webcrypto: crypto } = require('node:crypto');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../Povix.Dex/Scripts/povix-token-wallet.js'), 'utf8');
+// Emulate browsers that enforce RFC 7518 minimal RSA integer encoding.
+let checkedImports = 0;
+const browserCrypto = { getRandomValues: bytes => crypto.getRandomValues(bytes),
+    subtle: new Proxy(crypto.subtle, { get(target, name) {
+        if (name === 'importKey') return async (format, key, ...args) => {
+            if (format === 'jwk' && key.kty === 'RSA') {
+                for (const member of ['n', 'e', 'd', 'p', 'q', 'dp', 'dq', 'qi'])
+                    if (key[member]) assert.notEqual(Buffer.from(key[member], 'base64url')[0], 0,
+                        'The JWK "' + member + '" member contained a leading zero.');
+                checkedImports++;
+            }
+            return target.importKey(format, key, ...args);
+        };
+        const value = Reflect.get(target, name);
+        return typeof value === 'function' ? value.bind(target) : value;
+    } }) };
 const local = new Map(), session = new Map();
 const storage = map => ({ getItem: k => map.get(k) || null, setItem: (k,v) => map.set(k,v), removeItem: k => map.delete(k) });
 const key = 'povix.dex.wallet-session.v1';
@@ -20,7 +36,7 @@ async function encrypted(wallets, password) {
 }
 function page(wallets, tab = session) {
     const listeners = {};
-    const context = vm.createContext({ crypto, TextEncoder, TextDecoder, Uint8Array, AbortController, Map, Blob,
+    const context = vm.createContext({ crypto: browserCrypto, TextEncoder, TextDecoder, Uint8Array, AbortController, Map, Blob,
         atob, btoa, setTimeout: () => 1, clearTimeout() {}, localStorage:storage(local), sessionStorage:storage(tab),
         addEventListener: (name, fn) => { listeners[name] = fn; },
         prompt: () => { prompted++; return 'export-backup-password'; },
@@ -38,7 +54,7 @@ function page(wallets, tab = session) {
     const pair = await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',hash:'SHA-256',modulusLength:2048,publicExponent:new Uint8Array([1,0,1])},true,['sign','verify']);
     const jwk = await crypto.subtle.exportKey('jwk',pair.privateKey);
     const fields={Modulus:'n',Exponent:'e',D:'d',P:'p',Q:'q',DP:'dp',DQ:'dq',InverseQ:'qi'};
-    const xml='<RSAKeyValue>'+Object.entries(fields).map(([name,k])=>'<'+name+'>'+Buffer.from(jwk[k],'base64url').toString('base64')+'</'+name+'>').join('')+'</RSAKeyValue>';
+    const xml='<RSAKeyValue>'+Object.entries(fields).map(([name,k])=>'<'+name+'>'+(k === 'e' || k === 'n' ? Buffer.from(jwk[k], 'base64url') : Buffer.concat([Buffer.from([0, 0]), Buffer.from(jwk[k], 'base64url')])).toString('base64')+'</'+name+'>').join('')+'</RSAKeyValue>';
     const wallets=[{Name:'Primeira',PrivateKeys:[xml]},{Name:'Selecionada',PrivateKeys:[xml]}];
     const desktop=Buffer.concat([Buffer.from([1,0,0,0]),Buffer.from('0Iyd3wEV0RGMegDAT8KX6w==','base64')]);
     let current=page(wallets);
@@ -66,5 +82,6 @@ function page(wallets, tab = session) {
     current=page(wallets); assert.equal(await current.wallet.restoreSession(),false);
     session.set(key,'{broken'); assert.equal(await current.wallet.restoreSession(),false); assert(!session.has(key));
     await assert.rejects(current.wallet.readFile(file(backup),'wrong-password'),/Senha incorreta/);
-    console.log('PASS: passwordless Desktop connection, selected wallet across navigation, signing, generated keys, encrypted export, tab isolation, disconnect and corrupt sessions.');
+    assert(checkedImports >= 4);
+    console.log('PASS: padded Desktop RSA integers accepted without changing addresses; strict JWK import;  passwordless Desktop connection, selected wallet across navigation, signing, generated keys, encrypted export, tab isolation, disconnect and corrupt sessions.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
