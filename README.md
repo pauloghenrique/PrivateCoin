@@ -562,7 +562,7 @@ e clientes devem ser atualizados juntos. O hash dos fontes do Core continua
 a integrar a identidade da rede conforme a configuração existente.
 
 
-## Lançamento inicial nativo — consenso v24
+## Lançamento inicial nativo — consenso v25
 
 As regras executáveis e os exemplos de uso estão em [docs/povix-initial-launch.md](docs/povix-initial-launch.md).
 A confirmação da 1ª carteira completa os 600 POVIX gratuitos e cria automaticamente
@@ -571,13 +571,17 @@ Cada uma das primeiras 10.000 identidades registradas recebe 100 USDC, incluindo
 a primeira, sem ultrapassar 1.000.000 USDC emitidos. O crédito depende da confirmação
 do registro e não se repete ao reabrir ou recuperar a mesma identidade. Após o limite,
 novos registros continuam sem crédito USDC. A nova regra altera o genesis e requer
-nós/DEX/Desktop compatíveis com v24; não migra saldos da cadeia anterior.
+nós/DEX/Desktop compatíveis com v25; não migra saldos da cadeia anterior.
 Esses tokens têm seis casas decimais, IDs reservados e oferta fixa, sem ponte,
 lastro externo, emissão adicional, pausa ou queima administrativa.
 O par automático usa **USDC local**; USDT local continua transferível como ativo separado.
 
 Cada identidade registrada pode comprar uma vez: 1 token local por 6 POVIX brutos, com a taxa da rede descontada desse recebimento.
 O valor líquido fica bloqueado e não é necessário ter POVIX antes da compra.
+A compra dispensa aprovação dos validadores, mas exige assinaturas válidas,
+saldo USDC e confirmação em bloco com prova de trabalho. A taxa descontada
+sem validador de transação não gera saída de pagamento e reduz os POVIX
+em UTXOs; não é redistribuída à carteira ou ao minerador.
 A primeira carteira recompensada também pode participar. Após 29.950 compras, restam 179.700 POVIX e 29.950 unidades do
 ativo escolhido na pool; os compradores são desbloqueados e as trocas são liberadas.
 Não existe prazo ou devolução antecipada. Identidade significa a chave do endereço

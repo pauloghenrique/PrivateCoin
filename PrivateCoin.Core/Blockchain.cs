@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 24;
+        public const int ConsensusVersion = 25;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
         private const int BlockConfirmationVersion = 15;
@@ -219,12 +219,12 @@ namespace PrivateCoin.Core
         public static bool IsSelfValidatedOperation(Transaction transaction)
         {
             return transaction != null && (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.InitialLaunchCreate ||
-                transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock);
+                transaction.Kind == TransactionKind.InitialLaunchPurchase || transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock);
         }
 
         public static bool RequiresLockedTokenApproval(Transaction transaction)
         {
-            return transaction != null && transaction.Inputs.Count > 0 &&
+            return transaction != null && !IsSelfValidatedOperation(transaction) && transaction.Inputs.Count > 0 &&
                 (transaction.Kind == TransactionKind.Transfer || transaction.Kind == TransactionKind.TokenCreate || transaction.Kind == TransactionKind.TokenTransfer || transaction.Kind == TransactionKind.TokenManage || TokenExchange.IsPoolOperation(transaction.Kind));
         }
 
@@ -648,7 +648,8 @@ namespace PrivateCoin.Core
                     if (block.ConsensusVersion >= LegacySignedVersion && regularTransactionIndex == 0 &&
                         !(block.ConsensusVersion >= LegacyWalletBatchVersion && (block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate || block.Transactions[transactionIndex].Kind == TransactionKind.InitialLaunchCreate)) &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeLock &&
-                        block.Transactions[transactionIndex].Kind != TransactionKind.StakeUnlock)
+                        block.Transactions[transactionIndex].Kind != TransactionKind.StakeUnlock &&
+                        !(block.ConsensusVersion >= 25 && block.Transactions[transactionIndex].Kind == TransactionKind.InitialLaunchPurchase))
                         throw new InvalidOperationException("Transfers and token operations require signed consensus validations.");
                     if (block.ConsensusVersion < LegacyWalletBatchVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate)
                         throw new InvalidOperationException("Wallet registrations require consensus version 8.");

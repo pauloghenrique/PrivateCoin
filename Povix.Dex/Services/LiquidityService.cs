@@ -293,7 +293,7 @@ namespace Povix.Dex.Services
                 var block = blockchain.Blocks.FirstOrDefault(item => item.Transactions.Any(operation => operation.Id == id));
                 var queued = pending.FirstOrDefault(item => item.Id == id);
                 var tx = block?.Transactions.First(item => item.Id == id) ?? queued ?? record.Transaction;
-                bool validated = block != null || queued != null && blockchain.HasValidTransactionApproval(queued, pending);
+                bool validated = block != null || queued != null && (Blockchain.IsSelfValidatedOperation(queued) || blockchain.HasValidTransactionApproval(queued, pending));
                 var pool = Snapshot(record.Exchange.PoolId);
                 return new ExchangeReceiptViewModel { TransactionId = id, PoolId = record.Exchange.PoolId, Operation = record.Exchange.Operation,
                     RewardMode = pool?.RewardMode ?? "fees", LoyaltyPolicy = pool?.LoyaltyPolicy,
