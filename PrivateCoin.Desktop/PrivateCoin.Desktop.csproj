@@ -84,6 +84,7 @@
     <Compile Include="TokenAmount.cs" />
     <Compile Include="TokenWalletOperations.cs" />
     <Compile Include="WalletBalanceSummary.cs" />
+    <Compile Include="WalletRegistration.cs" />
     <Compile Include="TokenWalletDialog.cs">
       <SubType>Form</SubType>
     </Compile>

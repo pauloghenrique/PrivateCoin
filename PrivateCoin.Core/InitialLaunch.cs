@@ -101,7 +101,7 @@ namespace PrivateCoin.Core
                     string.IsNullOrWhiteSpace(tx.Outputs[4].OneTimeAddress) ||
                     FundingTokens().Any(token => TokenGovernance.State(utxo, token.Id) != null) ||
                     tx.Id != CreateAutomatic(tx.Outputs[4].OneTimeAddress, tx.TimestampUtcTicks).Id)
-                    throw new InvalidOperationException("The hundredth rewarded registration must atomically create the canonical initial pool.");
+                    throw new InvalidOperationException("The first rewarded registration must atomically create the canonical initial pool.");
                 return;
             }
             var funding = TokenGovernance.State(utxo, tx.Outputs[1].AssetId);
