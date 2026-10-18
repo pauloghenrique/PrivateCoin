@@ -8,6 +8,7 @@
     let busy = false, refreshing = false, epoch = 0;
     const message = text => { byId('app-message').textContent = text || ''; byId('app-message').hidden = !text; };
     const asset = id => assets.find(item => item.id === id);
+    const nativeCollecting = pool => pool?.nativeInitialLaunch === true && pool.status === 'collecting';
     const selectedPool = () => pools.find(item => item.poolId === byId('swap-pool').value);
     const integrated = app.dataset.integrated === 'true';
     const managing = app.dataset.mode === 'manage';
@@ -79,7 +80,7 @@
         const element = byId(id), previous = element.value || (id === 'swap-pool' ? preferredPool : id === 'launch-token' ? app.dataset.launchTokenId : null);
         element.replaceChildren(new Option(empty, ''));
         if (integrated && id === 'swap-pool') entries = entries.filter(item => item.poolId === preferredPool);
-        entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false; element.add(option); });
+        entries.forEach(item => { const option = new Option(label(item), item.id || item.poolId); option.disabled = item.available === false && !nativeCollecting(item); element.add(option); });
         if (entries.some(item => (item.id || item.poolId) === previous)) element.value = previous;
     }
     function selectedBurnPolicy(a, b) {
@@ -124,7 +125,7 @@
         byId('swap-fields').disabled = !editing || !unlocked;
         if (integrated) byId('swap-pool').disabled = true;
         byId('prepare-pool').disabled = !editing || !ready;
-        byId('prepare-swap').disabled = !editing || !ready || !selectedPool()?.available;
+        byId('prepare-swap').disabled = !editing || !ready || !(selectedPool()?.available || nativeCollecting(selectedPool()));
         byId('exchange-priority').disabled = !editing;
         byId('sign-exchange').disabled = busy || !draft || !ready;
         byId('edit-exchange').disabled = busy;
@@ -136,12 +137,18 @@
         }
         const pool = selectedPool();
         updatePrices(pool);
+        const collecting = nativeCollecting(pool);
+        if (collecting && !draft) { swapDirection = '1'; byId('swap-side').value = '1'; byId('swap-amount').value = '1'; byId('swap-minimum').value = '6'; }
+        if (byId('market-fee-help')) byId('market-fee-help').textContent = collecting ? 'A compra de lançamento cobra somente a taxa da rede em POVIX. Os 6 POVIX recebidos ficam bloqueados até a meta.' : 'Paga em POVIX. A taxa da pool de 0,30% permanece nas reservas.';
+        byId('swap-amount').readOnly = collecting;
+        byId('swap-minimum').readOnly = collecting;
+        byId('swap-side').disabled = collecting || !editing || !unlocked;
         if (integrated) {
             byId('swap-side').value = swapDirection;
             for (const [id, side] of [['swap-buy', '1'], ['swap-sell', '0']]) {
                 const button = byId(id);
                 if (!button) continue;
-                button.disabled = !editing || !ready || !pool?.available;
+                button.disabled = !editing || !ready || !(pool?.available || collecting) || collecting && side === '0';
                 button.setAttribute('aria-pressed', swapSide() === side ? 'true' : 'false');
                 button.setAttribute('title', pool ? (side === '1' ? pool.assetB.symbol + ' → ' + pool.assetA.symbol : pool.assetA.symbol + ' → ' + pool.assetB.symbol) : 'Aguarde a pool');
             }
@@ -159,6 +166,7 @@
         }
         try {
             if (!pool) throw new Error();
+            if (nativeCollecting(pool)) { byId('swap-estimate').textContent = '1 USDC local → 6 POVIX bloqueados até a meta. Uma participação por identidade. Taxa da rede em POVIX; sem taxa AMM nesta compra.'; return; }
             const side = Number(swapSide()), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
             const amount = wallet.parseSupply(byId('swap-amount').value, input.decimals);
             const quote = wallet.quotePoolSwap(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount, pool.assetA, pool.assetB, side, pool.burnPolicy);
@@ -214,6 +222,7 @@
             addReview('Bloco limite', String(result.launch.deadlineHeight));
             addReview('Abertura', 'Captação integral na liquidez da carteira criadora; compradores recebem tokens proporcionais.');
         }
+        if (result.initialLaunchPurchase) addReview('Lançamento inicial', '1 USDC local por 6 POVIX bloqueados até a meta de 179.700 POVIX na reserva. Uma participação por identidade.');
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
@@ -224,6 +233,7 @@
         byId('sign-exchange').textContent = result.operation === 'lock' ? 'Confirmar bloqueio das reservas' : result.operation === 'close' ? 'Confirmar encerramento da pool' :
             result.operation === 'add' ? 'Confirmar e adicionar liquidez' : result.operation === 'remove' ? 'Confirmar e remover liquidez' :
             result.operation === 'pool' ? 'Confirmar e criar pool' : 'Confirmar troca';
+        if (result.initialLaunchPurchase) { byId('review-title').textContent = 'Compra do lançamento'; byId('sign-exchange').textContent = 'Confirmar compra de 6 POVIX bloqueados'; }
         if (result.launch) byId('sign-exchange').textContent = result.transactionKind === 16 ? 'Assinar devolução dos aportes' : result.transactionKind === 15 ? 'Assinar aporte e abrir negociação' : result.transactionKind === 13 ? 'Assinar e criar lançamento' : 'Assinar aporte no lançamento';
         byId('sign-actions').hidden = false; update(); byId('review-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -406,15 +416,15 @@
         busy = true; message(''); update();
         try {
             const pool = selectedPool(); if (!pool) throw new Error('Selecione uma pool para a troca.');
-            if (!pool.available) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
+            if (!pool.available && !nativeCollecting(pool)) throw new Error(pool.statusMessage || 'A pool aguarda reservas confirmadas e disponíveis. Consulte seu comprovante.');
             const inputSide = Number(selectedSide), input = inputSide === 0 ? pool.assetA : pool.assetB, output = inputSide === 0 ? pool.assetB : pool.assetA;
             const amountAtomic = wallet.parseSupply(byId('swap-amount').value, input.decimals), minimumReceiveAtomic = wallet.parseSupply(byId('swap-minimum').value, output.decimals);
-            const quote = wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
+            const quote = nativeCollecting(pool) ? { receiveAtomic: '600000000', inputDebitAtomic: '1000000' } : wallet.quotePoolSwap(inputSide === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, inputSide === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amountAtomic, pool.assetA, pool.assetB, inputSide, pool.burnPolicy);
             const receive = quote.receiveAtomic;
             if (BigInt(receive) < BigInt(minimumReceiveAtomic)) throw new Error('O mínimo a receber supera a cotação atual.');
             const feeAtomic = fee(), changeAddress = wallet.addresses()[0], funds = new Map([['povix', BigInt(feeAtomic)]]);
             funds.set(input.id, (funds.get(input.id) || 0n) + BigInt(quote.inputDebitAtomic)); ensureFunds(funds);
-            const wanted = { ...wantedFromPool(pool), operation: 'swap', inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
+            const wanted = { ...wantedFromPool(pool), operation: 'swap', initialLaunchPurchase: nativeCollecting(pool), inputSide, amountAtomic, minimumReceiveAtomic, feeAtomic, changeAddress };
             const result = await post(app.dataset.prepareSwapUrl, { PoolId: pool.poolId, InputSide: inputSide, InputAssetId: input.id, OutputAssetId: output.id, Amount: byId('swap-amount').value,
                 MinimumReceive: byId('swap-minimum').value, FeePriority: byId('exchange-priority').value, FeeAtomic: feeAtomic, publicKeys: wallet.publicKeys(), changeAddress });
             await review(result, wanted);
@@ -479,7 +489,7 @@
         try {
             await wallet.verifyExchangeDraft(draft, expected, app.dataset.networkId);
             if (!signatures) signatures = await wallet.sign({ signingPayload: draft.signingPayload,
-                inputAddresses: draft.inputs.slice(0, ['swap', 'add', 'remove', 'launch-contribute', 'launch-refund'].includes(draft.operation) ? draft.userInputCount : undefined).map(item => item.address) });
+                inputAddresses: draft.inputs.slice(0, ['swap', 'add', 'remove', 'launch-contribute', 'launch-refund'].includes(draft.operation) ? draft.userInputCount : undefined).map(item => item.address).concat(draft.initialLaunchPurchase ? [draft.outputs[2].address] : []) });
             const result = await post(['launch-contribute', 'launch-refund'].includes(draft.operation) ? app.dataset.submitLaunchUrl : ['add', 'remove'].includes(draft.operation) ? app.dataset.submitLiquidityUrl : draft.operation === 'lock' || draft.operation === 'close' ? app.dataset.submitReservesUrl :
                 draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                 { draftId: draft.draftId, signatures });
