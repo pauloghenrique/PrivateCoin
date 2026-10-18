@@ -621,7 +621,7 @@ node Tests/PovixInitialLaunchWalletRegression.js work/initial-launch-swap.json
 ```
 
 Verifica a distribuição de 600 POVIX, emissão única da reserva e dos dois tokens
-locais de um milhão, criação automática na 100ª carteira, compra única por identidade assinada,
+locais de um milhão, criação automática na 1ª carteira, compra única por identidade assinada,
 bloqueio de gasto e negociação antecipados, catálogo e saldo da carteira,
 restauração completa e contabilização. A fronteira 29.949 → 29.950 usa estado
 UTXO de teste, validado pelo mesmo `Apply` do consenso, para conferir abertura,
@@ -633,3 +633,20 @@ Para verificar descoberta automática no DEX sem registros locais de pools, comp
 os Models/Services do DEX e execute `Tests/PovixInitialLaunchCatalogueRegression.cs`
 com `work/initial-launch-swap.json.chain.json` gerado pela suíte anterior.
 A regressão usa a consulta real de catálogo, sem iniciar um servidor HTTP/TCP.
+
+
+## Registro no Desktop 1.0.1
+
+```sh
+mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
+  -r:System.Runtime.Serialization -out:work/DesktopRegistration.exe \
+  Tests/PrivateCoinDesktopRegistrationRegression.cs \
+  PrivateCoin.Desktop/WalletRegistration.cs PrivateCoin.Desktop/WalletBalanceSummary.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/DesktopRegistration.exe
+```
+
+Verifica a primeira carteira local, preparação e confirmação dos 600 POVIX,
+registro pendente sem crédito antecipado, reserva da pool fora do saldo,
+os dois tokens locais no catálogo, carteiras posteriores com zero, repetição
+bloqueada e restauração dos registros após serialização. A suíte testa a lógica
+usada pelos dois botões; não faz automação visual do Windows Forms.

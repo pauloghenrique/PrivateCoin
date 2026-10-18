@@ -23,6 +23,7 @@ namespace PrivateCoin.Desktop
         private bool persistenceAvailable = true;
         private bool miningInProgress;
         private bool updateCheckInProgress;
+        private bool registrationInProgress;
         private readonly BlockProductionScheduler blockScheduler = new BlockProductionScheduler();
         private readonly Timer blockProductionTimer;
 
@@ -187,17 +188,11 @@ namespace PrivateCoin.Desktop
             try
             {
                 ExecuteNetworkOperation(() => true);
-                string rewardAddress = namedWallet.Wallet.CreateReceiveAddress();
-                Transaction registration = await Task.Run(() => ExecuteNetworkOperation(() => blockchain.CreateWalletCreationTransaction(rewardAddress, SnapshotPending())));
+                Transaction registration = await Task.Run(() => ExecuteNetworkOperation(() => WalletRegistration.Prepare(blockchain, namedWallet.Wallet, SnapshotPending())));
 
                 wallets.Add(namedWallet);
                 walletAdded = true;
-                lock (pendingSync)
-                {
-                    blockchain.ValidatePendingTransactions(pendingTransactions.Concat(new[] { registration }));
-                    pendingIds.Add(registration.Id);
-                    pendingTransactions.Add(registration);
-                }
+                QueueWalletRegistration(registration);
                 walletNameTextBox.Clear();
                 RefreshWalletList(wallets.Count - 1);
                 SaveState();
@@ -211,8 +206,7 @@ namespace PrivateCoin.Desktop
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
-                Log("Carteira “" + name + "” criada e salva. O registro será confirmado em um bloco próprio, sem aprovação por tokens bloqueados. " +
-                    (registration.Outputs[0].Amount > 0 ? "Os 6 POVIX estarão disponíveis após a confirmação em bloco." : "A distribuição promocional terminou."), true);
+                Log("Carteira “" + name + "” criada e salva. " + WalletRegistration.Describe(registration), true);
                 if (peerNode != null)
                 {
                     await peerNode.BroadcastAsync(registration);
@@ -229,12 +223,59 @@ namespace PrivateCoin.Desktop
                     Log("Não foi possível criar a carteira: " + error.Message, false);
                 }
                 else
-                    Log("A carteira foi criada, mas não foi possível propagar sua recompensa: " + error.Message, false);
+                    Log("A carteira foi criada, mas não foi possível propagar seu registro: " + error.Message, false);
             }
             finally
             {
                 createWalletButton.Enabled = true;
             }
+        }
+
+        private void QueueWalletRegistration(Transaction registration)
+        {
+            ExecuteNetworkOperation(() =>
+            {
+                lock (pendingSync)
+                {
+                    if (pendingIds.Contains(registration.Id)) throw new InvalidOperationException("O registro já está na fila.");
+                    Transaction[] next = pendingTransactions.Concat(new[] { registration }).ToArray();
+                    blockchain.ValidatePendingTransactions(next);
+                    // Persist new receiving keys before a pending reward can be relayed or mined.
+                    walletStore.SaveTokenTransfer(wallets, blockchain, next);
+                    pendingIds.Add(registration.Id);
+                    pendingTransactions.Add(registration);
+                }
+                return true;
+            });
+        }
+
+        private async void RegisterWalletButtonClick(object sender, EventArgs e)
+        {
+            if (registrationInProgress) return;
+            NamedWallet selected = SelectedWallet;
+            if (selected == null) return;
+            registrationInProgress = true;
+            registerWalletButton.Enabled = false;
+            Transaction registration = null;
+            try
+            {
+                // The selected wallet is visible to UI callbacks; keep key creation on
+                // this thread instead of mutating its key dictionary in a worker.
+                UseWaitCursor = true;
+                registration = ExecuteNetworkOperation(() => WalletRegistration.Prepare(blockchain, selected.Wallet, SnapshotPending()));
+                receiveAddressTextBox.Text = selected.Wallet.OwnedOneTimeAddresses.LastOrDefault() ?? string.Empty;
+                QueueWalletRegistration(registration);
+                UpdateChainSummary();
+                Log("Carteira “" + selected.Name + "”: " + WalletRegistration.Describe(registration), true);
+                if (peerNode != null) await peerNode.BroadcastAsync(registration);
+                BeginInvoke(new Action(StartAutomaticMining));
+            }
+            catch (Exception error)
+            {
+                bool queued = registration != null && SnapshotPending().Any(tx => tx.Id == registration.Id);
+                Log((queued ? "Registro salvo e aguardando retransmissão; não repita a operação. " : "Não foi possível concluir o registro: ") + error.Message, false);
+            }
+            finally { UseWaitCursor = false; registrationInProgress = false; UpdateWalletSummary(); }
         }
 
         private async void RecoverWalletButtonClick(object sender, EventArgs e)
@@ -418,6 +459,7 @@ namespace PrivateCoin.Desktop
 
         private void UpdatePeerStatus()
         {
+            UpdateRegistrationControls();
             PeerNode node = peerNode;
             int connectedPeers = node == null ? 0 : node.ConnectedPeerCount;
             bool connected = connectedPeers > 0;
@@ -842,6 +884,7 @@ namespace PrivateCoin.Desktop
         private void UpdateWalletSummary()
         {
             RefreshValidatorState();
+            UpdateRegistrationControls();
             NamedWallet selected = SelectedWallet;
             WalletBalanceSummary balance = WalletBalanceSummary.Read(blockchain, selected?.Wallet, SnapshotPending());
             long lockedStake = selected == null ? 0 : selected.LockedStake;
@@ -865,6 +908,18 @@ namespace PrivateCoin.Desktop
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator && !collateralPending;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator && !collateralPending;
             unlockStakeButton.Enabled = selected != null && selected.IsValidator && !collateralPending;
+        }
+
+        private void UpdateRegistrationControls()
+        {
+            var queue = SnapshotPending();
+            bool registered = WalletRegistration.HasRegistration(blockchain, SelectedWallet?.Wallet, queue);
+            bool confirmed = WalletRegistration.HasRegistration(blockchain, SelectedWallet?.Wallet, new Transaction[0]);
+            registerWalletButton.Text = confirmed ? "Carteira registrada" : registered ? "Registro na fila" : "Registrar carteira";
+            registerWalletButton.Enabled = persistenceAvailable && !registrationInProgress && SelectedWallet != null && !registered &&
+                networkReadiness.IsReady && IsNetworkConnected();
+            initialLaunchLabel.Text = WalletRegistration.LaunchStatus(blockchain, queue);
+            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX bloqueados por 1 USDC local. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
         }
 
         private void RefreshValidatorState()

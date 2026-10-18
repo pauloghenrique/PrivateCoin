@@ -153,6 +153,22 @@ namespace PrivateCoin.Core
                 TransactionKind.StakeLock, publicKey, rewardAddress, keys.Keys.OrderBy(item => item, StringComparer.Ordinal).ToList());
         }
 
+        /// <summary>The holder funds collateral owned by another validator, without minting or transferring free coins.</summary>
+        public Transaction CreateSponsoredStakeLockTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
+            string validatorPublicKey, long amount)
+        {
+            using (var validator = new RSACryptoServiceProvider())
+            {
+                validator.PersistKeyInCsp = false;
+                validator.FromXmlString(validatorPublicKey);
+                validatorPublicKey = validator.ToXmlString(false);
+            }
+            string address = Crypto.Sha256(validatorPublicKey);
+            if (keys.ContainsKey(address)) throw new InvalidOperationException("Use the ordinary stake lock for this wallet; sponsorship requires a separate validator identity.");
+            return CreateSignedTransaction(chain, pendingTransactions, address, amount, 0,
+                TransactionKind.StakeLock, validatorPublicKey, address, new List<string> { address }, true);
+        }
+
         public Transaction CreateStakeUnlockTransaction(Blockchain chain, string rewardAddress, long fee)
         {
             return CreateStakeUnlockTransaction(chain, Enumerable.Empty<Transaction>(), rewardAddress, fee);
@@ -211,7 +227,7 @@ namespace PrivateCoin.Core
 
         private Transaction CreateSignedTransaction(Blockchain chain, IEnumerable<Transaction> pendingTransactions,
             string destinationOneTimeAddress, long amount, long fee, TransactionKind kind, string validatorPublicKey,
-            string validatorRewardAddress, List<string> validatorOwnedAddresses)
+            string validatorRewardAddress, List<string> validatorOwnedAddresses, bool sponsoredStake = false)
         {
             if (chain == null) throw new ArgumentNullException(nameof(chain));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
@@ -238,7 +254,7 @@ namespace PrivateCoin.Core
             transaction.Outputs.Add(new TransactionOutput { Amount = amount, OneTimeAddress = destinationOneTimeAddress });
             if (total > required)
                 transaction.Outputs.Add(new TransactionOutput { Amount = total - required, OneTimeAddress = CreateReceiveAddress() });
-            if (kind == TransactionKind.StakeLock)
+            if (kind == TransactionKind.StakeLock && !sponsoredStake)
                 transaction.ValidatorOwnedAddresses = selected.Select(item => item.Output.OneTimeAddress)
                     .Concat(transaction.Outputs.Select(output => output.OneTimeAddress))
                     .Concat(new[] { validatorRewardAddress }).Distinct(StringComparer.Ordinal)
