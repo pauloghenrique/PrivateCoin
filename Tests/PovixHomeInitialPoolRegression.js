@@ -21,9 +21,11 @@ let pools = [
     { poolId: 'c'.repeat(64), available: true, assetA, assetB, reserveAAtomic: '100000000', reserveBAtomic: '1000000' }
 ];
 const context = { document: { getElementById: get, createElement: () => new Node() },
-    window: { location: { href: 'https://dex.example/' } }, URL, URLSearchParams,
+    window: { location: { href: 'https://dex.example/' }, setInterval: handler => { context.poll = handler; return 1; }, clearInterval: () => {}, addEventListener: () => {} }, URL, URLSearchParams,
     fetch: async () => ({ ok: true, json: async () => ({ pools }) }) };
+get('dex-home').dataset.initialCatalogue = JSON.stringify({ pools });
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../Povix.Dex/Scripts/povix-home.js'), 'utf8'), context);
+assert.equal(get('dex-token-list').children.length, 2, 'Initial server snapshot must render before fetch resolves');
 const text = node => node.textContent + node.children.map(text).join(' ');
 (async () => {
     await new Promise(resolve => setImmediate(resolve));
@@ -44,5 +46,11 @@ const text = node => node.textContent + node.children.map(text).join(' ');
     assert.match(text(get('dex-token-list').children[0]), /Negociação aberta/);
     assert.match(text(get('dex-token-list').children[0]), /179\.700 POVIX/);
     assert.match(text(get('dex-token-list').children[0]), /Negociar/);
+    pools = [];
+    await context.poll();
+    assert.equal(get('dex-token-list').children.length, 0);
+    pools = [{ poolId: 'd'.repeat(64), nativeInitialLaunch: true, available: false, status: 'collecting', assetA, assetB, reserveAAtomic: '35940000000000', reserveBAtomic: '0' }];
+    await context.poll();
+    assert.match(text(get('dex-token-list').children[0]), /359\.400 POVIX/);
     console.log('PASS: native collecting pool on home, live reserves, status, metrics, search and trading activation.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

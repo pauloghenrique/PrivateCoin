@@ -51,6 +51,16 @@
             byId('dex-status').hidden = rows.children.length > 0;
         }
     }
+    function updateCatalogue(data) {
+        if (!data || !Array.isArray(data.pools)) return;
+        pools = data.pools;
+        const pairedAssets = new Set();
+        pools.filter(visiblePool).forEach(pool => {
+            pairedAssets.add(pool.assetA.id); pairedAssets.add(pool.assetB.id);
+        });
+        byId('dex-asset-count').textContent = pairedAssets.size;
+        byId('dex-pool-count').textContent = pools.filter(visiblePool).length;
+    }
     async function refresh() {
         if (loading) return;
         loading = true; byId('dex-refresh').disabled = true;
@@ -60,13 +70,7 @@
             const response = await fetch(app.dataset.catalogueUrl, { method: 'POST', body, credentials: 'same-origin', cache: 'no-store' });
             const data = await response.json();
             if (!response.ok || !Array.isArray(data.pools)) throw new Error('catalogue');
-            pools = data.pools;
-            const pairedAssets = new Set();
-            pools.filter(visiblePool).forEach(pool => {
-                pairedAssets.add(pool.assetA.id); pairedAssets.add(pool.assetB.id);
-            });
-            byId('dex-asset-count').textContent = pairedAssets.size;
-            byId('dex-pool-count').textContent = pools.filter(visiblePool).length;
+            updateCatalogue(data);
             loading = false; render();
         } catch (_) {
             byId('dex-status').hidden = false;
@@ -75,5 +79,9 @@
     }
     byId('dex-search').addEventListener('input', render);
     byId('dex-refresh').addEventListener('click', refresh);
+    try { updateCatalogue(JSON.parse(app.dataset.initialCatalogue || 'null')); render(); }
+    catch (_) { /* The live catalogue request can recover an unavailable initial snapshot. */ }
     refresh();
+    const refreshTimer = window.setInterval(refresh, 15000);
+    window.addEventListener('pagehide', () => window.clearInterval(refreshTimer), { once: true });
 }());
