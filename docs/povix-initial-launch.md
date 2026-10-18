@@ -1,7 +1,7 @@
 # Lançamento inicial POVIX — consenso v22
 
 Implementação no Core: `InitialLaunch`, `TokenExchange`, `Blockchain` e `Wallet`.
-A criação é automática na confirmação da 100ª carteira recompensada; a compra está disponível pelas APIs assinadas do Core. A carteira
+A criação é automática na confirmação da 1ª carteira recompensada; a compra está disponível pelas APIs assinadas do Core. A carteira
 Desktop apresenta o saldo comprado como bloqueado; o DEX descobre a pool pela
 cadeia e permite trocas e liquidez adicional depois da abertura. O formulário
 DEX de lançamentos genéricos continua separado: não cria o lançamento nativo.
@@ -10,15 +10,15 @@ DEX de lançamentos genéricos continua separado: não cria o lançamento nativo
 
 | Destino | Quantidade |
 | --- | ---: |
-| Primeiras 100 identidades registradas | 600 POVIX (6 cada) |
+| Primeira identidade registrada | 600 POVIX (recompensa única) |
 | Reserva na criação única do lançamento | 359.400 POVIX |
 | Total inicial POVIX | 360.000 POVIX |
-| USDC local, para a 100ª carteira recompensada | 1.000.000 USDC |
-| USDT local, para a 100ª carteira recompensada | 1.000.000 USDT |
+| USDC local, para a 1ª carteira recompensada | 1.000.000 USDC |
+| USDT local, para a 1ª carteira recompensada | 1.000.000 USDT |
 
-Não há emissão no bloco zero. A confirmação da 100ª carteira emite seus 6 POVIX,
-completa os 600 gratuitos e cria a pool na mesma operação, sem taxa ou ação manual.
-Ela emite os tokens locais uma única vez para a 100ª carteira e deposita os 359.400
+Não há emissão no bloco zero. A confirmação da 1ª carteira emite seus 600 POVIX,
+completa a distribuição inicial de 600 POVIX e cria a pool na mesma operação, sem taxa ou ação manual.
+Ela emite os tokens locais uma única vez para a 1ª carteira e deposita os 359.400
 POVIX na reserva, sem entregar essa reserva como saldo livre. A pool usa uma chave
 pública fixa do protocolo, sem chave privada retida; sua liquidez principal não tem dono. As unidades locais têm seis casas decimais e oferta fixa.
 Não possuem política de mint, pausa, queima administrativa ou vesting.
@@ -36,8 +36,8 @@ Não existe soma de reservas USDC e USDT no mesmo par nem troca do par na capta�
 
 ## Compra e desbloqueio
 
-Cada identidade registrada pode comprar uma vez, inclusive as primeiras 100 que
-receberam a distribuição gratuita. Uma compra deposita exatamente 1 unidade do
+Cada identidade registrada pode comprar uma vez, inclusive a primeira, que
+recebeu a distribuição inicial. Uma compra deposita exatamente 1 unidade do
 token local selecionado e retira exatamente 6 POVIX da reserva de venda. Esses
 6 POVIX aparecem como um UTXO do comprador, bloqueado pelo consenso.
 A taxa de rede é paga à parte em POVIX livres; os 6 comprados não podem pagá-la.
@@ -84,10 +84,10 @@ A parcela das cotas permanentes continua dentro da pool permanentemente.
 ## APIs do Core
 
 ```csharp
-// A chamada existente para registrar carteiras já cria a pool na 100ª recompensa.
+// A chamada existente para registrar carteiras já cria a pool na 1ª recompensa.
 Transaction registration = chain.CreateWalletCreationTransaction(address, pending);
 // Encaminhar registration à confirmação normal. Não há criação manual da pool.
-// Os tokens locais são creditados à 100ª carteira; ela pode distribuí-los
+// Os tokens locais são creditados à 1ª carteira; ela pode distribuí-los
 // usando as transferências de token já existentes.
 
 Transaction purchase = buyer.CreateInitialLaunchPurchase(
@@ -103,7 +103,7 @@ Para assinatura externa, `TokenExchange.PrepareInitialLaunchPurchase` retorna `U
 assinar o payload com cada chave de entrada livre e com a chave da identidade;
 passar esta última assinatura como segundo argumento de `Complete`.
 As reservas são consumidas sem assinatura do provedor, mas somente pelas regras
-exatas do consenso. As compras exigem aprovação e confirmação normais. O cadastro da 100ª carteira e sua criação automática de pool são auto-validados pelo consenso, como os demais cadastros.
+exatas do consenso. As compras exigem aprovação e confirmação normais. O cadastro da 1ª carteira e sua criação automática de pool são auto-validados pelo consenso, como os demais cadastros.
 
 ## Rede e validação
 
@@ -118,3 +118,15 @@ compras e assinaturas, locks, catálogo, restauração real da cadeia, criação
 USDC/USDT, últimas compras, impossibilidade de fechamento, liquidez adicional,
 taxas e contabilização pública. Os testes de fronteira usam uma fixture do estado
 antes da última compra e executam o validador real; não mineram 29.950 compras.
+
+
+## Inicialização dos validadores com uma única recompensa
+
+As carteiras posteriores registram suas identidades com saldo inicial zero.
+A primeira carteira pode ceder garantia a dois validadores independentes usando
+`CreateSponsoredStakeLockTransaction(chain, pending, validatorPublicKey, amount)`.
+Essa operação de garantia existente é auto-validada e não emite moedas novas:
+o valor sai dos 600 POVIX do titular e fica sob a chave do validador destinatário.
+Depois das garantias confirmadas, os validadores podem aprovar as transferências
+normais do titular para os demais participantes. A aprovação de transferências
+não é dispensada para inicializar a rede.

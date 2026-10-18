@@ -12,7 +12,7 @@ namespace PrivateCoin.Core
     {
         public const int DecimalPlaces = 8;
         public const long OneCoin = 100000000L;
-        public const long WalletCreationReward = 6L * OneCoin;
+        public const long WalletCreationReward = 600L * OneCoin;
         public const long DistributionSupply = 600L * OneCoin;
         public const int RewardedWalletLimit = (int)(DistributionSupply / WalletCreationReward);
         public const long MaximumSupply = DistributionSupply + InitialLaunch.ReserveSupply;

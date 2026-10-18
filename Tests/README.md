@@ -621,7 +621,7 @@ node Tests/PovixInitialLaunchWalletRegression.js work/initial-launch-swap.json
 ```
 
 Verifica a distribuição de 600 POVIX, emissão única da reserva e dos dois tokens
-locais de um milhão, criação automática na 100ª carteira, compra única por identidade assinada,
+locais de um milhão, criação automática na 1ª carteira, compra única por identidade assinada,
 bloqueio de gasto e negociação antecipados, catálogo e saldo da carteira,
 restauração completa e contabilização. A fronteira 29.949 → 29.950 usa estado
 UTXO de teste, validado pelo mesmo `Apply` do consenso, para conferir abertura,

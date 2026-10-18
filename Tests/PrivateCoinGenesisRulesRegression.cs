@@ -84,7 +84,7 @@ internal static class PrivateCoinGenesisRulesRegression
         Check(new Blockchain().Blocks[0].Hash == chain.Blocks[0].Hash, "genesis construction is deterministic");
         Check(rules.TotalSupplyAtomicUnits == 18180000L * Blockchain.OneCoin && rules.InitialDistributionAtomicUnits == 600L * Blockchain.OneCoin &&
             rules.ValidatorSupplyAtomicUnits == 17820000L * Blockchain.OneCoin && rules.GenesisIssuanceAtomicUnits == 0, "genesis exposes total, distribution, rewards and zero premine");
-        Check(rules.WalletRewardAtomicUnits == 6L * Blockchain.OneCoin && rules.RewardedWalletLimit == 100 && rules.RewardPhases.Count == 4 &&
+        Check(rules.WalletRewardAtomicUnits == 600L * Blockchain.OneCoin && rules.RewardedWalletLimit == 1 && rules.RewardPhases.Count == 4 &&
             rules.RewardPhases.Sum(phase => (phase.LastHeight - phase.FirstHeight + 1) * phase.RewardAtomicUnits) == rules.ValidatorSupplyAtomicUnits,
             "distribution and all emission phases agree with executable policy");
         Check(rules.MaxOperationsPerBlock == 20 && rules.BlockWaitSeconds == 10 && rules.ProofOfWorkDifficultyBits == 12 &&
