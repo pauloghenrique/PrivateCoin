@@ -1,0 +1,149 @@
+@model Povix.Dex.Models.TokenNetworkViewModel
+@{ bool creatingLaunch = ViewBag.CreateLaunchPool == true; bool creating = ViewBag.CreatePool == true || creatingLaunch; ViewBag.Title = creatingLaunch ? "Criar pool de lançamento" : creating ? "Criar pool de liquidez" : "Minhas pools"; }
+<main id="liquidity-app" data-mode="@(creatingLaunch ? "create-launch" : creating ? "create" : "manage")" data-network-id="@Model.NetworkId" data-pool-id="@ViewBag.SelectedPoolId" data-launch-token-id="@ViewBag.SelectedLaunchTokenId" data-network-url="@Url.Action("NetworkStatus", "Tokens")"
+      data-market-url="@Url.Action("Market", new { poolId = "__id__" })" data-catalogue-url="@Url.Action("Catalogue")" data-prepare-pool-url="@Url.Action("PreparePool")" data-prepare-swap-url="@Url.Action("PrepareSwap")"
+      data-prepare-launch-pool-url="@Url.Action("PrepareLaunchPool")" data-prepare-launch-operation-url="@Url.Action("PrepareLaunchOperation")" data-submit-launch-url="@Url.Action("SubmitLaunchOperation")"
+      data-prepare-liquidity-url="@Url.Action("PrepareLiquidityChange")" data-submit-liquidity-url="@Url.Action("SubmitLiquidityChange")"
+      data-prepare-reserves-url="@Url.Action("PrepareReserveOperation")" data-submit-reserves-url="@Url.Action("SubmitReserveOperation")"
+      data-submit-pool-url="@Url.Action("SubmitPool")" data-submit-swap-url="@Url.Action("SubmitSwap")"
+      data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
+    <div class="page-intro liquidity-intro"><span class="eyebrow">LIQUIDEZ NA BLOCKCHAIN POVIX</span><h1>@(creatingLaunch ? "Criar pool de lançamento" : creating ? "Criar pool de liquidez" : "Minhas pools")</h1>
+        @if (creating) { <p>@(creatingLaunch ? "Defina os tokens, a meta de captação e o prazo do lançamento." : "Escolha os dois ativos e as reservas iniciais da pool.")</p><a class="text-button" href="@Url.Action("Index")">← Voltar para minhas pools</a> }
+        else { <p>Somente pools criadas pela carteira conectada.</p> }
+    </div>
+    @if (creating) {
+        <ol class="pool-create-steps" aria-label="Etapas da criação">
+            <li aria-current="step"><span>01</span> Configure os ativos</li><li><span>02</span> Revise a operação</li><li><span>03</span> Assine com a carteira</li>
+        </ol>
+    }
+    <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
+    <div id="app-message" class="notice" role="alert" hidden></div>
+    <div class="liquidity-grid">
+        <div id="pool-management-fee" class="liquidity-setup" hidden="@(!creating)">
+
+            <section class="card token-form liquidity-fee"><h2>Taxa da rede</h2><p>A taxa de rede é paga em POVIX pela carteira que cria a pool ou executa a troca. A taxa da pool é 0,30% e permanece nas reservas.</p>
+                <label for="exchange-priority">Prioridade</label><select id="exchange-priority"><option value="1">Econômica</option><option value="2" selected>Normal</option><option value="4">Prioritária</option></select><small id="exchange-fee">Consultando a taxa…</small>
+            </section>
+        </div>
+        <div class="liquidity-operations" hidden="@(!creating)">
+            <form hidden="@creatingLaunch" id="pool-form" class="card token-form">
+                @Html.AntiForgeryToken()
+                <div class="section-heading"><span class="step-number">01</span><div><h2>Criar pool de liquidez</h2><p>Escolha dois ativos distintos. As duas reservas ficam bloqueadas na blockchain e separadas do saldo livre da carteira.</p></div></div>
+                <fieldset id="pool-fields" disabled>
+                    <div class="pool-assets"><section class="pool-asset-card" aria-label="Primeiro ativo"><span class="eyebrow">ATIVO 01</span><label for="pool-asset-a">Primeiro ativo</label><select id="pool-asset-a" required></select><small id="pool-balance-a"></small>
+                    <label for="pool-amount-a">Quantidade do primeiro ativo</label><input placeholder="0,00" id="pool-amount-a" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    </section><span class="pool-pair-plus" aria-hidden="true">+</span><section class="pool-asset-card" aria-label="Segundo ativo"><span class="eyebrow">ATIVO 02</span><label for="pool-asset-b">Segundo ativo</label><select id="pool-asset-b" required></select><small id="pool-balance-b"></small>
+                    <label for="pool-amount-b">Quantidade do segundo ativo</label><input placeholder="0,00" id="pool-amount-b" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    </section></div>
+                    <section class="pool-settings"><h2>Recompensas da pool</h2><p>Escolha como recompensar quem fornece liquidez.</p>
+                    <label for="pool-reward-mode">Opção de recompensa</label>
+                    <select id="pool-reward-mode" aria-describedby="pool-reward-description" required>
+                        <option value="fees" selected>Participação nas taxas</option>
+                        <option value="loyalty">Bônus por permanência</option>
+                    </select>
+                    <div id="pool-reward-description" class="notice" role="status" aria-live="polite">
+                        <strong id="pool-reward-title">Participação nas taxas</strong>
+                        <p id="pool-reward-summary">Destinar aos provedores uma parcela das taxas geradas pelas negociações.</p>
+                        <small id="pool-reward-detail">Recompensa acompanha o uso do pool. Retorno varia conforme o volume.</small>
+                    </div>
+                    <fieldset id="pool-loyalty-policy" hidden disabled>
+                        <legend>Regras do bônus definidas pelo criador</legend>
+                        <label for="pool-loyalty-fee">Parcela das taxas destinada ao bônus (%)</label>
+                        <input id="pool-loyalty-fee" inputmode="decimal" maxlength="6" pattern="[0-9]+([.,][0-9]{1,2})?" />
+                        <small>De 0,01% a 100% das taxas geradas pelas negociações. Esta parcela não altera a taxa de negociação da pool.</small>
+                        <label for="pool-loyalty-minimum">Reserva mínima planejada para bônus (POVIX)</label>
+                        <input id="pool-loyalty-minimum" inputmode="decimal" maxlength="30" pattern="[0-9]+([.,][0-9]{1,8})?" />
+                        <label for="pool-loyalty-exit">Retirada antes do prazo escolhido</label>
+                        <select id="pool-loyalty-exit"><option value="forfeit">Permitir retirada do aporte com perda do bônus</option><option value="locked">Bloquear retirada até o fim do prazo</option></select>
+                        <p>O provedor escolherá o prazo em dias, meses ou anos. O bônus será proporcional à participação e receberá a parcela das taxas definida acima.</p>
+                        <small>Cadastro das regras: a reserva ainda não é debitada ou separada e não há pagamento de bônus nem bloqueio por prazo ativo.</small>
+                    </fieldset>
+                    </section>
+                    <section class="pool-settings"><h2>Queima nas trocas</h2>
+                        <label class="checkbox-label"><input id="pool-burn-enabled" type="checkbox" /> Aplicar uma taxa própria de queima nesta pool</label>
+                        <fieldset id="pool-burn-fields" hidden disabled>
+                            <label for="pool-burn-mode">Modalidade</label><select id="pool-burn-mode"><option value="percent">Percentual por token negociado</option><option value="fixed">Valor fixo por ativo</option></select>
+                            <div id="pool-burn-percent-field"><label for="pool-burn-percent">Taxa de queima (%)</label><input id="pool-burn-percent" maxlength="6" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?" /></div>
+                            <div id="pool-burn-fixed-fields" hidden>
+                                <label for="pool-burn-fixed-a">Queima fixa no primeiro ativo</label><input id="pool-burn-fixed-a" maxlength="30" inputmode="decimal" value="0" />
+                                <label for="pool-burn-fixed-b">Queima fixa no segundo ativo</label><input id="pool-burn-fixed-b" maxlength="30" inputmode="decimal" value="0" />
+                            </div>
+                            <small>Percentual de 0,01% a 100%, com duas casas, arredondado para baixo na precisão de cada token. No modo fixo, informe zero para isentar um ativo e um valor positivo para ao menos um token. POVIX nunca sofre queima.</small>
+                        </fieldset>
+                        <small>Opção desabilitada por padrão e permanente após criar a pool. Taxa independente da queima de transferências dos tokens. Nas trocas, a entrada é cobrada além do valor enviado à pool e a saída é descontada antes do recebimento. O mínimo a receber considera o valor líquido. Não se aplica a aportes ou retiradas. A taxa de 0,30% da pool e a taxa da rede em POVIX permanecem separadas.</small>
+                    </section>
+                    <section class="pool-permissions"><h2>Participação de usuários</h2>
+                    <label class="checkbox-label"><input id="pool-user-liquidity" type="checkbox" /> Permitir que usuários adicionem e removam liquidez</label>
+                    <small>Habilitada: cada carteira pode aportar os dois ativos e retirar sua própria participação proporcional. Desabilitada: usuários não podem adicionar nem remover liquidez. A escolha é permanente para esta pool.</small>
+                    </section>
+                </fieldset>
+                <p id="pool-price" class="liquidity-price" role="status" aria-live="polite">Preço: selecione dois ativos distintos e informe as reservas.</p>
+                <div class="form-bottom"><p>Confira os detalhes antes de assinar com sua carteira.</p><button id="prepare-pool" class="button button-primary" type="submit" disabled>Revisar criação da pool →</button></div>
+            </form>
+            <form hidden="@(!creatingLaunch)" id="launch-create-form" class="card token-form">
+                <h2>Criar pool de lançamento</h2>
+                <p>Capte POVIX ou outro token confirmado antes de abrir a negociação. Os aportes ficam bloqueados pela rede. O último aporte que completar a meta entrega os tokens e abre a pool na mesma confirmação.</p>
+                <fieldset id="launch-create-fields" disabled>
+                    <label for="launch-token">Token do lançamento</label><select id="launch-token" required></select>
+                    <label for="launch-funding-asset">Ativo de captação</label><select id="launch-funding-asset" required></select>
+                    <label for="launch-sale">Tokens para os compradores</label><input id="launch-sale" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <label for="launch-liquidity">Tokens para a liquidez inicial</label><input id="launch-liquidity" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <label for="launch-target">Meta no ativo de captação</label><input id="launch-target" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <label for="launch-seed">Aporte inicial do criador no ativo de captação</label><input id="launch-seed" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <small>Positivo e menor que a meta; conta como compra do criador. Os tokens para venda e liquidez são depositados na criação.</small>
+                    <label for="launch-deadline">Bloco limite de captação</label><input id="launch-deadline" type="number" min="1" max="2147483647" step="1" required />
+                    <small>O prazo é medido em blocos, não em horário. A partir do bloco limite, se a meta não foi atingida, todos os aportes podem ser devolvidos juntos. Cada operação paga sua taxa em POVIX livres.</small>
+                    <label class="checkbox-label"><input id="launch-user-liquidity" type="checkbox" /> Permitir liquidez de outros provedores após a abertura</label>
+                    <p>100% da captação formará a liquidez, administrada pela carteira criadora conforme as regras normais da pool. Compradores recebem tokens; não recebem participação de liquidez pelo aporte de lançamento. Até 100 carteiras por lançamento. Arredondamentos dos tokens permanecem na liquidez.</p>
+                </fieldset>
+                <p id="launch-create-estimate" role="status" aria-live="polite">Escolha os ativos e informe a meta.</p>
+                <button id="prepare-launch-create" class="button button-primary" type="submit" disabled>Revisar lançamento →</button>
+            </form>
+            <form hidden id="launch-contribute-form" class="card token-form">
+                <h2>Participar de um lançamento</h2>
+                <fieldset id="launch-contribute-fields" disabled>
+                    <label for="launch-pool">Lançamento</label><select id="launch-pool" required></select>
+                    <p id="launch-progress" role="status" aria-live="polite">Nenhum lançamento selecionado.</p>
+                    <label for="launch-operation">Operação</label><select id="launch-operation"><option value="contribute">Aportar na captação</option><option value="refund">Devolver todos os aportes após o prazo</option></select>
+                    <label for="launch-amount">Quantidade do ativo de captação</label><input id="launch-amount" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" />
+                    <p id="launch-contribution-estimate" role="status" aria-live="polite">Os tokens comprados serão entregues apenas quando a meta for completada.</p>
+                    <small>Sem meta atingida no prazo, qualquer carteira pode pagar a taxa de rede para devolver os valores aos endereços originais. O criador recebe de volta os tokens depositados. As taxas de rede já pagas não são reembolsadas.</small>
+                </fieldset>
+                <button id="prepare-launch-operation" class="button button-primary" type="submit" disabled>Revisar aporte ou devolução →</button>
+            </form>
+            <form hidden id="user-liquidity-form" class="card token-form">
+                <h2>Adicionar ou remover liquidez</h2><p>Disponível nas pools que permitem liquidez de usuários. As quantidades seguem a proporção das reservas; a taxa da rede é paga em POVIX livres.</p>
+                <fieldset id="user-liquidity-fields" disabled>
+                    <label for="user-liquidity-pool">Pool</label><select id="user-liquidity-pool" required></select>
+                    <label for="user-liquidity-operation">Operação</label><select id="user-liquidity-operation"><option value="add">Adicionar liquidez</option><option value="remove">Remover minha liquidez</option></select>
+                    <label id="user-liquidity-amount-label" for="user-liquidity-amount">Quantidade do primeiro ativo</label>
+                    <input id="user-liquidity-amount" maxlength="30" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" required />
+                    <p id="user-liquidity-estimate" role="status" aria-live="polite">Selecione uma pool e informe a quantidade.</p>
+                    <small>Na remoção, informe uma porcentagem de sua participação (até 100%). O criador mantém uma participação até encerrar a pool, após a saída dos demais provedores.</small>
+                </fieldset>
+                <button id="prepare-user-liquidity" class="button button-primary" type="submit" disabled>Revisar liquidez →</button>
+            </form>
+            <form hidden id="swap-form" class="card token-form">
+                <div class="section-heading"><span class="step-number">02</span><div><h2>Trocar tokens</h2><p>Assine a troca com sua carteira. Não é necessária a aprovação do criador da pool. As reservas precisam estar confirmadas.</p></div></div>
+                <fieldset id="swap-fields" disabled>
+                    <label for="swap-pool">Pool para troca</label><select id="swap-pool" required></select><small id="swap-pool-state" class="token-receiving-addresses" role="status" aria-live="polite"></small><small id="swap-provider" class="address-input"></small>
+                    <p id="swap-price" class="liquidity-price" role="status" aria-live="polite">Preço: selecione uma pool.</p><small>Preço pelas reservas, antes da taxa da pool e do impacto da quantidade trocada.</small>
+                    <label for="swap-side">Ativo que você entrega</label><select id="swap-side"><option value="0">Primeiro ativo</option><option value="1">Segundo ativo</option></select>
+                    <label for="swap-amount">Quantidade a trocar</label><input id="swap-amount" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required />
+                    <p id="swap-estimate" aria-live="polite">Escolha a pool e informe a quantidade.</p>
+                    <label for="swap-minimum">Mínimo a receber</label><input id="swap-minimum" maxlength="30" pattern="[0-9]+([.,][0-9]+)?" inputmode="decimal" required /><small>Você define esse limite. Uma cotação menor exige outra revisão.</small>
+                </fieldset>
+                <div class="form-bottom"><button id="prepare-swap" class="button button-primary" type="submit" disabled>Revisar troca →</button></div>
+            </form>
+        </div>
+        <aside id="pool-management-review" hidden="@(!creating)" class="review-column liquidity-review"><section class="card review-card"><span class="eyebrow">ANTES DE ASSINAR</span><h2 id="review-title">Revise sua operação</h2><p id="review-description">Quantidades, reservas, taxa e endereços serão apresentados antes da assinatura.</p>
+            <dl id="exchange-review" class="review-list"></dl>
+            <div id="sign-actions" hidden><button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button><button id="edit-exchange" type="button" class="text-button full-width">Voltar</button></div>
+        </section></aside>
+    </div>
+    <section hidden="@creating" class="token-form liquidity-pools"><div class="pool-list-heading"><div><span class="eyebrow">SUA LIQUIDEZ</span><h2>Seu painel de pools</h2><p>Seus pares, suas reservas. Tudo em um só lugar.</p></div><div class="pool-create-choices"><a id="create-pool" class="button button-primary" href="@Url.Action("Create")">Criar pool de liquidez</a><a id="create-launch-pool" class="button button-secondary" href="@Url.Action("CreateLaunch")">Criar pool de lançamento</a></div></div><div class="pool-list-tools">
+        <div><label for="pool-search">Buscar pool</label><input id="pool-search" type="search" placeholder="Par, token ou identificador" autocomplete="off" /></div>
+        <div><label for="pool-status-filter">Status</label><select id="pool-status-filter"><option value="all">Todos os status</option><option value="available">Disponíveis</option><option value="waiting">Aguardando confirmação</option><option value="closed">Encerradas</option><option value="other">Outros status</option></select></div>
+        <span id="pool-result-count" role="status" aria-live="polite"></span>
+    </div><div id="pool-list" class="transfer-history-list pool-items"></div><p id="pool-filter-empty" class="pool-filter-empty" hidden>Nenhuma pool corresponde à busca ou ao status escolhido.</p><p id="pools-empty" class="muted-text">Conecte sua carteira para consultar suas pools.</p></section>
+</main>
