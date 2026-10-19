@@ -38,7 +38,7 @@ const text = node => node.textContent + node.children.map(text).join(' ');
     assert.equal(rows[0].children.length, 2);
     assert(!text(rows[0]).includes('359.400'));
     assert(!text(rows[0]).includes('…'));
-    
+
     assert(!text(rows[0]).includes('Em captação'));
     assert.match(text(rows[0]), /Ver pool/);
     assert(!text(rows[0]).includes('Negociar'));
