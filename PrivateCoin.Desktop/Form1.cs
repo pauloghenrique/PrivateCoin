@@ -824,9 +824,9 @@ namespace PrivateCoin.Desktop
                 if (selected == null) throw new InvalidOperationException("Selecione uma carteira.");
 
                 ExecuteNetworkOperation(() => true);
-                decimal unlockedCoins = (decimal)selected.LockedStake / Blockchain.OneCoin;
                 long fee = 0;
                 Transaction unlockTransaction = selected.Wallet.CreateStakeUnlockTransaction(blockchain, SnapshotPending(), selected.ValidatorRewardAddress, fee);
+                decimal unlockedCoins = (decimal)(unlockTransaction.Outputs[0].Amount + fee) / Blockchain.OneCoin;
                 if (!ValidateAndQueue(unlockTransaction, "Desbloqueio de garantia")) return;
                 RefreshValidatorState();
                 SaveState();
@@ -861,7 +861,7 @@ namespace PrivateCoin.Desktop
             balanceLabel.Text = ((decimal)balance.Total / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
             toolTip.SetToolTip(balanceLabel, "Disponível para enviar: " +
                 ((decimal)balance.Available / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX" +
-                (balance.LaunchLocked == 0 ? string.Empty : "\nBloqueado até a abertura do lançamento: " +
+                (balance.LaunchLocked == 0 ? string.Empty : "\nGarantia de validação do lançamento (liberada na meta): " +
                     ((decimal)balance.LaunchLocked / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX") +
                 (balance.PendingChange == 0 ? string.Empty : "\nTroco aguardando confirmação em bloco: " +
                     ((decimal)balance.PendingChange / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX"));
@@ -877,7 +877,8 @@ namespace PrivateCoin.Desktop
             if (collateralPending) validatorStatusLabel.Text += "  |  Alteração aguardando bloco";
             stakeAmountTextBox.Enabled = selected != null && !selected.IsValidator && !collateralPending;
             activateValidatorButton.Enabled = selected != null && !selected.IsValidator && !collateralPending;
-            unlockStakeButton.Enabled = selected != null && selected.IsValidator && !collateralPending;
+            unlockStakeButton.Enabled = selected != null && selected.IsValidator && !collateralPending &&
+                blockchain.GetUnspentOutputs(selected.Wallet.OwnedOneTimeAddresses).Any(item => item.TransactionKind == TransactionKind.StakeLock);
         }
 
         private void UpdateInitialLaunchStatus()

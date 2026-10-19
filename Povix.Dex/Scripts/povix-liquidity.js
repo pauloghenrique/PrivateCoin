@@ -151,7 +151,7 @@
         updatePrices(pool);
         const collecting = nativeCollecting(pool);
         if (collecting && !draft) { swapDirection = '1'; byId('swap-side').value = '1'; byId('swap-amount').value = '1'; byId('swap-minimum').value = atomicText(String(600000000n - BigInt(fee())), 8); }
-        if (byId('market-fee-help')) byId('market-fee-help').textContent = collecting ? 'A taxa da rede é descontada dos 6 POVIX brutos. O valor líquido fica bloqueado até a meta. Não exige saldo POVIX anterior.' : 'Paga em POVIX. A taxa da pool de 0,30% permanece nas reservas.';
+        if (byId('market-fee-help')) byId('market-fee-help').textContent = collecting ? 'A taxa da rede é descontada dos 6 POVIX brutos. O valor líquido fica bloqueado para validação e criação de blocos até a meta. Não exige saldo POVIX anterior.' : 'Paga em POVIX. A taxa da pool de 0,30% permanece nas reservas.';
         byId('swap-amount').readOnly = collecting;
         byId('swap-minimum').readOnly = collecting;
         byId('swap-side').disabled = collecting || !editing || !unlocked;

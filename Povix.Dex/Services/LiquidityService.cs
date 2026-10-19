@@ -304,7 +304,7 @@ namespace Povix.Dex.Services
                     Outputs = tx.Outputs.Select((output, index) => {
                         var asset = output.AssetId == null ? NativeAsset() : output.AssetId == record.Exchange.AssetA.Id ? record.Exchange.AssetA : record.Exchange.AssetB;
                         return new ExchangeOutputViewModel { Amount = output.Amount, Symbol = asset.Symbol, Decimals = asset.Decimals, Address = output.OneTimeAddress,
-                            Purpose = tx.Kind == TransactionKind.InitialLaunchPurchase && index == 2 ? "POVIX bloqueados até a meta do lançamento" : tx.Kind == TransactionKind.LaunchRefund ? "Devolução do lançamento" : tx.Kind == TransactionKind.LaunchActivate && index >= 2 && index < 2 + tx.Launch.Contributions.Count ? "Tokens comprados no lançamento" : index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
+                            Purpose = tx.Kind == TransactionKind.InitialLaunchPurchase && index == 2 ? "POVIX em garantia de validação e criação de blocos até a meta do lançamento" : tx.Kind == TransactionKind.LaunchRefund ? "Devolução do lançamento" : tx.Kind == TransactionKind.LaunchActivate && index >= 2 && index < 2 + tx.Launch.Contributions.Count ? "Tokens comprados no lançamento" : index < 2 ? record.Exchange.Operation == "close" ? "Reserva devolvida à carteira" :
                                 tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LiquiditySwap || tx.Kind == TransactionKind.LiquidityAdd || tx.Kind == TransactionKind.LiquidityRemove ? "Reserva bloqueada da pool" : "Reserva da pool antiga (sem bloqueio)" :
                                 record.Exchange.Operation == "remove" && index < 4 ? "Liquidez retirada pela carteira" :
                                 record.Exchange.Operation == "swap" && index == 2 ? "Recebimento da troca" : "Troco da carteira" };
@@ -462,7 +462,7 @@ namespace Povix.Dex.Services
             } else if (collecting) {
                 bool expired = !nativeCollecting && blockchain.Blocks.Count >= current.Launch.DeadlineHeight;
                 status = expired ? "launch_expired" : "collecting"; reason = expired ? "launch_deadline" : "launch_target_pending";
-                message = nativeCollecting ? "Lançamento inicial: 6 POVIX bloqueados por carteira por 1 token local. Negociação liberada quando restarem 179.700 POVIX. Sem prazo ou devolução antecipada." : expired ? "Meta não atingida no bloco limite. Qualquer carteira pode pagar a taxa para devolver todos os aportes aos seus donos." :
+                message = nativeCollecting ? "Lançamento inicial: 6 POVIX bloqueados por carteira por 1 token local. POVIX recebidos participam da validação e criação de blocos enquanto bloqueados. Negociação e movimentação liberadas quando restarem 179.700 POVIX. Sem prazo ou devolução antecipada." : expired ? "Meta não atingida no bloco limite. Qualquer carteira pode pagar a taxa para devolver todos os aportes aos seus donos." :
                     "Em captação. Negociações bloqueadas até a meta; o último aporte entrega os tokens e abre a pool após confirmação.";
             } else if (!locked) {
                 status = "unlocked"; reason = "legacy_reserves_unlocked";
