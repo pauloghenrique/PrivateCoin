@@ -38,14 +38,18 @@
             reserves.append(element('div', reserveText(pool.reserveAAtomic, pool.assetA)),
                 element('small', reserveText(pool.reserveBAtomic, pool.assetB)));
             const action = element('td', '');
-            if (launchingPool(pool) || pool.nativeInitialLaunch) {
+            if (!launchingPool(pool) && pool.nativeInitialLaunch) {
                 action.append(element('div', pool.available ? 'Negociação aberta' : launchingPool(pool) ? (pool.nativeInitialLaunch ? 'Em captação · 6 POVIX por 1 USDC local' : 'Em captação') : pool.statusMessage || 'Aguardando disponibilidade'));
             }
             const link = element('a', pool.available ? 'Negociar ↗' : 'Ver pool ↗', 'button button-secondary');
             const url = new URL(app.dataset.marketUrl, window.location.href);
             url.searchParams.set('poolId', pool.poolId);
             link.href = url.href; action.append(link);
-            row.append(identity, id, reserves, action); (launchingPool(pool) ? launches : rows).append(row);
+            if (launchingPool(pool)) {
+                row.append(identity, action); launches.append(row);
+            } else {
+                row.append(identity, id, reserves, action); rows.append(row);
+            }
         });
         byId('dex-result-count').textContent = rows.children.length + ' pool(s) lançada(s) encontrada(s)';
         byId('dex-launch-count').textContent = launches.children.length + ' pool(s) em lançamento encontrada(s)';
