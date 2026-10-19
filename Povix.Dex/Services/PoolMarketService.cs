@@ -63,7 +63,7 @@ namespace Povix.Dex.Services
                             volume = group.Sum(item => Math.Abs(item.DeltaA / scaleA)) };
                     }).ToArray();
                 var latest = history.LastOrDefault(item => item.Status == "confirmed");
-                return new { pool = PoolResponse(pool), tokens = new[] { MarketToken(pool.AssetA), MarketToken(pool.AssetB) }, interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+                return new { pool = PoolResponse(pool), tokens = new[] { MarketToken(pool.AssetA) }, interval, updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
                     price = latest == null || closed || !pool.Available || pool.Transaction.Kind == TransactionKind.LaunchCreate || pool.Transaction.Kind == TransactionKind.LaunchContribute || latest.ReserveA <= 0 ? (decimal?)null : (latest.ReserveB / scaleB) / (latest.ReserveA / scaleA),
                     candles = candles.Skip(Math.Max(0, candles.Length - 200)).ToArray(),
                     ledger = history.OrderByDescending(item => item.Time).ThenByDescending(item => item.Height).Take(100).Select(item => new {
@@ -78,11 +78,32 @@ namespace Povix.Dex.Services
             var token = asset.Id == "povix" ? asset : blockchain.GetTokens().FirstOrDefault(item => item.Id == asset.Id) ?? asset;
             var creation = blockchain.Blocks.SelectMany(block => block.Transactions)
                 .FirstOrDefault(tx => tx.Kind == TransactionKind.TokenCreate && tx.Token?.Id == token.Id);
+            bool native = token.Id == "povix";
+            var blocks = blockchain.Blocks.ToArray();
+            var creationBlock = blocks.FirstOrDefault(block => block.Transactions.Any(tx =>
+                native ? tx.Outputs.Any(output => output.AssetId == null && output.Amount > 0) :
+                tx.Kind == TransactionKind.TokenCreate && tx.Token?.Id == token.Id ||
+                tx.Kind == TransactionKind.InitialLaunchCreate && InitialLaunch.FundingTokens().Any(item => item.Id == token.Id)));
+            var addresses = blocks.SelectMany(block => block.Transactions).SelectMany(tx => tx.Outputs)
+                .Where(output => native ? output.AssetId == null : output.AssetId == token.Id)
+                .Select(output => output.OneTimeAddress).Distinct(StringComparer.Ordinal).ToArray();
+            var outputs = blockchain.GetUnspentOutputs(addresses)
+                .Where(item => (native ? item.Output.AssetId == null : item.Output.AssetId == token.Id) && item.Output.Amount > 0).ToArray();
+            long supply = native ? outputs.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount)) : token.Supply;
+            bool initialLaunchActive = blockchain.GetInitialLaunchStatus().Active;
+            long circulating = outputs.Where(item => item.Output.UnlockHeight <= blocks.Length &&
+                    (!item.Output.InitialLaunchLocked || initialLaunchActive) && !item.InitialLaunchCollecting &&
+                    item.TransactionKind != TransactionKind.StakeLock &&
+                    item.TransactionKind != TransactionKind.LaunchCreate && item.TransactionKind != TransactionKind.LaunchContribute)
+                .Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount));
+            int holders = outputs.Where(item => !item.IsPoolReserve)
+                .Select(item => item.Output.OneTimeAddress).Distinct(StringComparer.Ordinal).Count();
             TokenProfile profile;
             profiles.TryGetValue(token.Id, out profile);
             bool matching = creation != null && profile != null && profile.CreationId == creation.Id;
             return new { id = token.Id, name = matching ? profile.Name : token.Name, symbol = matching ? profile.Symbol : token.Symbol, decimals = token.Decimals,
-                supplyAtomic = token.Id == "povix" ? null : Atomic(token.Supply), native = token.Id == "povix",
+                supplyAtomic = Atomic(supply), circulatingSupplyAtomic = Atomic(circulating), holderCount = holders,
+                createdUtc = creationBlock == null ? null : new DateTime(creationBlock.TimestampUtcTicks, DateTimeKind.Utc).ToString("o", CultureInfo.InvariantCulture), native,
                 description = matching ? profile.Description : token.Policy?.Description };
         }
         private static long UnixTime(long ticks) => (ticks - 621355968000000000L) / TimeSpan.TicksPerSecond;

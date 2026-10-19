@@ -97,17 +97,21 @@
             cell.textContent = item.transactionId; cell.setAttribute('title', item.transactionId); cell.className = 'market-tx'; row.appendChild(cell); body.appendChild(row);
         });
         const info = byId('market-token-info'); info.replaceChildren();
-        (data.tokens || [p.assetA, p.assetB]).forEach(token => {
-            const card = document.createElement('section'), title = document.createElement('h3');
-            title.textContent = (token.name || token.symbol) + ' (' + token.symbol + ')'; card.appendChild(title);
-            const fields = [['Identificador', token.id], ['Precisão', token.decimals + ' casas decimais'],
-                ['Oferta total', token.supplyAtomic == null ? 'Ativo nativo POVIX' : atomic(token.supplyAtomic, token.decimals).replace(/^\+/, '') + ' ' + token.symbol]];
-            const list = document.createElement('dl');
-            fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
-            card.appendChild(list);
-            if (token.description) { const description = document.createElement('p'); description.textContent = token.description; card.appendChild(description); }
-            info.appendChild(card);
-        });
+        const token = (data.tokens || []).find(item => item.id === p.assetA.id) || p.assetA;
+        const card = document.createElement('section'), title = document.createElement('h3');
+        title.textContent = (token.name || token.symbol) + ' (' + token.symbol + ')'; card.appendChild(title);
+        const supplyText = value => value == null ? 'Não disponível' : atomic(value, token.decimals).replace(/^\+/, '') + ' ' + token.symbol;
+        const created = token.createdUtc ? new Date(token.createdUtc) : null;
+        const fields = [['Supply total', supplyText(token.supplyAtomic)],
+            ['Supply em circulação', supplyText(token.circulatingSupplyAtomic)],
+            ['Número de holders', token.holderCount == null ? 'Não disponível' : Number(token.holderCount).toLocaleString('pt-BR')],
+            ['Data de criação', created && Number.isFinite(created.getTime()) ? created.toLocaleString('pt-BR') : 'Não disponível']];
+        const list = document.createElement('dl');
+        fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
+        card.appendChild(list);
+        const note = document.createElement('p');
+        note.textContent = 'Circulação exclui valores ainda bloqueados. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
+        card.appendChild(note); info.appendChild(card);
         chart(data.candles, data.interval);
         byId('market-connection').setAttribute('data-state', 'ready');
         byId('market-connection').textContent = 'Atualizado às ' + new Date(data.updatedUtc).toLocaleTimeString('pt-BR') + ' · ' + data.peerCount + ' pares · Consulta a cada 5 segundos';
