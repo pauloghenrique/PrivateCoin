@@ -90,6 +90,7 @@ namespace Povix.Dex.Services
             var outputs = blockchain.GetUnspentOutputs(addresses)
                 .Where(item => (native ? item.Output.AssetId == null : item.Output.AssetId == token.Id) && item.Output.Amount > 0).ToArray();
             long supply = native ? outputs.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount)) : token.Supply;
+            // Pool reserves and wallet balances circulate together; unreleased locks do not.
             bool initialLaunchActive = blockchain.GetInitialLaunchStatus().Active;
             long circulating = outputs.Where(item => item.Output.UnlockHeight <= blocks.Length &&
                     (!item.Output.InitialLaunchLocked || initialLaunchActive) && !item.InitialLaunchCollecting &&

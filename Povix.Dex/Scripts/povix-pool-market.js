@@ -102,15 +102,15 @@
         title.textContent = (token.name || token.symbol) + ' (' + token.symbol + ')'; card.appendChild(title);
         const supplyText = value => value == null ? 'Não disponível' : atomic(value, token.decimals).replace(/^\+/, '') + ' ' + token.symbol;
         const created = token.createdUtc ? new Date(token.createdUtc) : null;
-        const fields = [['Supply total', supplyText(token.supplyAtomic)],
-            ['Supply em circulação', supplyText(token.circulatingSupplyAtomic)],
+        const fields = [['Supply em circulação', supplyText(token.circulatingSupplyAtomic)],
+            ['Supply total', supplyText(token.supplyAtomic)],
             ['Número de holders', token.holderCount == null ? 'Não disponível' : Number(token.holderCount).toLocaleString('pt-BR')],
             ['Data de criação', created && Number.isFinite(created.getTime()) ? created.toLocaleString('pt-BR') : 'Não disponível']];
         const list = document.createElement('dl');
         fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
         card.appendChild(list);
         const note = document.createElement('p');
-        note.textContent = 'Circulação exclui valores ainda bloqueados. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
+        note.textContent = 'Supply em circulação soma pools e carteiras de toda a rede, excluindo valores ainda bloqueados. Supply total inclui os valores bloqueados. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
         card.appendChild(note); info.appendChild(card);
         chart(data.candles, data.interval);
         byId('market-connection').setAttribute('data-state', 'ready');

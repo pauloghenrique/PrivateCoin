@@ -38,13 +38,14 @@ class Element {
     ];
     await element('market-refresh').listeners.click();
     assert.equal(element('market-token-info').children.length, 1, 'Only token A is displayed even when tokens arrive reordered');
-    assert.deepEqual(tokenFields().slice(0, 6), ['Supply total', '1234567890,12345678 POVIX', 'Supply em circulação', '1,00000000 POVIX', 'Número de holders', '0']);
+    assert.deepEqual(tokenFields().slice(0, 6), ['Supply em circulação', '1,00000000 POVIX', 'Supply total', '1234567890,12345678 POVIX', 'Número de holders', '0']);
     assert(!tokenFields().includes('Token B'));
     assert.notEqual(tokenFields()[7], 'Não disponível');
     data.tokens[1].createdUtc = 'invalid';
     data.tokens[1].circulatingSupplyAtomic = '0';
     await element('market-refresh').listeners.click();
-    assert.equal(tokenFields()[3], '0,00000000 POVIX');
+    assert.equal(tokenFields()[1], '0,00000000 POVIX');
+    assert.equal(tokenFields()[3], '1234567890,12345678 POVIX', 'Total retains locked amounts when circulating supply is zero');
     assert.equal(tokenFields()[7], 'Não disponível');
 
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
