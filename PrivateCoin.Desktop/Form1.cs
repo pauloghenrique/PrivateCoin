@@ -648,7 +648,7 @@ namespace PrivateCoin.Desktop
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
                     Log("Criação de bloco iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) aprovada(s).", true);
 
-                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch) || batch.Any(Blockchain.IsFirstLaunchPurchase)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -697,7 +697,7 @@ namespace PrivateCoin.Desktop
 
         private async Task ApprovePendingTransactions()
         {
-            foreach (Transaction transaction in SnapshotPending().Where(Blockchain.RequiresLockedTokenApproval))
+            foreach (Transaction transaction in SnapshotPending().Where(tx => Blockchain.RequiresLockedTokenApproval(tx) || tx.Kind == TransactionKind.InitialLaunchPurchase))
             {
                 Transaction[] pending = SnapshotPending();
                 if (blockchain.HasValidTransactionApproval(transaction, pending)) continue;

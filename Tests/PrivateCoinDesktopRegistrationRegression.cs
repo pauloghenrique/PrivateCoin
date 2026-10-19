@@ -60,6 +60,42 @@ class PrivateCoinDesktopRegistrationRegression
             Check(chain.GetMinimumValidatorsForTransactions(new[] { later, new Transaction { Kind = TransactionKind.StakeLock } }) == 2,
                 "mixed registration batches do not acquire single-validator rights");
             Check(WalletBalanceSummary.Read(chain, second, empty).Available == 0, "second wallet remains at zero after registration");
+            // Reproduce two Desktop wallets: founder validates the registration, then its buyer's first swap.
+            var purchase = second.CreateInitialLaunchPurchase(chain, empty, original, original, 1);
+            Check(chain.GetValidatorsForTransactions(new[] { purchase }).Single().ValidatorId == validatorAddress,
+                "initial 600-POVIX wallet is eligible for the second wallet's very first launch swap");
+            Check(chain.GetMinimumValidatorsForTransactions(new[] { purchase }) == 1,
+                "first launch swap needs only the existing founder validator");
+            purchase.TransactionApproval = chain.CreateTransactionApproval(purchase, new[] { purchase }, new[] { stake });
+            Check(purchase.TransactionApproval != null && purchase.TransactionApproval.CollateralTransactionId == registration.Id &&
+                purchase.TransactionApproval.CollateralOutputIndex == 4 && chain.HasValidTransactionApproval(purchase, new[] { purchase }),
+                "first launch swap approval uses the confirmed original 600-POVIX collateral");
+            Check(!Blockchain.IsSelfValidatedOperation(purchase) && Blockchain.RequiresLockedTokenApproval(purchase),
+                "signed first swap follows rewarded validation instead of unsigned bootstrap");
+            long founderBeforeSwap = WalletBalanceSummary.Read(chain, first, empty).Available;
+            int swapHeight = chain.Blocks.Count;
+            var swapBlock = chain.AddProofOfStakeBlock(new[] { purchase }, new[] { stake });
+            var founderAfterSwap = WalletBalanceSummary.Read(chain, first, empty);
+            Check(swapBlock.Validators.Count == 1 && founderAfterSwap.Available - founderBeforeSwap == ProofOfStake.GetBlockReward(swapHeight) + purchase.Fee,
+                "sole founder validator receives the first swap's scheduled block reward and network fee");
+            Check(founderAfterSwap.LaunchLocked == Blockchain.WalletCreationReward && WalletBalanceSummary.Read(chain, second, empty).LaunchLocked == InitialLaunch.PurchaseAmount - purchase.Fee,
+                "first swap keeps both initial collateral and buyer receipt locked");
+            using (var third = new Wallet())
+            {
+                var nextRegistration = WalletRegistration.Prepare(chain, third, empty);
+                chain.AddProofOfStakeBlock(new[] { nextRegistration }, new[] { stake });
+                string thirdAddress = third.OwnedOneTimeAddresses.Single();
+                var nextSwap = third.CreateInitialLaunchPurchase(chain, empty, thirdAddress, thirdAddress, 1);
+                nextSwap.TransactionApproval = chain.CreateTransactionApproval(nextSwap, new[] { nextSwap }, new[] { stake });
+                var nextBlock = chain.AddProofOfStakeBlock(new[] { nextSwap }, new[] { stake });
+                Check(nextBlock.Validators.Count == 1 && nextBlock.Validators[0].ValidatorId == validatorAddress,
+                    "founder remains eligible for later swaps even when another locked buyer exists");
+                var ownPurchase = first.CreateInitialLaunchPurchase(chain, empty, validatorAddress, validatorAddress, 1);
+                Check(chain.CreateTransactionApproval(ownPurchase, new[] { ownPurchase }, new[] { stake }) == null,
+                    "600-POVIX founder cannot approve its own purchase");
+                Reject(() => chain.AddProofOfStakeBlock(new[] { ownPurchase }, new[] { stake }),
+                    "600-POVIX founder cannot sign its own purchase block");
+            }
             using (var stream = new MemoryStream())
             {
                 var json = new DataContractJsonSerializer(typeof(Block[])); json.WriteObject(stream, chain.Blocks.ToArray()); stream.Position = 0;

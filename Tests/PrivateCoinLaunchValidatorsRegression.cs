@@ -39,15 +39,16 @@ class PrivateCoinLaunchValidatorsRegression
         Check(!Blockchain.IsSelfValidatedOperation(second)&&Blockchain.RequiresLockedTokenApproval(second),"later purchase requires a locked-holder approval");
         Check(chain.GetValidatorsForTransactions(new[]{second}).Count==1,"confirmed first receipt supplies the only eligible validator");
         Check(Blockchain.MinimumValidatorsForTransactions(new[]{second})==1,"launch-only block needs one validator");
-        Check(chain.GetValidatorsForTransactions(new[]{second}).Single().LockedAmount==first.Outputs[2].Amount,"launch purchase weight excludes the initial 600-POVIX collateral");
+        long launchWeight = Blockchain.WalletCreationReward + first.Outputs[2].Amount;
+        Check(chain.GetValidatorsForTransactions(new[]{second}).Single().LockedAmount==launchWeight,"launch purchase aggregates initial 600 and bought collateral once per identity");
         Reject(()=>chain.AddBlock(new[]{second}),"later purchase cannot bypass approval in an unsigned block");
-        var stake=a.CreateValidatorStake(aa,first.Outputs[2].Amount);
+        var stake=a.CreateValidatorStake(aa,launchWeight);
         Check(chain.CreateTransactionApproval(second,new[]{second},new[]{b.CreateValidatorStake(bb,first.Outputs[2].Amount)})==null,"unconfirmed purchaser cannot approve its own purchase");
         second.TransactionApproval=chain.CreateTransactionApproval(second,new[]{second},new[]{stake});
         Check(second.TransactionApproval!=null&&chain.HasValidTransactionApproval(second,new[]{second}),"locked receipt signs a valid purchase approval");
         var bad=Copy(second);bad.TransactionApproval.Proof.Signature=Convert.ToBase64String(new byte[256]);
         Reject(()=>chain.AddProofOfStakeBlock(new[]{bad},new[]{stake}),"invalid approval signature is rejected");
-        var malformed=a.CreateValidatorStake(aa,first.Outputs[2].Amount+1);
+        var malformed=a.CreateValidatorStake(aa,launchWeight+1);
         Reject(()=>chain.AddProofOfStakeBlock(new[]{second},new[]{malformed}),"validator cannot inflate its locked receipt weight");
         long before=chain.GetBalance(new[]{aa}); int height=chain.Blocks.Count;
         var block=chain.AddProofOfStakeBlock(new[]{second},new[]{stake});
@@ -79,7 +80,7 @@ class PrivateCoinLaunchValidatorsRegression
         var final=draft.Complete(Enumerable.Repeat(inputSignature,draft.UserInputCount),inputSignature);
         final.TransactionApproval=Approval(chain,final,a,aa,first);
         height=chain.Blocks.Count;var reward=new Transaction {TimestampUtcTicks=DateTime.UtcNow.Ticks,Outputs=new List<TransactionOutput>{new TransactionOutput{OneTimeAddress=aa,Amount=ProofOfStake.GetBlockReward(height)}}};reward.Id=Id(reward);
-        var record=new BlockValidator {ValidatorId=aa,RewardAddress=aa,LockedAmount=first.Outputs[2].Amount,OwnedAddresses=new List<string>{aa},PublicKey=Public(a),IsCreator=true};
+        var record=new BlockValidator {ValidatorId=aa,RewardAddress=aa,LockedAmount=launchWeight,OwnedAddresses=new List<string>{aa},PublicKey=Public(a),IsCreator=true};
         var finalBlock=new Block {ConsensusVersion=Blockchain.ConsensusVersion,Height=height,PreviousHash=chain.Blocks.Last().Hash,TimestampUtcTicks=reward.TimestampUtcTicks,
             Transactions=new List<Transaction>{reward,final},Validators=new List<BlockValidator>{record},TransactionValidations=new List<TransactionValidation>{final.TransactionApproval.Proof}};
         record.VoteSignature=Sign(a,(string)Call("CreateVotePayload",finalBlock));
