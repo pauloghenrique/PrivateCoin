@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8');
+const predicate = source.slice(source.indexOf('    function visiblePool('), source.indexOf('    let swapDirection ='));
 const start = source.indexOf('            const visiblePools =');
 const end = source.indexOf('            visiblePools.forEach', start);
 for (const [unlocked, addresses, managing, expected] of [
@@ -13,7 +14,7 @@ for (const [unlocked, addresses, managing, expected] of [
     const nodes = { 'pool-list': { replaceChildren() { this.cleared = true; } }, 'pools-empty': {} };
     const context = { app: { dataset: {} }, managing, pools: [{ providerAddress: 'alice' }, { providerAddress: 'bob' }, { providerAddress: 'alice' }],
         wallet: { isUnlocked: () => unlocked, addresses: () => addresses }, byId: id => nodes[id] };
-    vm.runInNewContext(source.slice(start, end) + '\nglobalThis.count = visiblePools.length;', context);
+    vm.runInNewContext(predicate + source.slice(start, end) + '\nglobalThis.count = visiblePools.length;', context);
     assert.equal(context.count, expected);
     assert.equal(nodes['pools-empty'].hidden, expected > 0);
     assert.equal(nodes['pool-list'].cleared, true);
@@ -21,7 +22,7 @@ for (const [unlocked, addresses, managing, expected] of [
 }
 console.log('PASS: owned pools, multiple wallet addresses, disconnected wallet, empty list and public market catalogue.');
 const filterStart = source.indexOf('    function filterPoolList() {');
-const filterEnd = source.indexOf("    if (byId('pool-search')) {", filterStart);
+const filterEnd = source.indexOf("    if (managing) {", filterStart);
 const rows = [
     { dataset: { search: 'povix abc pool-one', group: 'available' } },
     { dataset: { search: 'povix xyz pool-two', group: 'closed' } },
@@ -43,24 +44,38 @@ assert.equal(nodes['pool-filter-empty'].hidden, true);
 console.log('PASS: pool search, combined status filters, result counts and empty results.');
 
 const actionNodes = {}, actionNode = id => {
-    if (id === 'pool-reward-mode') return null;
-    return actionNodes[id] || (actionNodes[id] = { value: '', dataset: { url: '/liquidez/criar' }, querySelectorAll: () => [], addEventListener(type, callback) { this[type] = callback; } });
+    if (id === 'pool-reward-mode' || id === 'pool-burn-fields') return null;
+    return actionNodes[id] || (actionNodes[id] = { value: '', children: [], dataset: { walletUrl: id === 'create-launch-pool' ? '/liquidez/lancamento' : '/liquidez/criar' },
+        querySelectorAll: () => [], replaceChildren() { this.children = []; },
+        setAttribute(key, value) { this[key] = value; }, removeAttribute(key) { delete this[key]; },
+        addEventListener(type, callback) { this[type] = callback; } });
 };
-let connected = false, navigations = 0;
+let connected = false;
 const actionContext = { app: { dataset: {} }, byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null,
-    integrated: false, window: {}, updateUserLiquidity() {}, updatePrices() {}, selectedPool: () => null, asset: () => null,
-    atomicText: () => '0', fee: () => '0', location: { assign(url) { assert.equal(url, '/liquidez/criar'); navigations++; } } };
+    integrated: false, managing: true, window: {}, updateUserLiquidity() {}, updatePrices() {}, selectedPool: () => null, asset: () => null,
+    atomicText: () => '0', fee: () => '0', nativeCollecting: () => false };
 const updateStart = source.indexOf('    function update() {'), updateEnd = source.indexOf('    function addReview(', updateStart);
-const actionStart = source.indexOf("    const createPoolButton = byId('create-pool');"), actionEnd = source.indexOf("    for (const id of ['pool-form', 'swap-form', 'exchange-priority'])", actionStart);
-vm.createContext(actionContext); vm.runInContext(source.slice(updateStart, updateEnd) + source.slice(actionStart, actionEnd), actionContext);
+const actionStart = source.indexOf("    if (managing) {\n        for (const id of ['create-pool', 'create-launch-pool']) byId(id).addEventListener"),
+    actionEnd = source.indexOf("    if (byId('pool-search')) {", actionStart);
+vm.createContext(actionContext); vm.runInContext(source.slice(updateStart, updateEnd) + source.slice(filterStart, filterEnd).split('    if (managing) {')[0] + source.slice(actionStart, actionEnd), actionContext);
 for (const value of [false, true, false, true]) {
-    connected = value; actionContext.update();
-    assert.equal(actionNode('create-pool').disabled, !connected);
-    const before = navigations; actionNode('create-pool').click(); assert.equal(navigations, before + (connected ? 1 : 0));
+    connected = value;
+    actionNode('pool-list').children = [{ dataset: { search: 'pool', group: 'available' } }];
+    actionContext.update();
+    assert.equal(actionNode('pool-list').hidden, !connected);
+    assert.equal(actionNode('pool-list').children.length, connected ? 1 : 0, 'Disconnect clears all existing pool rows immediately');
+    assert.equal(actionNode('pool-search').disabled, !connected);
+    assert.equal(actionNode('pool-status-filter').disabled, !connected);
+    for (const id of ['create-pool', 'create-launch-pool']) {
+        const link = actionNode(id);
+        assert.equal(link['aria-disabled'], String(!connected));
+        assert.equal(link.href, connected ? link.dataset.walletUrl : undefined);
+        let prevented = false; link.click({ preventDefault() { prevented = true; } });
+        assert.equal(prevented, !connected, 'Disconnected actions cannot navigate');
+    }
 }
-const liquidityView = fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
-assert(!liquidityView.includes('creation-tabs')); assert(!liquidityView.includes('>Criar token</a>'));
-assert.match(liquidityView, /id="create-pool"[^>]* disabled>\+ Criar pool/);
-const layout = fs.readFileSync('Povix.Dex/Views/Shared/_Layout.cshtml', 'utf8');
-assert(!layout.includes('Pools e trocas')); assert(layout.includes('>Pools</a>'));
-console.log('PASS: create pool requires connected wallet, reconnect restores it, creation tabs removed and menu uses Pools.');
+const liquidityView = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolPage.cshtml', 'utf8');
+assert.match(liquidityView, /id="create-pool"[^>]*aria-disabled="true"/);
+assert.match(liquidityView, /id="create-launch-pool"[^>]*aria-disabled="true"/);
+assert.match(liquidityView, /id="pool-list" hidden/);
+console.log('PASS: disconnected wallet hides pools and disables create actions/filters; reconnect restores actions.');

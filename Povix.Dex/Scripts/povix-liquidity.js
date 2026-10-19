@@ -13,6 +13,7 @@
     const integrated = app.dataset.integrated === 'true';
     const managing = app.dataset.mode === 'manage';
     function visiblePool(pool) {
+        if (managing && !wallet.isUnlocked()) return false;
         if (pool.nativeInitialLaunch) return true;
         if (managing) return wallet.isUnlocked() && wallet.addresses().includes(pool.providerAddress);
         return app.dataset.mode !== 'launch' || Boolean(pool.launch);
@@ -133,14 +134,30 @@
         }
         const unlocked = wallet.isUnlocked(), ready = unlocked && network && network.CanCreate && assets.length > 0, editing = !busy && !draft;
         window.PovixWalletMenu?.setBusy(busy || Boolean(draft));
+        if (managing) {
+            byId('pool-list').hidden = !unlocked;
+            if (!unlocked) {
+                byId('pool-list').replaceChildren();
+                byId('pools-empty').hidden = false;
+                byId('pools-empty').textContent = 'Conecte sua carteira para consultar suas pools.';
+                filterPoolList();
+            }
+            for (const id of ['pool-search', 'pool-status-filter']) byId(id).disabled = !unlocked;
+            for (const id of ['create-pool', 'create-launch-pool']) {
+                const link = byId(id), disabled = !unlocked || !editing;
+                link.setAttribute('aria-disabled', String(disabled));
+                if (disabled) { link.removeAttribute('href'); link.setAttribute('tabindex', '-1'); }
+                else { link.href = link.dataset.walletUrl; link.removeAttribute('tabindex'); }
+            }
+        }
         byId('pool-fields').disabled = !editing || !unlocked;
         byId('swap-fields').disabled = !editing || !unlocked;
         if (integrated) byId('swap-pool').disabled = true;
         byId('prepare-pool').disabled = !editing || !ready;
         byId('prepare-swap').disabled = !editing || !ready || !(selectedPool()?.available || nativeCollecting(selectedPool()));
-        byId('exchange-priority').disabled = !editing;
+        byId('exchange-priority').disabled = !editing || managing && !unlocked;
         byId('sign-exchange').disabled = busy || !draft || !ready;
-        byId('edit-exchange').disabled = busy;
+        byId('edit-exchange').disabled = busy || managing && !unlocked;
         byId('pool-list').querySelectorAll('button').forEach(button => { button.disabled = !editing || !ready; });
         try { byId('exchange-fee').textContent = atomicText(fee(), 8) + ' POVIX'; } catch (_) { byId('exchange-fee').textContent = 'Consultando a taxa…'; }
         for (const side of ['a', 'b']) {
@@ -538,6 +555,11 @@
         byId('pool-result-count').textContent = count + ' de ' + rows.length + (rows.length === 1 ? ' pool' : ' pools');
         byId('pool-filter-empty').hidden = rows.length === 0 || count > 0;
     }
+    if (managing) {
+        for (const id of ['create-pool', 'create-launch-pool']) byId(id).addEventListener('click', event => {
+            if (!wallet.isUnlocked() || busy || draft) event.preventDefault();
+        });
+    }
     if (byId('pool-search')) {
         byId('pool-search').addEventListener('input', filterPoolList);
         byId('pool-status-filter').addEventListener('change', filterPoolList);
@@ -631,7 +653,7 @@
     document.addEventListener('povix-wallet-change', async () => {
         try {
             epoch++; assets = []; pools = [];
-            if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = 'Consultando pools da carteira…'; }
+            if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = wallet.isUnlocked() ? 'Consultando pools da carteira…' : 'Conecte sua carteira para consultar suas pools.'; }
             filterPoolList();
             reset();
             await refresh(); update();

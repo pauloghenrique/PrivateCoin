@@ -14,7 +14,7 @@ for (const mode of ['manage', 'launch', 'all']) {
                 { querySelector: () => ({ value: 'test-csrf' }) } } };
         vm.runInNewContext(source, context);
         const visible = context.window.visiblePool;
-        assert(visible({ nativeInitialLaunch: true, providerAddress: 'ownerless', launch: null }));
+        assert.equal(visible({ nativeInitialLaunch: true, providerAddress: 'ownerless', launch: null }), mode !== 'manage' || unlocked);
         assert.equal(visible({ providerAddress: 'other', launch: null }), mode === 'all');
         assert.equal(visible({ providerAddress: 'mine', launch: null }), mode === 'all' || mode === 'manage' && unlocked);
         assert.equal(visible({ providerAddress: 'other', launch: {} }), mode !== 'manage');
