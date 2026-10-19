@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 30;
+        public const int ConsensusVersion = 31;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -85,7 +85,7 @@ namespace PrivateCoin.Core
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 ValidateBatch(pending);
-                if (pending.Any(IsFirstLaunchPurchase)) throw new InvalidOperationException("The first launch purchase must use a bootstrap block without validators.");
+                if (pending.Any(tx => IsFirstLaunchPurchase(tx) && tx.TransactionApproval == null)) throw new InvalidOperationException("A rewarded first launch purchase requires a signed validator approval.");
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
                 ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(ConsensusValidators(pending, BuildUtxo(), blocks), pending).ToArray();
                 if (!ValidValidatorSet(active, globallyEligible, IsLaunchValidationBatch(pending) || IsLaunchRegistrationBatch(pending, BuildUtxo())))
@@ -221,7 +221,7 @@ namespace PrivateCoin.Core
         public static bool IsSelfValidatedOperation(Transaction transaction)
         {
             return transaction != null && (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.InitialLaunchCreate ||
-                IsFirstLaunchPurchase(transaction) || transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock);
+                IsFirstLaunchPurchase(transaction) && transaction.TransactionApproval == null || transaction.Kind == TransactionKind.StakeLock || transaction.Kind == TransactionKind.StakeUnlock);
         }
 
         public static bool IsFirstLaunchPurchase(Transaction tx) => tx != null && tx.Kind == TransactionKind.InitialLaunchPurchase &&
@@ -232,13 +232,13 @@ namespace PrivateCoin.Core
         private static bool IsLaunchValidationBatch(IEnumerable<Transaction> transactions)
         {
             var batch = transactions.ToArray();
-            return batch.Length > 0 && batch.All(tx => tx.Kind == TransactionKind.InitialLaunchPurchase && !IsFirstLaunchPurchase(tx));
+            return batch.Length > 0 && batch.All(tx => tx.Kind == TransactionKind.InitialLaunchPurchase);
         }
 
         public static bool HasCompatibleValidatorRules(IEnumerable<Transaction> transactions)
         {
             var batch = transactions.ToArray();
-            return !batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchPurchase && !IsFirstLaunchPurchase(tx)) || IsLaunchValidationBatch(batch);
+            return !batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchPurchase) || IsLaunchValidationBatch(batch);
         }
 
         public static int MinimumValidatorsForTransactions(IEnumerable<Transaction> transactions) => IsLaunchValidationBatch(transactions) ? 1 : 2;
@@ -269,21 +269,35 @@ namespace PrivateCoin.Core
 
         private static ValidatorStake LaunchCollateral(UnspentOutput item, IDictionary<string, UnspentOutput> utxo, IList<Block> history)
         {
+            if (item == null || !item.Output.InitialLaunchLocked || item.Output.AssetId != null ||
+                (item.OutputIndex != 2 && item.OutputIndex != 4)) return null;
             var state = InitialLaunch.State(utxo);
-            if (state == null || state.Active || item == null || item.OutputIndex != 2 || !item.Output.InitialLaunchLocked ||
-                item.Output.AssetId != null || item.Output.Amount <= 0) return null;
-            var origin = history.SelectMany(block => block.Transactions).FirstOrDefault(tx => tx.Id == item.TransactionId &&
-                tx.Kind == TransactionKind.InitialLaunchPurchase);
-            string key = origin?.InitialLaunchIdentity?.PublicKey;
-            if (key == null || Crypto.Sha256(key) != item.Output.OneTimeAddress) return null;
-            return new ValidatorStake(Crypto.Sha256(key), item.Output.OneTimeAddress, item.Output.Amount,
+            if (state == null || state.Active) return null;
+            return LaunchCollateral(item, history.SelectMany(block => block.Transactions)
+                .Where(tx => InitialLaunch.IsOperation(tx.Kind)).ToDictionary(tx => tx.Id, StringComparer.Ordinal));
+        }
+
+        private static ValidatorStake LaunchCollateral(UnspentOutput item, IDictionary<string, Transaction> origins)
+        {
+            if (item == null || !item.Output.InitialLaunchLocked || item.Output.AssetId != null || item.Output.Amount <= 0) return null;
+            Transaction origin;
+            if (!origins.TryGetValue(item.TransactionId, out origin)) return null;
+            bool founder = item.OutputIndex == 4 && origin.Kind == TransactionKind.InitialLaunchCreate && item.Output.Amount == WalletCreationReward;
+            if (!founder && !(item.OutputIndex == 2 && origin.Kind == TransactionKind.InitialLaunchPurchase)) return null;
+            string key = founder ? item.ValidatorPublicKey : origin.InitialLaunchIdentity?.PublicKey;
+            if (!founder && key == null || key != null && Crypto.Sha256(key) != item.Output.OneTimeAddress) return null;
+            return new ValidatorStake(item.Output.OneTimeAddress, item.Output.OneTimeAddress, item.Output.Amount,
                 new[] { item.Output.OneTimeAddress }, key, null);
         }
 
         private static ValidatorStake ApprovalCollateral(Transaction tx, UnspentOutput item,
             IDictionary<string, UnspentOutput> utxo, IList<Block> history, int version = ConsensusVersion)
         {
-            if (tx.Kind == TransactionKind.InitialLaunchPurchase) return LaunchCollateral(item, utxo, history);
+            if (tx.Kind == TransactionKind.InitialLaunchPurchase)
+            {
+                var source = LaunchCollateral(item, utxo, history);
+                return source == null ? null : ConsensusValidators(new[] { tx }, utxo, history).SingleOrDefault(stake => stake.ValidatorId == source.ValidatorId);
+            }
             if (item == null || !IsValidatorCollateral(item, utxo, version)) return null;
             return StakesFromUtxo(utxo, version).SingleOrDefault(stake => stake.ValidatorId == CollateralIdentity(item) &&
                 stake.RewardAddress == item.ValidatorRewardAddress);
@@ -295,17 +309,14 @@ namespace PrivateCoin.Core
             if (!IsLaunchValidationBatch(transactions)) return StakesFromUtxo(utxo);
             var state = InitialLaunch.State(utxo);
             if (state == null || state.Active) return new ValidatorStake[0];
-            var origins = history.SelectMany(block => block.Transactions).Where(tx => tx.Kind == TransactionKind.InitialLaunchPurchase)
+            var origins = history.SelectMany(block => block.Transactions).Where(tx => InitialLaunch.IsOperation(tx.Kind))
                 .ToDictionary(tx => tx.Id, StringComparer.Ordinal);
-            return utxo.Values.Where(item => item.OutputIndex == 2 && item.Output.InitialLaunchLocked && item.Output.AssetId == null && item.Output.Amount > 0)
-                .Select(item => {
-                    Transaction origin;
-                    if (!origins.TryGetValue(item.TransactionId, out origin)) return null;
-                    string key = origin.InitialLaunchIdentity?.PublicKey;
-                    return key == null || Crypto.Sha256(key) != item.Output.OneTimeAddress ? null :
-                        new ValidatorStake(Crypto.Sha256(key), item.Output.OneTimeAddress, item.Output.Amount,
-                            new[] { item.Output.OneTimeAddress }, key, null);
-                }).Where(item => item != null).OrderBy(item => item.ValidatorId, StringComparer.Ordinal).ToArray();
+            return utxo.Values.Select(item => LaunchCollateral(item, origins)).Where(item => item != null)
+                .GroupBy(item => item.ValidatorId, StringComparer.Ordinal)
+                .Select(group => new ValidatorStake(group.Key, group.First().RewardAddress, group.Sum(item => item.LockedAmount),
+                    group.SelectMany(item => item.OwnedAddresses).Distinct(StringComparer.Ordinal),
+                    group.Select(item => item.PublicKey).FirstOrDefault(key => key != null), null))
+                .OrderBy(item => item.ValidatorId, StringComparer.Ordinal).ToArray();
         }
 
         private static bool ValidValidatorSet(ValidatorStake[] proposed, ValidatorStake[] eligible, bool launch)
@@ -750,7 +761,7 @@ namespace PrivateCoin.Core
                         !(block.ConsensusVersion >= LegacyWalletBatchVersion && (block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate || block.Transactions[transactionIndex].Kind == TransactionKind.InitialLaunchCreate)) &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeLock &&
                         block.Transactions[transactionIndex].Kind != TransactionKind.StakeUnlock &&
-                        !(block.ConsensusVersion >= 28 && IsFirstLaunchPurchase(block.Transactions[transactionIndex])))
+                        !(block.ConsensusVersion >= 28 && IsFirstLaunchPurchase(block.Transactions[transactionIndex]) && block.Transactions[transactionIndex].TransactionApproval == null))
                         throw new InvalidOperationException("Transfers and token operations require signed consensus validations.");
                     if (block.ConsensusVersion < LegacyWalletBatchVersion && block.Transactions[transactionIndex].Kind == TransactionKind.WalletCreate)
                         throw new InvalidOperationException("Wallet registrations require consensus version 8.");
@@ -779,7 +790,7 @@ namespace PrivateCoin.Core
         private static void ValidateProofOfStakeBlock(Block block, string previousHash, IDictionary<string, UnspentOutput> utxo, IList<Block> history)
         {
             if (block.Transactions.Count == 0) throw new InvalidOperationException("A proof-of-stake block must contain its reward.");
-            if (block.Transactions.Skip(1).Any(IsFirstLaunchPurchase)) throw new InvalidOperationException("The first launch purchase cannot pay a validator block reward.");
+            if (block.Transactions.Skip(1).Any(tx => IsFirstLaunchPurchase(tx) && tx.TransactionApproval == null)) throw new InvalidOperationException("A rewarded first launch purchase requires a signed validator approval.");
             BlockValidator[] records = block.Validators.ToArray();
             var launchBlock = IsLaunchValidationBatch(block.Transactions.Skip(1));
             bool launchRegistration = block.ConsensusVersion >= 30 && IsLaunchRegistrationBatch(block.Transactions.Skip(1), utxo);
@@ -790,7 +801,7 @@ namespace PrivateCoin.Core
             var collateral = block.ConsensusVersion >= SelfValidatedVersion && block.ConsensusVersion < BlockConfirmationVersion
                 ? BuildLegacyImmediateUtxo(utxo, block.Transactions.Skip(1), history, null, block.ConsensusVersion >= ImmediateChangeVersion,
                     block.ConsensusVersion >= ImmediateTokenVersion, block.ConsensusVersion >= LegacyImmediateTransferVersion) : utxo;
-            var launchValidators = launchBlock ? ConsensusValidators(block.Transactions.Skip(1), collateral, history).ToDictionary(item => item.PublicKey) : null;
+            var launchValidators = launchBlock ? ConsensusValidators(block.Transactions.Skip(1), collateral, history).ToDictionary(item => item.ValidatorId) : null;
             foreach (BlockValidator record in records)
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.PublicKey) ||
@@ -798,7 +809,7 @@ namespace PrivateCoin.Core
                     !ProofOfStake.VerifyVote(record.PublicKey, CreateVotePayload(block), record.VoteSignature))
                     throw new InvalidOperationException("Invalid individual validator vote signature.");
                 ValidatorStake launchValidator;
-                bool collateralExists = launchBlock ? launchValidators.TryGetValue(record.PublicKey, out launchValidator) &&
+                bool collateralExists = launchBlock ? launchValidators.TryGetValue(record.ValidatorId, out launchValidator) &&
                     launchValidator.RewardAddress == record.RewardAddress && launchValidator.LockedAmount == record.LockedAmount :
                     StakesFromUtxo(collateral, block.ConsensusVersion).Any(item =>
                     item.ValidatorId == record.ValidatorId && item.RewardAddress == record.RewardAddress &&
@@ -843,7 +854,7 @@ namespace PrivateCoin.Core
         public TransactionApproval CreateTransactionApproval(Transaction transaction, IEnumerable<Transaction> pendingTransactions,
             IEnumerable<ValidatorStake> localValidators)
         {
-            if (!RequiresLockedTokenApproval(transaction)) throw new ArgumentException("A movement requiring a fee is required.", nameof(transaction));
+            if (transaction == null || (!RequiresLockedTokenApproval(transaction) && transaction.Kind != TransactionKind.InitialLaunchPurchase)) throw new ArgumentException("A movement requiring a fee is required.", nameof(transaction));
             if (pendingTransactions == null) throw new ArgumentNullException(nameof(pendingTransactions));
             if (localValidators == null) throw new ArgumentNullException(nameof(localValidators));
             lock (sync)

@@ -760,3 +760,14 @@ garantia preservada, ausência de crédito pendente, rejeição de pagamento rep
 e replay. `PrivateCoinInitialLaunchRegression.cs` conserva a cobertura de vários
 validadores. `PrivateCoinLaunchValidatorsRegression.cs` rejeita a exceção de
 um único validador para registros após a meta.
+
+
+## Fundador valida compras da pool principal (v31)
+
+`PrivateCoinDesktopRegistrationRegression.cs` reproduz duas carteiras: uma recebe
+os 600, valida o registro da outra e depois assina sua primeira compra. Confere
+aprovação pela saída inicial 4, recompensa mais taxa, bloqueios preservados,
+compras seguintes com apenas o fundador, rejeição de autoaprovação e replay.
+`PrivateCoinLaunchValidatorsRegression.cs` verifica soma das garantias automáticas
+sem duplicar identidade e preserva a cobertura do bootstrap sem aprovação,
+da fronteira da meta e das regras normais após ativação.

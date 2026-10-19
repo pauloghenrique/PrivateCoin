@@ -220,3 +220,26 @@ A recompensa é contabilizada na emissão de validadores já prevista, limitada 
 17.820.000 POVIX, além dos 360.000 POVIX iniciais. O teto total permanece
 18.180.000 POVIX: cada pagamento aumenta a oferta emitida e reduz o orçamento
 não emitido, sem debitar a reserva da pool ou ampliar o limite.
+
+
+## Garantia inicial nas compras do lançamento (consenso v31)
+
+A carteira dos primeiros 600 POVIX também pode aprovar compras da pool principal
+e assinar seus blocos durante a captação, mesmo sendo o único validador disponível.
+A seleção aceita os 600 bloqueados e recibos de compras confirmadas, somando as
+garantias automáticas por identidade sem duplicar o validador. A assinatura deve
+corresponder à chave da garantia. Staking manual não substitui essas garantias
+no regime especial de compras.
+
+A primeira compra pode receber aprovação e bloco remunerado quando houver um
+validador elegível não participante; sem aprovação, continua disponível o bootstrap
+sem recompensa. O Desktop tenta obter a aprovação antes de escolher o caminho.
+As compras seguintes continuam exigindo aprovação. O criador sozinho recebe a
+recompensa vigente integral; a taxa vai ao aprovador. O pagamento usa a emissão
+existente, com teto total inalterado de 18.180.000 POVIX.
+
+Remetentes e destinatários não podem aprovar nem assinar o bloco da própria
+compra. As garantias ficam bloqueadas até a meta e deixam de conferir elegibilidade
+automática na ativação; a liquidez principal continua permanente. Core, Desktop e
+DEX passam a consenso v31, alterando o compromisso do genesis e a identidade da
+rede; o PR não migra, reinicia nem publica a cadeia existente.
