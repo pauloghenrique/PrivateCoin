@@ -51,6 +51,10 @@ class Element {
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
     const market = fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8');
     assert.match(market, /Html.Partial\("_PoolTrading", Model\)/);
+    assert(market.includes('@Scripts.Url("~/bundles/povix-pool-market")'), 'Market script URL changes when its contents change');
+    assert(!market.includes('@Url.Content("~/Scripts/povix-pool-market.js")'));
+    assert(fs.readFileSync('Povix.Dex/App_Start/BundleConfig.cs', 'utf8').includes('new Bundle("~/bundles/povix-pool-market").Include("~/Scripts/povix-pool-market.js")'));
+
     assert.match(trading, /data-integrated="true"/);
     assert.match(trading, /id="swap-form"/);
     const markupIds = [...(trading + market).matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
