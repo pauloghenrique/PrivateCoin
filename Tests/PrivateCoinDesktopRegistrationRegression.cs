@@ -36,7 +36,29 @@ class PrivateCoinDesktopRegistrationRegression
             var later = WalletRegistration.Prepare(chain, second, empty);
             Check(later.Kind == TransactionKind.WalletCreate && later.Outputs[0].Amount == 0 && later.Outputs[0].OneTimeAddress == original, "later selected wallet reuses its receiving identity and gets zero reward");
             Check(WalletRegistration.Describe(later).StartsWith("Registro com 100 USDC"), "Desktop explains the 100-USDC registration reward");
-            chain.AddBlock(new[] { later });
+            Check(chain.GetMinimumValidatorsForTransactions(new[] { later }) == 1, "registration during launch needs one eligible signer");
+            string validatorAddress = first.OwnedOneTimeAddresses.Single();
+            var stake = first.CreateValidatorStake(validatorAddress, Blockchain.WalletCreationReward);
+            int rewardHeight = chain.Blocks.Count;
+            Check(WalletBalanceSummary.Read(chain, first, new[] { later }).Available == 0, "queued registration cannot credit a premature validator reward");
+            var paidBlock = chain.AddProofOfStakeBlock(new[] { later }, new[] { stake });
+            Check(paidBlock.Validators.Count == 1 && paidBlock.Validators.Single().IsCreator, "Desktop registration produces a signed block with one confirmed validator");
+            var paidBalance = WalletBalanceSummary.Read(chain, first, empty);
+            Check(paidBalance.Available == ProofOfStake.GetBlockReward(rewardHeight) && paidBalance.LaunchLocked == Blockchain.WalletCreationReward,
+                "block reward is spendable in Desktop while the first 600 POVIX remain locked");
+            Check(paidBlock.Transactions[0].Outputs.Sum(item => item.Amount) == ProofOfStake.GetBlockReward(rewardHeight), "registration pays the scheduled reward once");
+            long totalCap = checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply);
+            long issuedNative = chain.GetBalance(first.OwnedOneTimeAddresses) + chain.GetBalance(second.OwnedOneTimeAddresses) + chain.GetInitialLaunchStatus().Remaining;
+            Check(issuedNative == Blockchain.MaximumSupply + ProofOfStake.GetBlockReward(rewardHeight), "validator reward is counted in issued native supply without changing pool reserves");
+            Check(totalCap == 18180000L * Blockchain.OneCoin && totalCap - issuedNative == ProofOfStake.MaximumSupply - paidBalance.Available,
+                "paid block reward reduces the unissued budget within the unchanged 18,180,000-POVIX cap");
+            Check(ProofOfStake.RewardPhases.Sum(phase => phase.TotalReward) == ProofOfStake.MaximumSupply,
+                "registration rewards use the existing capped reward schedule");
+            Reject(() => chain.AddProofOfStakeBlock(new[] { later }, new[] { stake }), "replaying the same registration cannot issue a second block reward");
+            Check(chain.GetMinimumValidatorsForTransactions(new[] { new Transaction { Kind = TransactionKind.Transfer } }) == 2,
+                "ordinary transfers retain two validators during launch");
+            Check(chain.GetMinimumValidatorsForTransactions(new[] { later, new Transaction { Kind = TransactionKind.StakeLock } }) == 2,
+                "mixed registration batches do not acquire single-validator rights");
             Check(WalletBalanceSummary.Read(chain, second, empty).Available == 0, "second wallet remains at zero after registration");
             using (var stream = new MemoryStream())
             {

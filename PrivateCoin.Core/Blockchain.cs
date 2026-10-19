@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 29;
+        public const int ConsensusVersion = 30;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -88,9 +88,9 @@ namespace PrivateCoin.Core
                 if (pending.Any(IsFirstLaunchPurchase)) throw new InvalidOperationException("The first launch purchase must use a bootstrap block without validators.");
                 ValidatorStake[] active = ExcludeTransactionParticipants(validators, pending).ToArray();
                 ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(ConsensusValidators(pending, BuildUtxo(), blocks), pending).ToArray();
-                if (!ValidValidatorSet(active, globallyEligible, IsLaunchValidationBatch(pending)))
+                if (!ValidValidatorSet(active, globallyEligible, IsLaunchValidationBatch(pending) || IsLaunchRegistrationBatch(pending, BuildUtxo())))
                     throw new InvalidOperationException("The proposed validators do not match the globally locked collateral set.");
-                if (active.Length < MinimumValidatorsForTransactions(pending)) throw new InvalidOperationException("Not enough eligible validators for this block.");
+                if (active.Length < GetMinimumValidatorsForTransactions(pending)) throw new InvalidOperationException("Not enough eligible validators for this block.");
                 var replay = BuildUtxo();
                 foreach (Transaction transaction in pending)
                 {
@@ -243,6 +243,24 @@ namespace PrivateCoin.Core
 
         public static int MinimumValidatorsForTransactions(IEnumerable<Transaction> transactions) => IsLaunchValidationBatch(transactions) ? 1 : 2;
 
+        private static bool IsLaunchRegistrationBatch(IEnumerable<Transaction> transactions, IDictionary<string, UnspentOutput> utxo)
+        {
+            var state = InitialLaunch.State(utxo);
+            if (state == null || !state.Created || state.Active) return false;
+            var batch = transactions.ToArray();
+            return batch.Length > 0 && batch.All(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null);
+        }
+
+        public int GetMinimumValidatorsForTransactions(IEnumerable<Transaction> transactions)
+        {
+            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
+            lock (sync)
+            {
+                var batch = transactions.ToArray();
+                return IsLaunchRegistrationBatch(batch, BuildUtxo()) ? 1 : MinimumValidatorsForTransactions(batch);
+            }
+        }
+
         public IReadOnlyList<ValidatorStake> GetValidatorsForTransactions(IEnumerable<Transaction> transactions)
         {
             if (transactions == null) throw new ArgumentNullException(nameof(transactions));
@@ -297,7 +315,7 @@ namespace PrivateCoin.Core
             return proposed.Length > 0 && proposed.Select(item => item.ValidatorId).Distinct().Count() == proposed.Length &&
                 proposed.All(item => {
                     ValidatorStake valid;
-                    return known.TryGetValue(item.ValidatorId, out valid) && valid.PublicKey == item.PublicKey &&
+                    return known.TryGetValue(item.ValidatorId, out valid) && (valid.PublicKey == null || valid.PublicKey == item.PublicKey) &&
                         valid.RewardAddress == item.RewardAddress && valid.LockedAmount == item.LockedAmount &&
                         valid.OwnedAddresses.OrderBy(value => value, StringComparer.Ordinal).SequenceEqual(item.OwnedAddresses.OrderBy(value => value, StringComparer.Ordinal));
                 });
@@ -764,7 +782,8 @@ namespace PrivateCoin.Core
             if (block.Transactions.Skip(1).Any(IsFirstLaunchPurchase)) throw new InvalidOperationException("The first launch purchase cannot pay a validator block reward.");
             BlockValidator[] records = block.Validators.ToArray();
             var launchBlock = IsLaunchValidationBatch(block.Transactions.Skip(1));
-            if (records.Length < (launchBlock ? 1 : 2) || records.Any(item => item == null) || records.Count(item => item.IsCreator) != 1)
+            bool launchRegistration = block.ConsensusVersion >= 30 && IsLaunchRegistrationBatch(block.Transactions.Skip(1), utxo);
+            if (records.Length < (launchBlock || launchRegistration ? 1 : 2) || records.Any(item => item == null) || records.Count(item => item.IsCreator) != 1)
                 throw new InvalidOperationException("Invalid proof-of-stake validator proof.");
             var stakes = records.Select(item => new ValidatorStake(item.ValidatorId, item.RewardAddress, item.LockedAmount,
                 item.OwnedAddresses ?? new List<string> { item.RewardAddress }, item.PublicKey, null)).ToArray();
@@ -790,7 +809,7 @@ namespace PrivateCoin.Core
             if (block.ConsensusVersion >= LegacySignedVersion) ValidateBatch(transfers, block.ConsensusVersion);
             bool excludeAllParticipants = block.ConsensusVersion < SelfValidatedVersion || block.ConsensusVersion >= BlockConfirmationVersion;
             ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(launchBlock ? ConsensusValidators(transfers, collateral, history) : StakesFromUtxo(collateral, block.ConsensusVersion), transfers, excludeAllParticipants).ToArray();
-            if (!ValidValidatorSet(stakes, globallyEligible, launchBlock))
+            if (!ValidValidatorSet(stakes, globallyEligible, launchBlock || launchRegistration))
                 throw new InvalidOperationException("The validator proof does not contain the global eligible collateral set.");
             if (ExcludeTransactionParticipants(stakes, transfers, excludeAllParticipants).Count() != stakes.Length)
                 throw new InvalidOperationException("A transfer sender or receiver cannot create or confirm its block.");

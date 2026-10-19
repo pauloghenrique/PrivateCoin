@@ -629,22 +629,26 @@ namespace PrivateCoin.Desktop
                 {
                     await ApprovePendingTransactions();
                     Transaction[] ready = blockchain.GetApprovedTransactions(SnapshotPending()).ToArray();
+                    var launchState = blockchain.GetInitialLaunchStatus();
+                    bool separateRegistrations = launchState.Created && !launchState.Active;
+                    Func<Transaction, bool> freshRegistration = tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null;
                     Transaction[] batch = blockScheduler.SelectBatch(ready,
-                        candidate => Blockchain.HasCompatibleValidatorRules(candidate) && (candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate).Length >= Blockchain.MinimumValidatorsForTransactions(candidate))).ToArray();
+                        candidate => (!separateRegistrations || !candidate.Any(freshRegistration) || candidate.All(freshRegistration)) &&
+                            Blockchain.HasCompatibleValidatorRules(candidate) && (candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate).Length >= blockchain.GetMinimumValidatorsForTransactions(candidate))).ToArray();
                     if (batch.Length == 0) break;
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
                     bool selfValidatedOnly = batch.All(Blockchain.IsSelfValidatedOperation);
-                    if (!selfValidatedOnly && activeValidators.Length < Blockchain.MinimumValidatorsForTransactions(batch))
+                    if (!selfValidatedOnly && activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch))
                     {
-                        miningStatusLabel.Text = "Aguardando " + Blockchain.MinimumValidatorsForTransactions(batch) + " validador(es) elegível(is)";
+                        miningStatusLabel.Text = "Aguardando " + blockchain.GetMinimumValidatorsForTransactions(batch) + " validador(es) elegível(is)";
                         Log("O bloco aguarda validadores elegíveis sem participação na operação.", false);
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
                     Log("Criação de bloco iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) aprovada(s).", true);
 
-                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < 2 || batch.Any(Blockchain.IsFirstLaunchPurchase)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch) || batch.Any(Blockchain.IsFirstLaunchPurchase)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -661,7 +665,7 @@ namespace PrivateCoin.Desktop
                             "”" + (block.Validators.Count == 1 ? ", como único validador elegível neste bloco" : ", confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) + " validador(es)") +
                             " e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     }
-                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) validada(s): " + ShortId(block.Hash) + ".", true);
+                    else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " confirmado sem recompensa de validador (bootstrap ou sem validadores elegíveis): " + ShortId(block.Hash) + ".", true);
                     SaveState();
                     if (peerNode != null) await peerNode.BroadcastChainAsync(blockchain.Blocks);
                     UpdateChainSummary();
