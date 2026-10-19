@@ -89,7 +89,11 @@ namespace Povix.Dex.Services
                 .Select(output => output.OneTimeAddress).Distinct(StringComparer.Ordinal).ToArray();
             var outputs = blockchain.GetUnspentOutputs(addresses)
                 .Where(item => (native ? item.Output.AssetId == null : item.Output.AssetId == token.Id) && item.Output.Amount > 0).ToArray();
-            long supply = native ? outputs.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount)) : token.Supply;
+            // Total means the issuance ceiling, including tokens not yet issued.
+            // Legacy fixed-supply tokens retain their original issuance even after burns.
+            long supply = native ? checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply) :
+                token.Policy?.MaximumSupply ?? creation?.Token.Supply ??
+                InitialLaunch.FundingTokens().FirstOrDefault(item => item.Id == token.Id)?.Supply ?? token.Supply;
             // Circulation includes every confirmed balance in pools and wallets, including locks.
             long circulating = outputs.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount));
             int holders = outputs.Where(item => !item.IsPoolReserve)
