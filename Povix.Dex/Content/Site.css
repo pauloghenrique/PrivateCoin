@@ -71,14 +71,9 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 
 /* Pool market: reference explorer composition, with the Povix palette. */
 .market-page { background:var(--paper); }
-.market-page .site-header { display:none; }
-.market-page .page-shell { max-width:none; margin-left:72px; padding:16px 14px 40px; }
-.market-page .site-footer { margin-left:86px; max-width:none; margin-right:14px; }
-.market-rail { position:fixed; inset:0 auto 0 0; width:72px; background:var(--white); border-right:1px solid var(--line); display:flex; flex-direction:column; gap:12px; padding:16px 0; z-index:5; }
-.market-rail a { width:100%; min-height:48px; display:grid; place-items:center; color:var(--muted); font-size:25px; }
-.market-rail a:hover { background:var(--paper); color:var(--green); }
-.market-rail .market-rail-brand { color:var(--green); font-weight:750; font-size:30px; margin-bottom:16px; }
-.market-rail .market-rail-active { color:var(--green); background:var(--soft-green); border-left:3px solid var(--green); }
+.market-page .site-header { max-width:none; }
+.market-page .page-shell { max-width:none; margin-left:0; padding:16px 14px 40px; }
+.market-page .site-footer { max-width:none; margin:0 14px; }
 #pool-market .market-topbar { display:flex; align-items:center; gap:18px; padding:0 0 16px; margin-bottom:12px; border-bottom:1px solid var(--line); }
 #pool-market .market-chain { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:7px; padding:12px 16px; background:white; font-size:13px; white-space:nowrap; }
 #pool-market .market-chain-icon { background:var(--green); color:white; border-radius:50%; width:25px; height:25px; display:grid; place-items:center; font-weight:700; }
@@ -187,8 +182,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market .market-fee-card h2 { font-size:14px; }
 #pool-market #market-trading-panel, #pool-market #market-chart-panel, #pool-market #market-ledger-panel { scroll-margin-top:20px; }
 @media(max-width:1100px) {
-    .market-page .page-shell { margin-left:54px; padding:12px; }
-    .market-rail { width:54px; }
+    .market-page .page-shell { padding:12px; }
     #pool-market .market-topbar { flex-wrap:wrap; gap:10px; }
     #pool-market .market-catalogue-link { flex-basis:100%; order:3; }
     #pool-market .market-topbar > .button { margin-left:auto; }
@@ -199,7 +193,6 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
     #pool-market #market-candles { height:auto; }
     #pool-market .market-chart .market-empty { min-height:280px; }
     #pool-market .market-toolbar { gap:6px; }
-    .market-page .site-footer { margin-left:66px; }
 }
 
 /* Wallet, order, fees and review belong to the same trading surface. */
