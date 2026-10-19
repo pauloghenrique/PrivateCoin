@@ -299,7 +299,7 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .dex-launches .dex-table tbody { display: block; }
 .dex-launches .dex-table tr { display: grid; gap: 12px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
 .dex-launches .dex-table td { display: block; padding: 0; border: 0; overflow-wrap: anywhere; }
-.dex-launches .dex-table td:last-child { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.dex-launches .dex-table td a { display: block; font-weight: 650; overflow-wrap: anywhere; }
 .dex-launches .dex-list-footer { flex-direction: column; padding: 16px 22px; }
 @media (max-width: 950px) { .dex-pool-layout { grid-template-columns: minmax(0, 1fr); } }
 .dex-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px; }
