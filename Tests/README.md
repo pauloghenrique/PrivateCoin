@@ -771,3 +771,18 @@ compras seguintes com apenas o fundador, rejeição de autoaprovação e replay.
 `PrivateCoinLaunchValidatorsRegression.cs` verifica soma das garantias automáticas
 sem duplicar identidade e preserva a cobertura do bootstrap sem aprovação,
 da fronteira da meta e das regras normais após ativação.
+
+
+## Registros consecutivos e concorrência sem chave (v32)
+
+`PrivateCoinRegistrationRewardPropagationRegression.cs` simula dois nós com a
+mesma cadeia, mas apenas um possui a chave da garantia dos 600 POVIX. Confere os
+registros 2, 3 e 4 consecutivos: o nó sem chave aguarda, a API recusa o fallback,
+um bloco concorrente minerado com prova de trabalho real é rejeitado no replay,
+e o bloco assinado remunera o fundador e sincroniza corretamente em ambos.
+Também cobre mistura de operações, bloqueios e teto total preservados.
+
+```sh
+mcs -out:work/RegistrationPropagation.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinRegistrationRewardPropagationRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationPropagation.exe
+```

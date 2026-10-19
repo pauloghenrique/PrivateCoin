@@ -23,8 +23,10 @@ class PovixInitialLaunchMarketFixture
         var wallet=new Wallet(); string address=wallet.CreateReceiveAddress(), key;
         using(var rsa=new RSACryptoServiceProvider()) { rsa.PersistKeyInCsp=false; rsa.FromXmlString(wallet.ExportPrivateKeys().First()); key=rsa.ToXmlString(false); }
         var chain=new Blockchain(); var provider=new Wallet();
-        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(provider.CreateReceiveAddress(),new Transaction[0])});
-        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])});
+        string founderAddress = provider.CreateReceiveAddress();
+        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(founderAddress,new Transaction[0])});
+        chain.AddProofOfStakeBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])},
+            new[]{provider.CreateValidatorStake(founderAddress,Blockchain.WalletCreationReward)});
         if(chain.GetBalance(new[]{address})!=0) throw new Exception("Buyer must start with zero POVIX");
         var reserves=chain.GetUnspentOutputs(new[]{Hash(InitialLaunch.ProviderPublicKey)}).Where(item=>item.OutputIndex>=0).OrderBy(item=>item.OutputIndex).ToArray();
         var json=new JavaScriptSerializer();

@@ -70,15 +70,16 @@ internal static class PrivateCoinInitialLaunchRegression
                 "confirmation of wallet 1 automatically creates the native POVIX/local-USDC pool");
             var empty = chain.CreateWalletCreationTransaction(b, new Transaction[0]);
             Check(empty.Outputs[0].Amount == 0 && chain.GetBalance(new[] { p }) == 600 * Blockchain.OneCoin, "only the first wallet receives 600 POVIX; the second receives zero");
-            chain.AddBlock(new[] { empty });
+            var founderStake = provider.CreateValidatorStake(p, Blockchain.WalletCreationReward);
+            chain.AddProofOfStakeBlock(new[] { empty }, new[] { founderStake });
             foreach (var address in new[] { l, a1, a2 })
             {
                 var registration = chain.CreateWalletCreationTransaction(address, new Transaction[0]);
                 Check(registration.Outputs[0].Amount == 0, "later wallets register without issuing additional POVIX");
-                chain.AddBlock(new[] { registration });
+                chain.AddProofOfStakeBlock(new[] { registration }, new[] { founderStake });
             }
             Reject(() => chain.CreateWalletCreationTransaction(p, new Transaction[0]), "the first wallet cannot register again for another reward");
-            Check(creation.Outputs[4].InitialLaunchLocked && chain.GetSpendableBalance(new[] { p }, new Transaction[0]) == 0 &&
+            Check(creation.Outputs[4].InitialLaunchLocked && !chain.GetSpendableOutputs(new[] { p }, new Transaction[0]).Any(item => item.TransactionId == creation.Id) &&
                 chain.GetInitialLaunchLockedBalance(new[] { p }) == Blockchain.WalletCreationReward,
                 "first wallet receives 600 locked POVIX with no freely spendable initial reward");
             Check(chain.GetActiveValidators().Single().ValidatorId == p && chain.GetActiveValidators().Single().LockedAmount == Blockchain.WalletCreationReward,
