@@ -1,12 +1,30 @@
 <dialog id="transaction-review-dialog" class="transaction-review-dialog" aria-labelledby="review-title" aria-describedby="review-description">
     <section class="card review-card">
-        <header class="review-dialog-header"><span class="review-dialog-icon" aria-hidden="true">↗</span><div><span class="review-dialog-eyebrow">REVISÃO DA TRANSAÇÃO</span><h2 id="review-title">Revise sua operação</h2></div><span class="review-dialog-badge">Assinatura local</span></header>
-        <p id="review-description">Confira os valores, a taxa e os endereços antes de confirmar.</p>
-        <p id="review-error" class="notice" role="alert" hidden></p>
-        <dl id="exchange-review" class="review-list"></dl>
-        <div id="sign-actions" hidden>
-            <button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button>
-            <button id="edit-exchange" type="button" class="text-button full-width">Cancelar e voltar</button>
+        <div id="transaction-review-content">
+            <header class="review-dialog-header"><span class="review-dialog-icon" aria-hidden="true">↗</span><div><span class="review-dialog-eyebrow">REVISÃO DA TRANSAÇÃO</span><h2 id="review-title">Revise sua operação</h2></div><span class="review-dialog-badge">Assinatura local</span></header>
+            <p id="review-description">Confira os valores, a taxa e os endereços antes de confirmar.</p>
+            <p id="review-error" class="notice" role="alert" hidden></p>
+            <dl id="exchange-review" class="review-list"></dl>
+            <div id="sign-actions" hidden>
+                <button id="sign-exchange" type="button" class="button button-primary full-width" disabled>Confirmar transação</button>
+                <button id="edit-exchange" type="button" class="text-button full-width">Cancelar e voltar</button>
+            </div>
         </div>
+        <section id="exchange-status" class="receipt-card" hidden aria-labelledby="exchange-status-title">
+            <h2 id="exchange-status-title" role="status" aria-live="polite">Troca enviada à rede.</h2>
+            <p id="exchange-status-description">Aguardando validação e confirmação em bloco.</p>
+            <dl class="receipt-data">
+                <dt>Status</dt><dd id="exchange-status-state">Pendente</dd>
+                <dt>Transação</dt><dd id="exchange-status-transaction" class="address-input"></dd>
+                <dt>Recebimento</dt><dd id="exchange-status-receive">—</dd>
+                <dt>Taxa da rede em POVIX</dt><dd id="exchange-status-fee">—</dd>
+                <dt>Confirmações em bloco</dt><dd id="exchange-status-confirmations">0</dd>
+                <dt>Bloco</dt><dd id="exchange-status-block">Aguardando confirmação</dd>
+                <dt>Hash do bloco</dt><dd id="exchange-status-hash" class="address-input">—</dd>
+            </dl>
+            <p id="exchange-status-connectivity" class="muted-text"></p>
+            <a id="exchange-status-receipt">Ver comprovante completo →</a>
+            <button id="close-exchange-result" type="button" class="button button-primary">Fechar</button>
+        </section>
     </section>
 </dialog>

@@ -11,6 +11,7 @@ const d = fixture.draft;
 (async () => {
     const integrated = d.operation === 'swap';
     let html = integrated ? fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8').replace('@Html.Partial("_PoolTrading", Model)', fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8')) : fs.readFileSync('Povix.Dex/Views/Liquidity/Index.cshtml', 'utf8');
+    html = html.replace('@Html.Partial("_TransactionReview")', fs.readFileSync('Povix.Dex/Views/Liquidity/_TransactionReview.cshtml', 'utf8'));
     html = (html + fs.readFileSync('Povix.Dex/Views/Shared/_Wallet.cshtml', 'utf8'))
         .replace('@Html.AntiForgeryToken()', '<input name="__RequestVerificationToken" value="test-csrf" type="hidden">')
         .replace(/data-([a-z-]+)="@Url.Action\([\s\S]*?\)"/g, (_, name) => 'data-' + name + '="/' + name + '"')
@@ -270,8 +271,9 @@ const d = fixture.draft;
         restored.window.document.getElementById('liquidity-app').dataset.receiptUrl = '/liquidez/operacao/__id__';
         for (const key of ['networkUrl', 'catalogueUrl']) restored.window.document.getElementById('liquidity-app').dataset[key] = '/' + key;
         restored.window.eval(fs.readFileSync('Povix.Dex/Scripts/povix-liquidity.js', 'utf8'));
-        await wait(() => restored.window.document.getElementById('exchange-status-state').textContent === 'Confirmada');
-        assert.equal(restored.window.PovixTokenWallet.isUnlocked(), false, 'receipt restores without opening a wallet');
+        assert.equal(restored.window.document.getElementById('exchange-status').hidden, true, 'Old receipts stay hidden on reload');
+        assert.equal(restored.window.sessionStorage.getItem('povix-dex-market-receipt:' + d.poolId), null);
+        assert.equal(restored.window.PovixTokenWallet.isUnlocked(), false);
         restored.window.close();
     }
     fs.writeFileSync(path.join(directory, 'exchange-browser-result.json'), JSON.stringify(captured));
