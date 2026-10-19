@@ -31,21 +31,21 @@ class Element {
     assert.equal(element('market-connection')['data-state'], 'ready');
     assert.equal(element('market-token-info').children[0].children[0].textContent, 'POVIX (POVIX)');
     const tokenFields = () => element('market-token-info').children[0].children[1].children.map(item => item.textContent);
-    assert.deepEqual(tokenFields().filter((_, index) => index % 2 === 1), Array(4).fill('Não disponível'));
+    assert.deepEqual(tokenFields().filter((_, index) => index % 2 === 1), Array(5).fill('Não disponível'));
     data.tokens = [
         { id: 'tkn', name: 'Token B', symbol: 'TKN', decimals: 2, supplyAtomic: '999' },
-        { id: 'povix', name: 'POVIX', symbol: 'POVIX', decimals: 8, supplyAtomic: '123456789012345678', circulatingSupplyAtomic: '100000000', holderCount: 0, createdUtc: '2026-10-01T12:00:00Z' }
+        { id: 'povix', name: 'POVIX', symbol: 'POVIX', decimals: 8, supplyAtomic: '123456789012345678', poolSupplyAtomic: '100000000', walletSupplyAtomic: '123456788912345678', holderCount: 0, createdUtc: '2026-10-01T12:00:00Z' }
     ];
     await element('market-refresh').listeners.click();
     assert.equal(element('market-token-info').children.length, 1, 'Only token A is displayed even when tokens arrive reordered');
-    assert.deepEqual(tokenFields().slice(0, 6), ['Supply total', '1234567890,12345678 POVIX', 'Supply em circulação', '1,00000000 POVIX', 'Número de holders', '0']);
+    assert.deepEqual(tokenFields().slice(0, 8), ['Supply total', '1234567890,12345678 POVIX', 'Supply nas pools', '1,00000000 POVIX', 'Supply nas carteiras', '1234567889,12345678 POVIX', 'Número de holders', '0']);
     assert(!tokenFields().includes('Token B'));
-    assert.notEqual(tokenFields()[7], 'Não disponível');
+    assert.notEqual(tokenFields()[9], 'Não disponível');
     data.tokens[1].createdUtc = 'invalid';
-    data.tokens[1].circulatingSupplyAtomic = '0';
+    data.tokens[1].poolSupplyAtomic = '0';
     await element('market-refresh').listeners.click();
     assert.equal(tokenFields()[3], '0,00000000 POVIX');
-    assert.equal(tokenFields()[7], 'Não disponível');
+    assert.equal(tokenFields()[9], 'Não disponível');
 
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
     const market = fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8');

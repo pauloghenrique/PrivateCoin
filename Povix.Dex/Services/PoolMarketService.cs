@@ -90,11 +90,10 @@ namespace Povix.Dex.Services
             var outputs = blockchain.GetUnspentOutputs(addresses)
                 .Where(item => (native ? item.Output.AssetId == null : item.Output.AssetId == token.Id) && item.Output.Amount > 0).ToArray();
             long supply = native ? outputs.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount)) : token.Supply;
-            bool initialLaunchActive = blockchain.GetInitialLaunchStatus().Active;
-            long circulating = outputs.Where(item => item.Output.UnlockHeight <= blocks.Length &&
-                    (!item.Output.InitialLaunchLocked || initialLaunchActive) && !item.InitialLaunchCollecting &&
-                    item.TransactionKind != TransactionKind.StakeLock &&
-                    item.TransactionKind != TransactionKind.LaunchCreate && item.TransactionKind != TransactionKind.LaunchContribute)
+            // Include confirmed balances even while locked in launches, vesting or staking.
+            long poolSupply = outputs.Where(item => item.IsPoolReserve)
+                .Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount));
+            long walletSupply = outputs.Where(item => !item.IsPoolReserve)
                 .Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount));
             int holders = outputs.Where(item => !item.IsPoolReserve)
                 .Select(item => item.Output.OneTimeAddress).Distinct(StringComparer.Ordinal).Count();
@@ -102,7 +101,7 @@ namespace Povix.Dex.Services
             profiles.TryGetValue(token.Id, out profile);
             bool matching = creation != null && profile != null && profile.CreationId == creation.Id;
             return new { id = token.Id, name = matching ? profile.Name : token.Name, symbol = matching ? profile.Symbol : token.Symbol, decimals = token.Decimals,
-                supplyAtomic = Atomic(supply), circulatingSupplyAtomic = Atomic(circulating), holderCount = holders,
+                supplyAtomic = Atomic(supply), poolSupplyAtomic = Atomic(poolSupply), walletSupplyAtomic = Atomic(walletSupply), holderCount = holders,
                 createdUtc = creationBlock == null ? null : new DateTime(creationBlock.TimestampUtcTicks, DateTimeKind.Utc).ToString("o", CultureInfo.InvariantCulture), native,
                 description = matching ? profile.Description : token.Policy?.Description };
         }
