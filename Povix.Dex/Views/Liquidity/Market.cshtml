@@ -8,21 +8,23 @@
     </header>
     <p id="market-connection" class="market-connection" data-state="loading" role="status" aria-live="polite">Consultando a blockchain…</p>
     <div class="market-explorer">
+        <aside id="market-trading-panel" class="pool-trading" aria-label="Troca da pool"><div class="market-trade-heading"><h2>Carteira e troca</h2><a href="#market-chart-panel">Gráfico ↗</a></div>@Html.Partial("_PoolTrading", Model)</aside>
         <div class="pool-analysis">
     <section id="market-chart-panel" class="card market-chart"><div class="market-toolbar"><div class="market-timeframes" role="group" aria-label="Intervalo do gráfico"><button type="button" id="market-time-60" aria-pressed="false">1m</button><button type="button" id="market-time-300" aria-pressed="true">5m</button><button type="button" id="market-time-900" aria-pressed="false">15m</button><button type="button" id="market-time-3600" aria-pressed="false">1h</button><button type="button" id="market-time-86400" aria-pressed="false">1d</button></div><div class="market-chart-mode">PREÇO</div><label class="market-interval-label" for="market-interval">Intervalo <select id="market-interval"><option value="60">1 minuto</option><option value="300" selected>5 minutos</option><option value="900">15 minutos</option><option value="3600">1 hora</option><option value="86400">1 dia</option></select></label><button id="market-refresh" type="button" class="button button-secondary">Atualizar</button></div>
         <h2 class="market-chart-title">Preço do par <span>· Candles confirmados</span></h2>
         <div class="market-chart-legend"><a class="market-section-link" href="#market-ledger-panel">Ver transações ↓</a><span class="market-up">Alta</span><span class="market-down">Baixa</span></div><svg id="market-candles" hidden viewBox="0 0 960 360" role="img" aria-label="Gráfico de candles do preço Reserva A por Reserva B"></svg><p id="market-chart-empty" class="market-empty" role="status">Carregando histórico de preço…</p>
     </section>
     <section id="market-ledger-panel" class="card market-ledger"><div class="market-ledger-header"><div><h2>Movimentações da carteira na pool</h2></div><a class="market-section-link" href="#market-chart-panel">Voltar ao gráfico ↑</a></div><p class="muted-text">Os valores mostram a carteira: (−) entregue à pool; (+) recebido da pool.</p><details class="market-ledger-help"><summary>Como ler as movimentações</summary><p>Nas trocas, o ativo entregue aparece negativo e o ativo recebido aparece positivo. Pendentes e rejeitadas não alteram o saldo confirmado.</p></details><p id="market-ledger-count" class="muted-text"></p><div class="market-table-scroll" tabindex="0" role="region" aria-label="Movimentações da carteira na pool"><table><caption class="market-table-caption">Histórico das movimentações da carteira na pool</caption><thead><tr><th scope="col">Data / hora</th><th scope="col">Operação</th><th scope="col">Status</th><th scope="col" id="market-heading-a">Primeiro ativo</th><th scope="col" id="market-heading-b">Segundo ativo</th><th scope="col">Bloco</th><th scope="col">Transação</th></tr></thead><tbody id="market-ledger"><tr><td colspan="7" class="market-empty">Carregando movimentações…</td></tr></tbody></table></div></section>
-    </div><aside id="market-trading-panel" class="pool-trading" aria-label="Troca da pool"><div class="market-trade-heading"><h2>Carteira e troca</h2><a href="#market-chart-panel">Gráfico ↗</a></div>@Html.Partial("_PoolTrading", Model)</aside>
+    </div>
         <aside class="market-overview" aria-label="Informações da pool">
+            <section class="card market-tokens"><div class="market-panel-heading"><span class="eyebrow">ATIVOS DO PAR</span><h2>Informações do token</h2></div><div id="market-token-info" class="market-token-grid"></div></section>
             <section class="card market-pool-card"><div class="market-panel-heading"><span class="eyebrow">POOL DE LIQUIDEZ</span><h2>Visão geral</h2></div>
                 <p id="market-state" class="market-pool-state" role="status">Consultando o estado da pool…</p>
                 <div class="market-summary" aria-label="Reservas da pool"><div><span id="market-label-a">Reserva do primeiro ativo</span><strong id="market-reserve-a">—</strong></div><div><span id="market-label-b">Reserva do segundo ativo</span><strong id="market-reserve-b">—</strong></div></div>
                 <dl class="market-pool-facts"><div><dt>Rede</dt><dd>POVIX</dd></div><div><dt>Taxa da pool</dt><dd>0,30%</dd></div></dl>
                 <details class="market-pool-id"><summary>Identificador da pool</summary><p class="address-input">@ViewBag.PoolId</p></details>
             </section>
-            <section class="card market-tokens"><div class="market-panel-heading"><span class="eyebrow">ATIVOS DO PAR</span><h2>Informações do token</h2></div><div id="market-token-info" class="market-token-grid"></div></section>
+
         </aside>
     </div>
 </main>
