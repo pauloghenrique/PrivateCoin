@@ -25,14 +25,6 @@
             if (![pair, pool.assetA.name, pool.assetB.name, pool.assetA.id, pool.assetB.id, pool.poolId]
                 .some(value => String(value).toLocaleLowerCase('pt-BR').includes(query))) return;
             const row = element('tr', '');
-            if (launchingPool(pool)) {
-                const cell = element('td', ''), link = element('a', pair);
-                const url = new URL(app.dataset.marketUrl, window.location.href);
-                url.searchParams.set('poolId', pool.poolId);
-                link.href = url.href;
-                cell.append(link); row.append(cell); launches.append(row);
-                return;
-            }
             const identity = element('td', ''), group = element('div', '', 'dex-token-identity');
             group.append(element('span', String(pool.assetA.symbol).slice(0, 2), 'dex-token-icon'),
                 element('span', String(pool.assetB.symbol).slice(0, 2), 'dex-token-icon'));
