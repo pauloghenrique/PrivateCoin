@@ -245,6 +245,17 @@ internal static class PrivateCoinInitialLaunchRegression
                 Check(!((ValidatorStake[])globalStakes.Invoke(null, new object[] { boundary, Blockchain.ConsensusVersion })).Any(item => item.ValidatorId == p),
                     "pool target releases the first-wallet 600 POVIX and removes their automatic validator guarantee");
                 Reject(() => Apply(Copy(final), CloneUtxo(boundary)), "no purchase is accepted after activation");
+                var envelope = typeof(InitialLaunch).GetMethod("ValidateEnvelope", BindingFlags.NonPublic | BindingFlags.Static);
+                foreach (var kind in new[] { TransactionKind.LiquidityPool, TransactionKind.LaunchCreate, TransactionKind.LiquidityAdd })
+                {
+                    var gated = new Transaction { Kind = kind };
+                    Reject(() => envelope.Invoke(null, new object[] { gated, new Dictionary<string, UnspentOutput>(), Blockchain.ConsensusVersion }), "pool access rejects " + kind + " before automatic pool exists");
+                    Reject(() => envelope.Invoke(null, new object[] { gated, Utxo(chain), Blockchain.ConsensusVersion }), "pool access rejects " + kind + " during principal launch");
+                    foreach (int announcedVersion in new[] { 21, 28 })
+                        Reject(() => envelope.Invoke(null, new object[] { gated, Utxo(chain), announcedVersion }), "announcing v" + announcedVersion + " cannot bypass principal target for " + kind);
+                    envelope.Invoke(null, new object[] { gated, boundary, Blockchain.ConsensusVersion });
+                    Check(true, "principal target releases " + kind + " for every wallet");
+                }
                 var activeA = boundary[final.Id + ":0"]; var activeB = boundary[final.Id + ":1"];
                 var closeFee = boundary.Values.First(item => item.OutputIndex >= 0 && provider.OwnedOneTimeAddresses.Contains(item.Output.OneTimeAddress) && item.Output.AssetId == null && !item.IsPoolReserve);
                 var close = new Transaction { Kind = TransactionKind.LiquidityClose, Fee = 1, TimestampUtcTicks = DateTime.UtcNow.Ticks,

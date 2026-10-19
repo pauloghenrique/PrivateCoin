@@ -17,6 +17,7 @@
         </ol>
     }
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
+    <p id="pool-creation-gate" class="notice" role="status">Criar pools e adicionar liquidez só é permitido após a pool principal atingir a meta de 179.700 POVIX.</p>
     <div id="app-message" class="notice" role="alert" hidden></div>
     <div class="liquidity-grid transaction-modal-layout">
         <div id="pool-management-fee" class="liquidity-setup" hidden="@(!creating)">

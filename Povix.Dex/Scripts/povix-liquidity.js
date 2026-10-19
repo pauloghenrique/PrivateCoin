@@ -5,7 +5,8 @@
     const wallet = window.PovixTokenWallet, byId = id => document.getElementById(id);
     const csrf = byId('pool-form').querySelector('[name="__RequestVerificationToken"]').value;
     let assets = [], pools = [], network = null, draft = null, expected = null, signatures = null;
-    let busy = false, refreshing = false, epoch = 0;
+    let busy = false, refreshing = false, epoch = 0, canCreatePools = false;
+    const poolAccessMessage = "Criar pools e adicionar liquidez só é permitido após a pool principal atingir a meta de 179.700 POVIX.";
     const message = text => { for (const id of ['app-message', 'review-error']) { const item = byId(id); if (item) { item.textContent = text || ''; item.hidden = !text; } } };
     const asset = id => assets.find(item => item.id === id);
     const nativeCollecting = pool => pool?.nativeInitialLaunch === true && pool.status === 'collecting';
@@ -144,16 +145,18 @@
             }
             for (const id of ['pool-search', 'pool-status-filter']) byId(id).disabled = !unlocked;
             for (const id of ['create-pool', 'create-launch-pool']) {
-                const link = byId(id), disabled = !unlocked || !editing;
+                const link = byId(id), disabled = !unlocked || !editing || !canCreatePools;
                 link.setAttribute('aria-disabled', String(disabled));
                 if (disabled) { link.removeAttribute('href'); link.setAttribute('tabindex', '-1'); }
                 else { link.href = link.dataset.walletUrl; link.removeAttribute('tabindex'); }
             }
         }
-        byId('pool-fields').disabled = !editing || !unlocked;
+        byId('pool-fields').disabled = !editing || !unlocked || !canCreatePools;
         byId('swap-fields').disabled = !editing || !unlocked;
         if (integrated) byId('swap-pool').disabled = true;
-        byId('prepare-pool').disabled = !editing || !ready;
+        byId('prepare-pool').disabled = !editing || !ready || !canCreatePools;
+        const gate = byId('pool-creation-gate');
+        if (gate) { gate.hidden = canCreatePools; gate.textContent = poolAccessMessage; }
         byId('prepare-swap').disabled = !editing || !ready || !(selectedPool()?.available || nativeCollecting(selectedPool()));
         byId('exchange-priority').disabled = !editing || managing && !unlocked;
         byId('sign-exchange').disabled = busy || !draft || !ready;
@@ -290,6 +293,7 @@
         finally { busy = false; update(); }
     }
     byId('pool-form').addEventListener('submit', async event => {
+        if (!canCreatePools) { event.preventDefault(); message(poolAccessMessage); return; }
         event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network || !network.CanCreate) return;
         busy = true; message(''); update();
         try {
@@ -342,7 +346,7 @@
     function updateLaunch() {
         if (!app.dataset.prepareLaunchPoolUrl) return;
         const ready = !busy && !draft && wallet.isUnlocked() && network?.CanCreate && assets.length > 0;
-        byId('launch-create-fields').disabled = !ready; byId('prepare-launch-create').disabled = !ready;
+        byId('launch-create-fields').disabled = !ready || !canCreatePools; byId('prepare-launch-create').disabled = !ready || !canCreatePools;
         byId('launch-contribute-fields').disabled = !ready; byId('prepare-launch-operation').disabled = !ready;
         if (network?.Height != null) { byId('launch-deadline').min = String(network.Height + 2); if (!byId('launch-deadline').value) byId('launch-deadline').value = String(network.Height + 1000); }
         const refund = byId('launch-operation').value === 'refund'; byId('launch-amount').disabled = refund; byId('launch-amount').required = !refund;
@@ -361,6 +365,7 @@
     if (app.dataset.prepareLaunchPoolUrl) {
         for (const id of ['launch-create-form', 'launch-contribute-form']) { byId(id).addEventListener('input', updateLaunch); byId(id).addEventListener('change', updateLaunch); }
         byId('launch-create-form').addEventListener('submit', async event => {
+            if (!canCreatePools) { event.preventDefault(); message(poolAccessMessage); return; }
             event.preventDefault(); if (busy || draft || !wallet.isUnlocked() || !network?.CanCreate) return;
             busy = true; message(''); update();
             try {
@@ -391,6 +396,7 @@
         });
     }
     function liquidityRequest() {
+        if (!canCreatePools && byId('user-liquidity-operation').value === 'add') throw new Error(poolAccessMessage);
         const pool = pools.find(item => item.poolId === byId('user-liquidity-pool').value);
         if (!pool || !pool.allowUserLiquidity || !pool.available) throw new Error('Selecione uma pool habilitada com reservas disponíveis.');
         const operation = byId('user-liquidity-operation').value, add = operation === 'add';
@@ -411,7 +417,7 @@
         if (!byId('user-liquidity-form')) return;
         const ready = !busy && !draft && wallet.isUnlocked() && network?.CanCreate;
         byId('user-liquidity-fields').disabled = !ready;
-        byId('prepare-user-liquidity').disabled = !ready;
+        byId('prepare-user-liquidity').disabled = !ready || (!canCreatePools && byId('user-liquidity-operation').value === 'add');
         byId('user-liquidity-amount-label').textContent = byId('user-liquidity-operation').value === 'add' ? 'Quantidade máxima do primeiro ativo' : 'Porcentagem da minha participação';
         try {
             const request = liquidityRequest(), pool = request.pool;
@@ -574,7 +580,7 @@
             byId('network-peers').textContent = String(network.PeerCount); byId('network-height').textContent = String(network.Height);
             const data = await post(app.dataset.catalogueUrl, { publicKeys: wallet.isUnlocked() ? wallet.publicKeys() : [] });
             if (currentEpoch !== epoch || busy) return;
-            assets = data.assets; pools = data.pools;
+            assets = data.assets; pools = data.pools; canCreatePools = data.canCreatePools === true;
             if (!draft) {
                 options('pool-asset-a', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o primeiro ativo');
                 options('pool-asset-b', assets, item => item.symbol + ' · ' + item.name + ' · ' + (item.id === 'povix' ? 'POVIX' : item.id.slice(0, 12)), 'Selecione o segundo ativo');
@@ -652,7 +658,7 @@
     }
     document.addEventListener('povix-wallet-change', async () => {
         try {
-            epoch++; assets = []; pools = [];
+            epoch++; assets = []; pools = []; canCreatePools = false;
             if (managing) { byId('pool-list').replaceChildren(); byId('pools-empty').hidden = false; byId('pools-empty').textContent = wallet.isUnlocked() ? 'Consultando pools da carteira…' : 'Conecte sua carteira para consultar suas pools.'; }
             filterPoolList();
             reset();

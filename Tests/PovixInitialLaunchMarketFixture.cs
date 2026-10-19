@@ -36,6 +36,18 @@ class PovixInitialLaunchMarketFixture
         var node=(PeerNode)FormatterServices.GetUninitializedObject(typeof(PeerNode));
         var peers=new ConcurrentDictionary<TcpClient,SemaphoreSlim>(); { var peer=(TcpClient)FormatterServices.GetUninitializedObject(typeof(TcpClient));
             peers.TryAdd(peer,new SemaphoreSlim(1)); Set(node,"peers",peers); Set(service,"node",node);
+            Action[] gatedOperations = {
+                () => service.PreparePool(new CreatePoolViewModel(), new[]{key}, address, "test"),
+                () => service.PrepareLaunchPool(new CreateLaunchPoolViewModel(), new[]{key}, address, "test"),
+                () => service.PrepareLiquidityChange(new LiquidityChangeViewModel {Operation="add"}, new[]{key}, address, "test")
+            };
+            foreach (var operation in gatedOperations) {
+                try { operation(); throw new Exception("Pool access accepted before principal target"); }
+                catch (TokenOperationException error) { if(error.Message != InitialLaunch.PoolAccessMessage) throw; }
+            }
+            var catalogue = (Dictionary<string,object>)json.DeserializeObject(json.Serialize(service.GetExchangeCatalogue(new[]{key})));
+            if ((bool)catalogue["canCreatePools"]) throw new Exception("Catalogue enables early pool creation");
+            Console.WriteLine("DEX gates both pool types and liquidity additions while principal collects");
             var request=new SwapViewModel {PoolId=chain.GetInitialLaunchStatus().RootTransactionId,InputSide=1,InputAssetId=InitialLaunch.UsdcTokenId,OutputAssetId="povix",Amount="1",MinimumReceive="5.99999999",FeeAtomic=1,FeePriority=1};
             var response=service.PrepareSwap(request,new[]{key},address,"test");
             File.WriteAllText(args[0]+".service.json",json.Serialize(response));
