@@ -106,12 +106,20 @@
             ['Supply total', supplyText(token.supplyAtomic)],
             ['Número de holders', token.holderCount == null ? 'Não disponível' : Number(token.holderCount).toLocaleString('pt-BR')],
             ['Data de criação', created && Number.isFinite(created.getTime()) ? created.toLocaleString('pt-BR') : 'Não disponível']];
-        const list = document.createElement('dl');
-        fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
+        const list = document.createElement('dl'); list.className = 'market-token-facts';
+        fields.forEach(([label, value], index) => {
+            const row = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd');
+            row.className = index < 2 ? 'market-token-fact market-token-supply' : 'market-token-fact';
+            term.textContent = label; detail.textContent = value;
+            row.append(term, detail); list.appendChild(row);
+        });
         card.appendChild(list);
         const note = document.createElement('p');
         note.textContent = 'Supply em circulação soma todos os saldos confirmados nas pools e carteiras da rede, incluindo valores bloqueados. Supply total é o limite máximo de emissão do token, incluindo tokens ainda não emitidos. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
-        card.appendChild(note); info.appendChild(card);
+        const explanation = document.createElement('details'), summary = document.createElement('summary');
+        explanation.className = 'market-token-explanation';
+        summary.textContent = 'Sobre os dados do token';
+        explanation.append(summary, note); card.appendChild(explanation); info.appendChild(card);
         chart(data.candles, data.interval);
         byId('market-connection').setAttribute('data-state', 'ready');
         byId('market-connection').textContent = 'Atualizado às ' + new Date(data.updatedUtc).toLocaleTimeString('pt-BR') + ' · ' + data.peerCount + ' pares · Consulta a cada 5 segundos';

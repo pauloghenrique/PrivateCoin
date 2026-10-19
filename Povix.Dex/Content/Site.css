@@ -115,12 +115,18 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 #pool-market summary { cursor:pointer; }
 #pool-market .market-pool-id p { overflow-wrap:anywhere; margin-top:10px; }
 #pool-market .market-token-grid { display:grid; gap:16px; }
-#pool-market .market-token-grid > section { border-top:1px solid var(--line); padding-top:14px; }
-#pool-market .market-token-grid h3 { font-size:14px; margin:0 0 12px; overflow-wrap:anywhere; }
-#pool-market .market-token-grid dl { margin:0; }
-#pool-market .market-token-grid dt { font-size:10px; }
-#pool-market .market-token-grid dd { text-align:left; font-size:12px; margin:4px 0 12px; }
-#pool-market .market-token-grid p { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+#pool-market .market-token-grid > section { border-top:1px solid var(--line); padding-top:18px; }
+#pool-market .market-token-grid h3 { font-size:17px; font-weight:650; margin:0 0 18px; color:var(--ink); overflow-wrap:anywhere; }
+#pool-market .market-token-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:0; }
+#pool-market .market-token-fact { min-width:0; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--white); }
+#pool-market .market-token-supply { grid-column:1 / -1; padding:18px; background:var(--soft-green); border-color:#d5e6db; }
+#pool-market .market-token-facts dt { font-size:11px; color:var(--muted); line-height:1.5; margin:0 0 8px; }
+#pool-market .market-token-facts dd { text-align:left; font-size:13px; line-height:1.5; margin:0; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+#pool-market .market-token-supply dd { font-size:clamp(16px,1.5vw,21px); letter-spacing:-.3px; color:var(--green); }
+#pool-market .market-token-explanation { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; }
+#pool-market .market-token-explanation summary { line-height:1.5; }
+#pool-market .market-token-explanation p { margin:10px 0 0; font-size:11px; line-height:1.7; overflow-wrap:anywhere; }
+@media (max-width:480px) { #pool-market .market-token-facts { grid-template-columns:minmax(0,1fr); } }
 #pool-market .market-chart { padding:20px; border:1px solid var(--line); background:var(--white); }
 #pool-market .market-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding-bottom:14px; border-bottom:1px solid var(--line); }
 #pool-market .market-timeframes { display:flex; gap:3px; }

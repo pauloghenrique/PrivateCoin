@@ -30,7 +30,7 @@ class Element {
     assert.equal(element('market-label-b').textContent, 'Reserva de TKN');
     assert.equal(element('market-connection')['data-state'], 'ready');
     assert.equal(element('market-token-info').children[0].children[0].textContent, 'POVIX (POVIX)');
-    const tokenFields = () => element('market-token-info').children[0].children[1].children.map(item => item.textContent);
+    const tokenFields = () => element('market-token-info').children[0].children[1].children.flatMap(row => row.children.map(item => item.textContent));
     assert.deepEqual(tokenFields().filter((_, index) => index % 2 === 1), Array(4).fill('Não disponível'));
     data.tokens = [
         { id: 'tkn', name: 'Token B', symbol: 'TKN', decimals: 2, supplyAtomic: '999' },
@@ -46,8 +46,8 @@ class Element {
     await element('market-refresh').listeners.click();
     assert.equal(tokenFields()[1], '0,00000000 POVIX');
     assert.equal(tokenFields()[3], '1234567890,12345678 POVIX', 'Total supply is independent from the circulating balance');
-    assert.match(element('market-token-info').children[0].children[2].textContent, /incluindo valores bloqueados/);
-    assert.match(element('market-token-info').children[0].children[2].textContent, /limite máximo de emissão.*ainda não emitidos/);
+    assert.match(element('market-token-info').children[0].children[2].children[1].textContent, /incluindo valores bloqueados/);
+    assert.match(element('market-token-info').children[0].children[2].children[1].textContent, /limite máximo de emissão.*ainda não emitidos/);
     assert.equal(tokenFields()[7], 'Não disponível');
 
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
