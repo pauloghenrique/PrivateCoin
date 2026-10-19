@@ -29,7 +29,7 @@ class PrivateCoinDesktopRegistrationRegression
             Check(WalletRegistration.HasRegistration(chain, first, empty), "confirmation marks the selected wallet registered");
             Reject(() => WalletRegistration.Prepare(chain, first, empty), "Desktop prevents duplicate confirmed rewards");
             var balance = WalletBalanceSummary.Read(chain, first, empty);
-            Check(balance.Available == 600 * Blockchain.OneCoin && balance.Total == 600 * Blockchain.OneCoin, "Desktop displays exactly 600 spendable POVIX without adding pool reserves");
+            Check(balance.Available == 0 && balance.LaunchLocked == 600 * Blockchain.OneCoin && balance.Total == 600 * Blockchain.OneCoin && balance.LaunchLockText.Contains("Bloqueado no lançamento"), "Desktop displays the first 600 POVIX as locked guarantee, without adding pool reserves");
             Check(WalletRegistration.LaunchStatus(chain, empty).Contains("Pool criada") && WalletRegistration.LaunchStatus(chain, empty).Contains("359.400"), "Desktop shows the automatically confirmed pool in collection");
             Check(chain.GetTokenBalances(first.OwnedOneTimeAddresses).Count == 2 && chain.GetTokenBalances(first.OwnedOneTimeAddresses).All(token => token.Amount == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply)), "Desktop token catalogue receives 100 USDC and one million USDT");
             string original = second.CreateReceiveAddress();

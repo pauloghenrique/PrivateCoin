@@ -77,7 +77,7 @@ namespace PrivateCoin.Desktop
             this.networkConnectionLabel = CreateValueLabel("●  Desconectado");
             this.tokensButton = CreateButton("Ver tokens", false);
             this.walletFolderButton = CreateButton("Pasta da carteira", false);
-            this.initialLaunchLabel = CreateMutedLabel("Primeira carteira: 600 POVIX e pool automática.");
+            this.initialLaunchLabel = CreateMutedLabel("Primeira carteira: 600 POVIX bloqueados e pool automática.");
 
             var header = new HeroPanel();
             header.SetBounds(0, 0, 1040, 96);

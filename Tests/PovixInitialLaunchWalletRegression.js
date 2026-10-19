@@ -19,9 +19,9 @@ vm.runInContext(source, context);
     for (const alter of [d => { d.participation.lockedSharesAtomic = '0'; },
         d => { d.participation.lockedSharesAtomic = String(BigInt(d.participation.lockedSharesAtomic) - 1n); },
         d => { d.outputs[0].amountAtomic = String(BigInt(d.outputs[0].amountAtomic) + 1n); },
-        d => { d.consensusVersion = 21; }, d => { d.consensusVersion = 25; }]) {
+        d => { d.consensusVersion = 21; }, d => { d.consensusVersion = 25; }, d => { d.consensusVersion = 26; }]) {
         const bad = JSON.parse(JSON.stringify(draft)); alter(bad);
         await assert.rejects(context.PovixTokenWallet.verifyExchangeDraft(bad, draft, draft.networkId));
     }
-    console.log('5 initial-launch browser payload checks passed');
+    console.log('7 initial-launch browser payload checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

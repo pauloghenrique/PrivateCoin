@@ -10,15 +10,15 @@ DEX de lançamentos genéricos continua separado: não cria o lançamento nativo
 
 | Destino | Quantidade |
 | --- | ---: |
-| Primeira identidade registrada | 600 POVIX (recompensa única) |
+| Primeira identidade registrada | 600 POVIX (recompensa única, bloqueada até a meta) |
 | Reserva na criação única do lançamento | 359.400 POVIX |
 | Total inicial POVIX | 360.000 POVIX |
-| USDC local, para a 1ª carteira recompensada | 1.000.000 USDC |
+| USDC local, por identidade registrada (até 10.000) | 100 USDC |
 | USDT local, para a 1ª carteira recompensada | 1.000.000 USDT |
 
 Não há emissão no bloco zero. A confirmação da 1ª carteira emite seus 600 POVIX,
 completa a distribuição inicial de 600 POVIX e cria a pool na mesma operação, sem taxa ou ação manual.
-Ela emite os tokens locais uma única vez para a 1ª carteira e deposita os 359.400
+Ela cria os tokens locais, credita 100 USDC e 1.000.000 USDT à primeira carteira e deposita os 359.400
 POVIX na reserva, sem entregar essa reserva como saldo livre. A pool usa uma chave
 pública fixa do protocolo, sem chave privada retida; sua liquidez principal não tem dono. As unidades locais têm seis casas decimais e oferta fixa.
 Não possuem política de mint, pausa, queima administrativa ou vesting.
@@ -120,17 +120,24 @@ taxas e contabilização pública. Os testes de fronteira usam uma fixture do es
 antes da última compra e executam o validador real; não mineram 29.950 compras.
 
 
-## Inicialização dos validadores com uma única recompensa
+## Inicialização dos validadores com garantias automáticas (v27)
 
-As carteiras posteriores registram suas identidades com saldo inicial zero.
-A primeira carteira pode ceder garantia a dois validadores independentes usando
-`CreateSponsoredStakeLockTransaction(chain, pending, validatorPublicKey, amount)`.
-Essa operação de garantia existente é auto-validada e não emite moedas novas:
-o valor sai dos 600 POVIX do titular e fica sob a chave do validador destinatário.
-Depois das garantias confirmadas, os validadores podem aprovar as transferências
-normais do titular para os demais participantes. A aprovação de transferências
-não é dispensada para inicializar a rede.
+Os 600 POVIX da primeira carteira ficam bloqueados até a meta, mas já contam
+como garantia de validação e criação de blocos. A primeira compra confirmada de
+outra identidade cria a segunda garantia automática. Registros e compras iniciais
+continuam auto-validados; a rede não precisa gastar os 600 POVIX para inicializar
+outros validadores. Blocos PoS exigem o conjunto elegível e ao menos dois validadores,
+sem participação nas operações, conforme as regras de consenso existentes.
 
+A primeira garantia registra o endereço da carteira. O voto ou a aprovação revela
+a chave pública, que precisa corresponder ao hash desse endereço e assinar a prova.
+Não é possível usar a garantia da primeira carteira com a chave de outro usuário.
+
+Os 600 POVIX e os recebimentos líquidos de compras permanecem bloqueados apesar
+das recompensas: remuneração de criação e validação é emitida em saídas separadas.
+Ao atingir a meta, os dois tipos de garantia automática são liberados. Não há botão
+ou staking manual para ativá-los. Staking manual continua disponível sobre outros
+saldos livres; não pode consumir o saldo original bloqueado.
 
 ## Garantia automática do comprador (consenso v26)
 
@@ -152,3 +159,12 @@ Esta é uma alteração de consenso v26. O genesis compromete a versão e os fon
 do Core, portanto a identidade da rede muda. DEX e nós precisam da mesma versão;
 esta alteração não migra automaticamente cadeias v25 e não deve ser tratada como
 uma atualização apenas visual. O PR não publica nem reinicia a rede existente.
+
+
+## Bloqueio da primeira recompensa (consenso v27)
+
+A saída de 600 POVIX da criação automática da pool agora carrega o mesmo bloqueio
+até a meta que os recebimentos de compra. O Desktop mostra ambos no saldo
+"Bloqueado no lançamento". A alteração exige consenso v27 e uma identidade de
+rede nova, pois o genesis compromete versão e fontes; não migra cadeias v26 e não
+reinicia nem publica a rede automaticamente.
