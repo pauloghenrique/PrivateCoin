@@ -27,15 +27,21 @@ namespace Povix.Dex.Services
                         .Sum(item => item.Output.Amount)) }).ToArray();
                 var pools = PoolRoots().Select(item => Snapshot(item.Transaction.Id))
                     .Where(item => item != null).Select(PoolResponse).ToArray();
-                return new { assets, pools, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
+                return new { assets, pools, canCreatePools = blockchain.GetInitialLaunchStatus().Active, poolCreationMessage = InitialLaunch.PoolAccessMessage, poolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints };
             }
+        }
+
+        private void RequirePoolAccess()
+        {
+            if (!blockchain.GetInitialLaunchStatus().Active)
+                throw new TokenOperationException("main_pool_target_required", InitialLaunch.PoolAccessMessage);
         }
 
         public object PreparePool(CreatePoolViewModel model, string[] publicKeys, string address, string owner)
         {
             lock (sync)
             {
-                RequireReady(); ReserveDraftSlot(owner);
+                RequireReady(); RequirePoolAccess(); ReserveDraftSlot(owner);
                 if (model.RewardMode != "fees" && model.RewardMode != "loyalty")
                     throw new TokenOperationException("reward_mode_invalid", "Escolha uma opção de recompensa válida.");
                 PoolLoyaltyPolicy loyaltyPolicy = null;
@@ -62,7 +68,7 @@ namespace Povix.Dex.Services
         public object PrepareLaunchPool(CreateLaunchPoolViewModel model, string[] publicKeys, string address, string owner)
         {
             lock (sync) {
-                RequireReady(); ReserveDraftSlot(owner);
+                RequireReady(); RequirePoolAccess(); ReserveDraftSlot(owner);
                 var a = Asset(model.AssetA); var b = Asset(model.AssetB);
                 if (a.Id == "povix" || a.Id == b.Id) throw new TokenOperationException("fields_invalid", "Escolha um token de lançamento e outro ativo de captação.");
                 var key = publicKeys.FirstOrDefault(value => AddressFor(value) == address);
@@ -117,7 +123,9 @@ namespace Povix.Dex.Services
         {
             lock (sync)
             {
-                RequireReady(); ReserveDraftSlot(owner);
+                RequireReady();
+                if (model.Operation == "add") RequirePoolAccess();
+                ReserveDraftSlot(owner);
                 var pool = Snapshot(model.PoolId);
                 if (pool == null || !pool.Available) throw new TokenOperationException("pool_unavailable", "Aguarde reservas confirmadas e disponíveis.");
                 if (pool.Transaction.PoolParticipation == null) throw new TokenOperationException("liquidity_disabled", "A criação desta pool não permite liquidez de usuários.");

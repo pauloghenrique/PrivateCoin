@@ -620,3 +620,17 @@ e salva as chaves antes de publicar a operação. O quadro de conexão mostra se
 pool aguarda confirmação, está em captação ou já abriu. A reserva principal não
 é somada ao saldo disponível. A primeira abertura continua sem emitir moedas
 isoladamente; é necessário conectar e sincronizar antes de registrar.
+
+
+## Criação de pools após a meta principal (consenso v29)
+
+Qualquer carteira só pode criar uma pool de liquidez ou de lançamento e adicionar
+liquidez depois de a pool principal confirmar 29.950 compras e atingir a reserva
+de 179.700 POVIX. Antes disso, a regra também bloqueia tentativas diretas na
+blockchain, mesmo antes da criação da pool principal. A criação automática da
+pool principal e suas compras continuam permitidas. O DEX desabilita as ações e
+informa a condição para liberação. A liquidez principal continua permanente;
+provedores adicionais podem remover sua própria participação pelas regras normais.
+
+A mudança exige Core, Desktop e DEX compatíveis com consenso v29 e altera a
+identidade da rede comprometida no genesis; não migra o histórico anterior.

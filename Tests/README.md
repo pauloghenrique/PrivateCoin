@@ -740,3 +740,13 @@ detentores disponíveis, replay, rejeição de assinatura/peso adulterado e pres
 da garantia automática das operações comuns durante a captação. Uma fixture UTXO próxima da meta valida aprovação
 e voto do último bloco, bloqueio permanente principal e fim dos direitos do
 lançamento na ativação. Não minera 29.950 compras nem substitui teste de rede.
+
+
+## Acesso a pools após meta principal (v29)
+
+A suíte `PrivateCoinInitialLaunchRegression.cs` também verifica os três tipos
+bloqueados (LiquidityPool, LaunchCreate e LiquidityAdd), antes da criação principal,
+durante a captação e depois da compra que ativa a pool. A fixture
+`PovixInitialLaunchMarketFixture.cs` verifica os bloqueios nos serviços DEX e que
+compras da pool principal continuam disponíveis. `PovixDexOwnedPoolsRegression.js`
+verifica botões bloqueados e liberação após a meta.

@@ -181,3 +181,17 @@ até a meta que os recebimentos de compra. O Desktop mostra ambos no saldo
 "Bloqueado no lançamento". A alteração exige consenso v27 e uma identidade de
 rede nova, pois o genesis compromete versão e fontes; não migra cadeias v26 e não
 reinicia nem publica a rede automaticamente.
+
+
+## Criação de pools após a meta principal (consenso v29)
+
+Qualquer carteira só pode criar uma pool de liquidez ou de lançamento e adicionar
+liquidez depois de a pool principal confirmar 29.950 compras e atingir a reserva
+de 179.700 POVIX. Antes disso, a regra também bloqueia tentativas diretas na
+blockchain, mesmo antes da criação da pool principal. A criação automática da
+pool principal e suas compras continuam permitidas. O DEX desabilita as ações e
+informa a condição para liberação. A liquidez principal continua permanente;
+provedores adicionais podem remover sua própria participação pelas regras normais.
+
+A mudança exige Core, Desktop e DEX compatíveis com consenso v29 e altera a
+identidade da rede comprometida no genesis; não migra o histórico anterior.

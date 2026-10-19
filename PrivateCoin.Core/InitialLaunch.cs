@@ -86,8 +86,13 @@ namespace PrivateCoin.Core
         internal static bool IsUnlocked(UnspentOutput item, IDictionary<string, UnspentOutput> utxo) =>
             !item.Output.InitialLaunchLocked || State(utxo)?.Active == true;
 
+        public const string PoolAccessMessage = "Criar pools e adicionar liquidez só é permitido após a pool principal atingir a meta de 179.700 POVIX.";
+
         internal static void ValidateEnvelope(Transaction tx, IDictionary<string, UnspentOutput> utxo, int version)
         {
+            if ((tx.Kind == TransactionKind.LiquidityPool || tx.Kind == TransactionKind.LaunchCreate ||
+                tx.Kind == TransactionKind.LiquidityAdd) && State(utxo)?.Active != true)
+                throw new InvalidOperationException(PoolAccessMessage);
             if (version < 28 && (IsOperation(tx.Kind) || tx.InitialLaunchIdentity != null || tx.Outputs.Any(output => output.InitialLaunchLocked) || tx.PoolParticipation?.LockedShares > 0))
                 throw new InvalidOperationException("Initial POVIX launch requires consensus v28.");
             if (tx.InitialLaunchIdentity != null && tx.Kind != TransactionKind.InitialLaunchPurchase)

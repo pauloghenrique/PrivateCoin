@@ -51,7 +51,7 @@ const actionNodes = {}, actionNode = id => {
         addEventListener(type, callback) { this[type] = callback; } });
 };
 let connected = false;
-const actionContext = { app: { dataset: {} }, byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null,
+const actionContext = { app: { dataset: {} }, byId: actionNode, wallet: { isUnlocked: () => connected }, assets: [], pools: [], busy: false, draft: null, network: null, canCreatePools: true, poolAccessMessage: "Aguarde a meta",
     integrated: false, managing: true, window: {}, updateUserLiquidity() {}, updatePrices() {}, selectedPool: () => null, asset: () => null,
     atomicText: () => '0', fee: () => '0', nativeCollecting: () => false };
 const updateStart = source.indexOf('    function update() {'), updateEnd = source.indexOf('    function addReview(', updateStart);
@@ -74,6 +74,19 @@ for (const value of [false, true, false, true]) {
         assert.equal(prevented, !connected, 'Disconnected actions cannot navigate');
     }
 }
+connected = true;
+actionContext.canCreatePools = false;
+actionContext.update();
+for (const id of ['create-pool', 'create-launch-pool']) {
+    assert.equal(actionNode(id)['aria-disabled'], 'true', 'Principal target gates all creation actions');
+    assert.equal(actionNode(id).href, undefined);
+}
+assert.equal(actionNode('prepare-pool').disabled, true);
+assert.equal(actionNode('pool-creation-gate').hidden, false);
+actionContext.canCreatePools = true;
+actionContext.update();
+assert.equal(actionNode('create-pool')['aria-disabled'], 'false');
+assert.equal(actionNode('pool-creation-gate').hidden, true);
 const liquidityView = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolPage.cshtml', 'utf8');
 assert.match(liquidityView, /id="create-pool"[^>]*aria-disabled="true"/);
 assert.match(liquidityView, /id="create-launch-pool"[^>]*aria-disabled="true"/);
