@@ -859,6 +859,9 @@ namespace PrivateCoin.Desktop
             WalletBalanceSummary balance = WalletBalanceSummary.Read(blockchain, selected?.Wallet, SnapshotPending());
             long lockedStake = selected == null ? 0 : selected.LockedStake;
             balanceLabel.Text = ((decimal)balance.Total / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX";
+            launchLockedBalanceLabel.Text = balance.LaunchLockText;
+            launchLockedBalanceLabel.Visible = balance.LaunchLocked > 0;
+            toolTip.SetToolTip(launchLockedBalanceLabel, balance.LaunchLockDescription);
             toolTip.SetToolTip(balanceLabel, "Disponível para enviar: " +
                 ((decimal)balance.Available / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX" +
                 (balance.LaunchLocked == 0 ? string.Empty : "\nGarantia de validação do lançamento (liberada na meta): " +
