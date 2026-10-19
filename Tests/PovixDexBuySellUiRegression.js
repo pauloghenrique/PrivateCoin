@@ -6,6 +6,7 @@ class Element {
     constructor() { this.value = ''; this.handlers = {}; this.children = []; this.options = [{ value: '1' }, { value: '0' }]; this.dataset = {}; }
     addEventListener(name, handler) { this.handlers[name] = handler; }
     setAttribute(key, value) { this[key] = value; }
+    removeAttribute(key) { delete this[key]; }
     querySelector() { return { value: 'csrf' }; }
     querySelectorAll() { return []; }
     replaceChildren(...items) { this.children = items; this.options = items; this.value = items[0]?.value || ''; }

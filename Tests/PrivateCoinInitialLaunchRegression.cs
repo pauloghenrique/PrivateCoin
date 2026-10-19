@@ -116,6 +116,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 Reject(() => chain.ValidatePendingTransactions(new[] { bad }), "funding signatures cannot substitute for wallet identity authorization");
                 Check(Blockchain.IsSelfValidatedOperation(purchase) && !Blockchain.RequiresLockedTokenApproval(purchase), "launch purchase requires no validator approval");
                 long nativeBefore = Utxo(chain).Values.Where(item => item.Output.AssetId == null).Sum(item => item.Output.Amount);
+                var prePurchaseBlocks = Copy(chain.Blocks.ToArray());
                 chain.AddBlock(new[] { purchase });
                 Check(nativeBefore - Utxo(chain).Values.Where(item => item.Output.AssetId == null).Sum(item => item.Output.Amount) == purchase.Fee, "approval-free launch fee has no validator payout and reduces native UTXOs");
                 Check(purchase.TransactionApproval == null && new Blockchain(Copy(chain.Blocks.ToArray())).IsValid(), "unsigned launch block confirms and replays without validator votes");
@@ -135,6 +136,36 @@ internal static class PrivateCoinInitialLaunchRegression
                 reserves = chain.GetUnspentOutputs(new[] { q }).Where(item => item.TransactionId == purchase.Id && item.OutputIndex < 2).OrderBy(item => item.OutputIndex).ToArray();
                 var swap = Complete(TokenExchange.PrepareSwap(chain, new Transaction[0], Keys(last), reserves[0], reserves[1], InitialLaunch.ProviderPublicKey, 1, 1, 1, l, 1), last);
                 Reject(() => chain.ValidatePendingTransactions(new[] { swap }), "pool cannot negotiate before the launch target");
+                var buyerStake = chain.GetActiveValidators().Single(item => item.ValidatorId == b);
+                Check(buyerStake.LockedAmount == purchase.Outputs[2].Amount && buyerStake.RewardAddress == b,
+                    "confirmed purchase automatically becomes validator collateral without a staking transaction");
+                var localBuyerStake = buyer.CreateValidatorStake(b, buyerStake.LockedAmount);
+                var allValidators = validators.Concat(new[] { localBuyerStake }).ToArray();
+                var unrelated = provider.CreateTransaction(chain, new Transaction[0], l, Blockchain.OneCoin, 1);
+                unrelated.TransactionApproval = chain.CreateTransactionApproval(unrelated, new[] { unrelated }, new[] { localBuyerStake });
+                Check(unrelated.TransactionApproval != null && unrelated.TransactionApproval.CollateralTransactionId == purchase.Id &&
+                    unrelated.TransactionApproval.CollateralOutputIndex == 2, "locked purchased POVIX can approve unrelated transfers");
+                var validatorBlock = chain.AddProofOfStakeBlock(new[] { unrelated }, allValidators);
+                Check(validatorBlock.Validators.Any(item => item.ValidatorId == b) &&
+                    new Blockchain(Copy(chain.Blocks.ToArray())).IsValid(), "launch buyer signs and confirms a real block that replays correctly");
+                Check(chain.GetInitialLaunchLockedBalance(new[] { b }) == purchase.Outputs[2].Amount,
+                    "validation and block rewards never unlock or consume the purchased collateral");
+                var prematureUnlock = Copy(spend); prematureUnlock.Kind = TransactionKind.StakeUnlock; prematureUnlock.Fee = 0;
+                prematureUnlock.Outputs[0].Amount = locked.Output.Amount; Resign(prematureUnlock, buyer, 1);
+                Reject(() => chain.ValidatePendingTransactions(new[] { prematureUnlock }), "stake unlock cannot bypass the launch target lock");
+                var globalStakes = typeof(Blockchain).GetMethod("StakesFromUtxo", BindingFlags.Static | BindingFlags.NonPublic);
+                Check(!((ValidatorStake[])globalStakes.Invoke(null, new object[] { Utxo(chain), 25 })).Any(item => item.ValidatorId == b),
+                    "legacy consensus does not activate launch collateral");
+                var mixed = CloneUtxo(Utxo(chain));
+                var manual = mixed.Values.First(item => item.TransactionKind == TransactionKind.StakeLock);
+                manual = (UnspentOutput)typeof(object).GetMethod("MemberwiseClone", Hidden).Invoke(manual, null);
+                Set(manual, "Output", Copy(manual.Output));
+                Set(manual, "ValidatorPublicKey", Public(buyer, b)); Set(manual, "ValidatorRewardAddress", b);
+                Set(manual, "ValidatorOwnedAddresses", new[] { b });
+                mixed["test-manual-buyer-stake"] = manual;
+                var merged = ((ValidatorStake[])globalStakes.Invoke(null, new object[] { mixed, Blockchain.ConsensusVersion })).Where(item => item.ValidatorId == b).ToArray();
+                Check(merged.Length == 1 && merged[0].LockedAmount == manual.Output.Amount + purchase.Outputs[2].Amount,
+                    "manual and launch collateral combine into one validator without duplicated identities");
                 // Boundary fixture: exercise the actual consensus transition from purchase 29949,
                 // without mining 29948 unrelated registrations and purchases in every test run.
                 var boundary = CloneUtxo(utxo);
@@ -152,6 +183,8 @@ internal static class PrivateCoinInitialLaunchRegression
                 Reject(() => Apply(final, CloneUtxo(boundary), 24), "v24 blocks cannot accept the v25 approval-free launch purchase");
                 Apply(final, boundary);
                 Check(boundary[final.Id + ":0"].Output.Amount == InitialLaunch.PrincipalSupply && boundary[final.Id + ":1"].Output.Amount == InitialLaunch.MaximumPurchases * InitialLaunch.FundingUnit && !boundary[final.Id + ":0"].InitialLaunchCollecting, "purchase 29950 atomically opens exactly 179700 POVIX against 29950 funding units");
+                Check(!((ValidatorStake[])globalStakes.Invoke(null, new object[] { boundary, Blockchain.ConsensusVersion })).Any(item => item.ValidatorId == b),
+                    "target activation automatically releases launch collateral from the active validator set");
                 Apply(spend, CloneUtxo(boundary)); Check(true, "earlier purchase becomes spendable exactly at activation");
                 Reject(() => Apply(Copy(final), CloneUtxo(boundary)), "no purchase is accepted after activation");
                 var activeA = boundary[final.Id + ":0"]; var activeB = boundary[final.Id + ":1"];
@@ -224,8 +257,8 @@ internal static class PrivateCoinInitialLaunchRegression
                 Resign(remove, last, 1); Apply(remove, boundary);
                 Check(boundary[remove.Id + ":0"].PoolParticipation.Total == InitialLaunch.PrincipalSupply && boundary[remove.Id + ":0"].PoolParticipation.Shares.Count == 0,
                     "additional provider withdraws its entire position at the current reserves including accrued fees");
-                var before = new Blockchain(Copy(chain.Blocks.Take(chain.Blocks.Count - 1).ToArray()));
-                Check(before.GetInitialLaunchStatus().Purchases == 0 && before.GetInitialLaunchLockedBalance(new[] { b }) == 0, "replay of the parent chain revokes the orphaned purchase and lock");
+                var before = new Blockchain(prePurchaseBlocks);
+                Check(before.GetInitialLaunchStatus().Purchases == 0 && before.GetInitialLaunchLockedBalance(new[] { b }) == 0 && !before.GetActiveValidators().Any(item => item.ValidatorId == b), "replay of the parent chain revokes the orphaned purchase and lock");
                 var query = new BlockchainQueryApi(chain);
                 Check(query.GetLedger(0, 1000).Single(entry => entry.TransactionId == creation.Id).IssuedAmount == InitialLaunch.ReserveSupply + Blockchain.WalletCreationReward && chain.Blocks[0].Rules.TotalSupplyAtomicUnits == Blockchain.MaximumSupply + ProofOfStake.MaximumSupply, "public emission accounting includes the launch reserve exactly once");
             }

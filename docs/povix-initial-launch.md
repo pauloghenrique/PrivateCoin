@@ -130,3 +130,25 @@ o valor sai dos 600 POVIX do titular e fica sob a chave do validador destinatár
 Depois das garantias confirmadas, os validadores podem aprovar as transferências
 normais do titular para os demais participantes. A aprovação de transferências
 não é dispensada para inicializar a rede.
+
+
+## Garantia automática do comprador (consenso v26)
+
+Após a confirmação da compra inicial de 1 USDC local por 6 POVIX brutos, a saída
+líquida (`6 POVIX - taxa`) permanece bloqueada e passa automaticamente a integrar
+a garantia do validador identificado pela chave que assinou a compra. Não há
+transação manual de staking nem gasto dessa saída para ativar a validação.
+O dono precisa manter a carteira e o nó conectados para assinar aprovações e blocos;
+continua proibido validar operações das quais participe.
+
+A saída pode respaldar aprovações e votos de blocos, mas não transferências,
+trocas ou desbloqueios de staking antes da meta. Recompensas são saídas separadas
+e não consomem a garantia comprada. Garantia manual da mesma identidade é somada
+sem criar dois validadores. Ao confirmar a compra que atinge a meta, o bloqueio
+do lançamento deixa de valer: o saldo comprado fica movimentável e sai da garantia
+automática, enquanto eventual staking manual continua ativo.
+
+Esta é uma alteração de consenso v26. O genesis compromete a versão e os fontes
+do Core, portanto a identidade da rede muda. DEX e nós precisam da mesma versão;
+esta alteração não migra automaticamente cadeias v25 e não deve ser tratada como
+uma atualização apenas visual. O PR não publica nem reinicia a rede existente.

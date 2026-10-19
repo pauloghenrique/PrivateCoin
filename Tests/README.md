@@ -702,3 +702,15 @@ TransactionApproval, restauração da cadeia, verificações de assinatura e
 limites preservadas, além da rejeição de compras v25 em blocos v24. A fixture
 do mercado também minera a compra aceita sem aprovações e verifica seu recibo
 confirmado. Transferências e negociações AMM mantêm aprovação dos validadores.
+
+
+## POVIX do lançamento como garantia automática (v26)
+
+A suíte `PrivateCoinInitialLaunchRegression.cs` cobre a elegibilidade automática
+após confirmação da compra, aprovação de uma transferência real, assinatura de
+bloco PoS e replay, preservação do bloqueio após recompensas, rejeição de
+StakeUnlock antecipado, união com staking manual sem duplicar identidade e saída
+da garantia automática quando a meta é atingida. Use os comandos da seção
+Lançamento inicial POVIX com o Core v26 compilado pelo `.csproj` (incluindo os
+recursos de compromisso dos fontes). Consulte `docs/povix-initial-launch.md`
+para a mudança de identidade da rede.
