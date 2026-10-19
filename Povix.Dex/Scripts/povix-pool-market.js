@@ -110,7 +110,7 @@
         fields.forEach(([label, value]) => { const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; list.append(term, detail); });
         card.appendChild(list);
         const note = document.createElement('p');
-        note.textContent = 'Supply em circulação soma todos os saldos confirmados nas pools e carteiras da rede, incluindo valores bloqueados. Supply total é a oferta total atual do token. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
+        note.textContent = 'Supply em circulação soma todos os saldos confirmados nas pools e carteiras da rede, incluindo valores bloqueados. Supply total é o limite máximo de emissão do token, incluindo tokens ainda não emitidos. Holders são endereços com saldo confirmado, sem as reservas de pools; um titular pode ter vários endereços. Data em horário local.';
         card.appendChild(note); info.appendChild(card);
         chart(data.candles, data.interval);
         byId('market-connection').setAttribute('data-state', 'ready');

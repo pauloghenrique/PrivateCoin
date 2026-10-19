@@ -47,6 +47,7 @@ class Element {
     assert.equal(tokenFields()[1], '0,00000000 POVIX');
     assert.equal(tokenFields()[3], '1234567890,12345678 POVIX', 'Total supply is independent from the circulating balance');
     assert.match(element('market-token-info').children[0].children[2].textContent, /incluindo valores bloqueados/);
+    assert.match(element('market-token-info').children[0].children[2].textContent, /limite máximo de emissão.*ainda não emitidos/);
     assert.equal(tokenFields()[7], 'Não disponível');
 
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
