@@ -71,8 +71,20 @@
         }
         return result;
     }
-    function reset() {
-        if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
+    function reset(keepDialog) {
+        if (keepDialog !== true && byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
+        if (byId('exchange-status')) {
+            byId('exchange-status').hidden = true;
+            byId('transaction-review-content').hidden = false;
+            byId('transaction-review-dialog').setAttribute('aria-labelledby', 'review-title');
+            byId('transaction-review-dialog').setAttribute('aria-describedby', 'review-description');
+            transactionId = null; receiptVersion = null;
+            for (const id of ['transaction', 'receive', 'fee', 'confirmations', 'block', 'hash', 'state', 'connectivity']) {
+                byId('exchange-status-' + id).textContent = '';
+            }
+            byId('exchange-status-receipt').removeAttribute('href');
+            try { sessionStorage.removeItem(receiptStorageKey); } catch (_) { }
+        }
         if (managing) byId('pool-management-fee').hidden = true;
         draft = null; expected = null; signatures = null; byId('sign-actions').hidden = true;
         byId('exchange-review').replaceChildren(); byId('review-title').textContent = 'Revise sua operação'; update();
@@ -458,7 +470,12 @@
     function showReceipt(id) {
         const url = receipt(id);
         transactionId = id; receiptVersion = null;
+        byId('transaction-review-content').hidden = true;
         byId('exchange-status').hidden = false;
+        const dialog = byId('transaction-review-dialog');
+        dialog.setAttribute('aria-labelledby', 'exchange-status-title');
+        dialog.setAttribute('aria-describedby', 'exchange-status-description');
+        if (!dialog.open) dialog.showModal?.();
         byId('exchange-status-transaction').textContent = id;
         byId('exchange-status-receipt').href = url;
         renderReceipt({ status: 'pending' });
@@ -495,15 +512,17 @@
                 draft.operation === 'swap' ? app.dataset.submitSwapUrl : app.dataset.submitPoolUrl,
                 { draftId: draft.draftId, signatures });
             const receiptUrl = receipt(result.transactionId);
-            if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
             if (integrated) {
-                showReceipt(result.transactionId);
-                reset(); document.dispatchEvent(new Event('povix-pool-updated'));
+                reset(true); showReceipt(result.transactionId); document.dispatchEvent(new Event('povix-pool-updated'));
                 refreshReceipt();
-            } else { location.assign(receiptUrl); }
+            } else {
+                if (byId('transaction-review-dialog')?.open) byId('transaction-review-dialog').close();
+                location.assign(receiptUrl);
+            }
         } catch (error) { if (error.rejected) reset(); message(error.message + (error.rejected ? '' : ' Repita o mesmo envio para recuperar o resultado.')); }
         finally { busy = false; update(); if (integrated) refresh(); }
     });
+    byId('close-exchange-result')?.addEventListener('click', () => { if (!busy) reset(); });
     byId('edit-exchange').addEventListener('click', reset);
     byId('transaction-review-dialog')?.addEventListener('cancel', event => { event.preventDefault(); if (!busy) reset(); });
     function filterPoolList() {
@@ -650,7 +669,7 @@
     for (const id of ['pool-form', 'swap-form', 'exchange-priority']) { byId(id).addEventListener('input', update); byId(id).addEventListener('change', update); }
     for (const id of ['pool-form', 'swap-form']) byId(id).addEventListener('invalid', () => message('Preencha os ativos, as quantidades e o mínimo a receber com valores válidos.'), true);
     if (integrated) {
-        try { const saved = sessionStorage.getItem(receiptStorageKey); if (/^[0-9a-f]{64}$/.test(saved || '')) showReceipt(saved); } catch (_) { }
+        try { sessionStorage.removeItem(receiptStorageKey); } catch (_) { }
         refreshReceipt(); setInterval(refreshReceipt, 5000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReceipt(); });
     }

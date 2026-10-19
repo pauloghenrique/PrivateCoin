@@ -7,21 +7,6 @@
       data-status-url="@Url.Action("Status", new { id = "__id__" })" data-receipt-url="@Url.Action("Details", new { id = "__id__" })">
     <div class="network-strip" aria-live="polite"><span id="network-state" class="status-pill">Aguardando a rede</span><span><strong id="network-peers">@Model.PeerCount</strong> pares</span><span>Bloco <strong id="network-height">@Model.Height</strong></span></div>
     <div id="app-message" class="notice" role="alert" hidden></div>
-    <section id="exchange-status" class="card receipt-card" hidden aria-labelledby="exchange-status-title">
-        <h2 id="exchange-status-title" role="status" aria-live="polite">Troca enviada à rede.</h2>
-        <p id="exchange-status-description">Aguardando validação e confirmação em bloco.</p>
-        <dl class="receipt-data">
-            <dt>Status</dt><dd id="exchange-status-state">Pendente</dd>
-            <dt>Transação</dt><dd id="exchange-status-transaction" class="address-input"></dd>
-            <dt>Recebimento</dt><dd id="exchange-status-receive">—</dd>
-            <dt>Taxa da rede em POVIX</dt><dd id="exchange-status-fee">—</dd>
-            <dt>Confirmações em bloco</dt><dd id="exchange-status-confirmations">0</dd>
-            <dt>Bloco</dt><dd id="exchange-status-block">Aguardando confirmação</dd>
-            <dt>Hash do bloco</dt><dd id="exchange-status-hash" class="address-input">—</dd>
-        </dl>
-        <p id="exchange-status-connectivity" class="muted-text"></p>
-        <a id="exchange-status-receipt">Ver comprovante completo →</a>
-    </section>
     <div class="pool-trading-stack">
         <div>
             <form id="pool-form" class="card token-form" hidden>
