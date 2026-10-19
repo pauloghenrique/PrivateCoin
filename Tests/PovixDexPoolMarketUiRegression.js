@@ -17,7 +17,7 @@ class Element {
     // Model SVG visibility as an attribute, independent from an HTML hidden property.
     element('market-candles').setAttribute('hidden', '');
     element('pool-market').dataset = { url: '/Liquidity/MarketData?poolId=test' };
-    const data = { pool: { assetA: { symbol: 'POVIX', decimals: 8 }, assetB: { symbol: 'TKN', decimals: 2 }, reserveAAtomic: '100000000', reserveBAtomic: '10000', status: 'available', statusMessage: 'Disponível' }, price: 0.01, interval: 300, updatedUtc: new Date().toISOString(), peerCount: 2, ledgerTotal: 1,
+    const data = { pool: { assetA: { id: 'povix', symbol: 'POVIX', decimals: 8 }, assetB: { id: 'tkn', symbol: 'TKN', decimals: 2 }, reserveAAtomic: '100000000', reserveBAtomic: '10000', status: 'available', statusMessage: 'Disponível' }, price: 0.01, interval: 300, updatedUtc: new Date().toISOString(), peerCount: 2, ledgerTotal: 1,
         candles: [{ time: 1700000000, open: 0.01, high: 0.0105, low: 0.0095, close: 0.0101 }], ledger: [{ time: 1700000000, operation: 'swap', status: 'pending', deltaAAtomic: '123456789012345678', deltaBAtomic: '-100', transactionId: '<script>bad</script>', blockHeight: null }] };
     const document = { hidden: false, getElementById: element, createElement: () => new Element(), createElementNS: () => new Element(), addEventListener: () => {} };
     vm.runInNewContext(fs.readFileSync('Povix.Dex/Scripts/povix-pool-market.js', 'utf8'), { document, window: { addEventListener: () => {} }, location: { href: 'https://example.test/' }, URL, AbortController, setTimeout: callback => { timers.set(++sequence, callback); return sequence; }, clearTimeout: key => timers.delete(key), fetch: async url => { calls++; assert.equal(new URL(url).searchParams.get('interval'), element('market-interval').value); return { ok: !failing, status: 503, json: async () => data }; } });
@@ -25,11 +25,28 @@ class Element {
     assert.equal(element('market-pair').textContent, 'POVIX / TKN');
     assert.equal(element('market-price').textContent, '1 POVIX = 0,01 TKN');
     assert.equal(element('market-reserve-b').textContent, '100,00 TKN');
-    assert.equal(element('market-token-info').children.length, 2);
+    assert.equal(element('market-token-info').children.length, 1);
     assert.equal(element('market-label-a').textContent, 'Reserva de POVIX');
     assert.equal(element('market-label-b').textContent, 'Reserva de TKN');
     assert.equal(element('market-connection')['data-state'], 'ready');
     assert.equal(element('market-token-info').children[0].children[0].textContent, 'POVIX (POVIX)');
+    const tokenFields = () => element('market-token-info').children[0].children[1].children.map(item => item.textContent);
+    assert.deepEqual(tokenFields().filter((_, index) => index % 2 === 1), Array(4).fill('Não disponível'));
+    data.tokens = [
+        { id: 'tkn', name: 'Token B', symbol: 'TKN', decimals: 2, supplyAtomic: '999' },
+        { id: 'povix', name: 'POVIX', symbol: 'POVIX', decimals: 8, supplyAtomic: '123456789012345678', circulatingSupplyAtomic: '100000000', holderCount: 0, createdUtc: '2026-10-01T12:00:00Z' }
+    ];
+    await element('market-refresh').listeners.click();
+    assert.equal(element('market-token-info').children.length, 1, 'Only token A is displayed even when tokens arrive reordered');
+    assert.deepEqual(tokenFields().slice(0, 6), ['Supply total', '1234567890,12345678 POVIX', 'Supply em circulação', '1,00000000 POVIX', 'Número de holders', '0']);
+    assert(!tokenFields().includes('Token B'));
+    assert.notEqual(tokenFields()[7], 'Não disponível');
+    data.tokens[1].createdUtc = 'invalid';
+    data.tokens[1].circulatingSupplyAtomic = '0';
+    await element('market-refresh').listeners.click();
+    assert.equal(tokenFields()[3], '0,00000000 POVIX');
+    assert.equal(tokenFields()[7], 'Não disponível');
+
     const trading = fs.readFileSync('Povix.Dex/Views/Liquidity/_PoolTrading.cshtml', 'utf8');
     const market = fs.readFileSync('Povix.Dex/Views/Liquidity/Market.cshtml', 'utf8');
     assert.match(market, /Html.Partial\("_PoolTrading", Model\)/);
