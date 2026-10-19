@@ -634,3 +634,28 @@ provedores adicionais podem remover sua própria participação pelas regras nor
 
 A mudança exige Core, Desktop e DEX compatíveis com consenso v29 e altera a
 identidade da rede comprometida no genesis; não migra o histórico anterior.
+
+
+## Recompensa ao confirmar registros no lançamento (consenso v30)
+
+Durante a captação da pool principal, um bloco contendo apenas novos registros
+de carteira pode ser assinado por um ou mais validadores elegíveis já confirmados,
+sem participação nos registros. Com um único criador, ele recebe a recompensa de
+bloco vigente integral; com vários, vale a divisão normal. A garantia pode ser
+os 600 POVIX iniciais ainda bloqueados, compras confirmadas ou staking elegível.
+O Desktop usa esse caminho remunerado e mantém os registros em lotes separados.
+A recompensa fica disponível como saída separada, sem consumir a garantia.
+
+Sem validador elegível, o bootstrap continua sem recompensa de validador.
+A criação da pool principal e a primeira compra mantêm suas exceções sem
+recompensa. Recibos de registro antigo e operações comuns não ganham o mínimo
+especial de um validador. Após a meta, registros voltam ao mínimo normal de dois.
+Não há pagamento retroativo para blocos já confirmados sem recompensa.
+
+Core, Desktop e DEX precisam da versão v30, que altera o compromisso do genesis
+e a identidade da rede. Esta mudança não migra nem reinicia a cadeia publicada.
+
+A recompensa é contabilizada na emissão de validadores já prevista, limitada a
+17.820.000 POVIX, além dos 360.000 POVIX iniciais. O teto total permanece
+18.180.000 POVIX: cada pagamento aumenta a oferta emitida e reduz o orçamento
+não emitido, sem debitar a reserva da pool ou ampliar o limite.

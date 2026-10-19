@@ -102,6 +102,11 @@ class PrivateCoinLaunchValidatorsRegression
         foreach(var vote in normalBlock.Validators) vote.VoteSignature=Sign(vote.ValidatorId==ee?e:f,(string)Call("CreateVotePayload",normalBlock));
         var oneNormal=Copy(normalBlock);oneNormal.Validators.RemoveAt(1);
         Reject(()=>Call("ValidateProofOfStakeBlock",oneNormal,previousHash,state,chain.Blocks.ToList()),"one validator cannot produce an ordinary post-activation block");
+        var oneRegistration = Copy(oneNormal);
+        var newWallet = new Wallet();
+        oneRegistration.Transactions[1] = chain.CreateWalletCreationTransaction(newWallet.CreateReceiveAddress(), new Transaction[0]);
+        oneRegistration.TransactionValidations.Clear();
+        Reject(()=>Call("ValidateProofOfStakeBlock",oneRegistration,previousHash,state,chain.Blocks.ToList()),"one validator cannot claim registration rewards after launch activation");
         Call("ValidateProofOfStakeBlock",normalBlock,previousHash,state,chain.Blocks.ToList());
         Call("Apply",normal,state,false,true,Blockchain.ConsensusVersion,nextHeight);
         Check(normalReward.Outputs.Sum(item=>item.Amount)==ProofOfStake.GetBlockReward(nextHeight),"post-activation ordinary block pays the unchanged scheduled reward");

@@ -750,3 +750,13 @@ durante a captação e depois da compra que ativa a pool. A fixture
 `PovixInitialLaunchMarketFixture.cs` verifica os bloqueios nos serviços DEX e que
 compras da pool principal continuam disponíveis. `PovixDexOwnedPoolsRegression.js`
 verifica botões bloqueados e liberação após a meta.
+
+
+## Recompensa de bloco no registro Desktop (v30)
+
+`PrivateCoinDesktopRegistrationRegression.cs` confirma um novo registro com
+apenas a garantia automática dos 600 POVIX e verifica recompensa disponível,
+garantia preservada, ausência de crédito pendente, rejeição de pagamento repetido
+e replay. `PrivateCoinInitialLaunchRegression.cs` conserva a cobertura de vários
+validadores. `PrivateCoinLaunchValidatorsRegression.cs` rejeita a exceção de
+um único validador para registros após a meta.
