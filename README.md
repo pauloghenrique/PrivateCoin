@@ -562,26 +562,33 @@ e clientes devem ser atualizados juntos. O hash dos fontes do Core continua
 a integrar a identidade da rede conforme a configuração existente.
 
 
-## Lançamento inicial nativo — consenso v25
+## Lançamento inicial nativo — consenso v28
 
 As regras executáveis e os exemplos de uso estão em [docs/povix-initial-launch.md](docs/povix-initial-launch.md).
-A confirmação da 1ª carteira completa os 600 POVIX gratuitos e cria automaticamente
+A confirmação da 1ª carteira credita 600 POVIX bloqueados até a meta e cria automaticamente
 a pool com 359.400 POVIX na reserva. A primeira carteira recebe 100 USDC locais e 1.000.000 de USDT local.
 Cada uma das primeiras 10.000 identidades registradas recebe 100 USDC, incluindo
 a primeira, sem ultrapassar 1.000.000 USDC emitidos. O crédito depende da confirmação
 do registro e não se repete ao reabrir ou recuperar a mesma identidade. Após o limite,
 novos registros continuam sem crédito USDC. A nova regra altera o genesis e requer
-nós/DEX/Desktop compatíveis com v25; não migra saldos da cadeia anterior.
+nós/DEX/Desktop compatíveis com v28; não migra saldos da cadeia anterior.
 Esses tokens têm seis casas decimais, IDs reservados e oferta fixa, sem ponte,
 lastro externo, emissão adicional, pausa ou queima administrativa.
 O par automático usa **USDC local**; USDT local continua transferível como ativo separado.
 
 Cada identidade registrada pode comprar uma vez: 1 token local por 6 POVIX brutos, com a taxa da rede descontada desse recebimento.
 O valor líquido fica bloqueado e não é necessário ter POVIX antes da compra.
-A compra dispensa aprovação dos validadores, mas exige assinaturas válidas,
-saldo USDC e confirmação em bloco com prova de trabalho. A taxa descontada
-sem validador de transação não gera saída de pagamento e reduz os POVIX
-em UTXOs; não é redistribuída à carteira ou ao minerador.
+A primeira compra confirma sem validador, pois ainda não existem recibos de
+lançamento bloqueados. As compras seguintes exigem aprovação e bloco assinado
+por pelo menos uma identidade não participante que possua POVIX bloqueados
+numa compra já confirmada. Um único detentor elegível pode produzir o bloco,
+mesmo com outros detentores indisponíveis. Recebe a recompensa vigente do bloco
+(integral quando atua sozinho) e a taxa da compra que aprovou. Sem validador na
+primeira compra, a taxa descontada não tem destinatário e sai de circulação.
+Blocos desse regime contêm somente compras do lançamento. As assinaturas, saldo
+USDC e uma participação por identidade continuam obrigatórios. Ao atingir a
+meta, a elegibilidade dos recibos termina: a rede mantém a tabela normal de
+recompensas e o mínimo normal de dois validadores com staking para negociações.
 A primeira carteira recompensada também pode participar. Após 29.950 compras, restam 179.700 POVIX e 29.950 unidades do
 ativo escolhido na pool; os compradores são desbloqueados e as trocas são liberadas.
 Não existe prazo ou devolução antecipada. Identidade significa a chave do endereço

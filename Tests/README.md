@@ -726,3 +726,17 @@ proibição de autoaprovação, replay e liberação dos dois tipos de saldo na 
 Use os comandos da seção Lançamento inicial POVIX com Core v27. Os blocos de
 bootstrap na fixture remuneram os validadores para financiar operações posteriores
 sem desbloquear a recompensa inicial.
+
+## Validadores com recibos bloqueados do lançamento (v28)
+
+```sh
+mcs -out:work/LaunchValidators.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Runtime.Serialization Tests/PrivateCoinLaunchValidatorsRegression.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/LaunchValidators.exe
+```
+
+Verifica bootstrap sem validador, elegibilidade de recibo confirmado, aprovação
+assinada, bloco com um criador, recompensa integral mais taxa, subconjunto de
+detentores disponíveis, replay, rejeição de assinatura/peso adulterado e preservação
+da garantia automática das operações comuns durante a captação. Uma fixture UTXO próxima da meta valida aprovação
+e voto do último bloco, bloqueio permanente principal e fim dos direitos do
+lançamento na ativação. Não minera 29.950 compras nem substitui teste de rede.
