@@ -714,3 +714,15 @@ da garantia automática quando a meta é atingida. Use os comandos da seção
 Lançamento inicial POVIX com o Core v26 compilado pelo `.csproj` (incluindo os
 recursos de compromisso dos fontes). Consulte `docs/povix-initial-launch.md`
 para a mudança de identidade da rede.
+
+
+## Primeira recompensa em garantia até a meta (v27)
+
+A suíte `PrivateCoinInitialLaunchRegression.cs` agora inicializa os validadores
+com a primeira recompensa bloqueada e compras confirmadas, sem gastar os 600 POVIX.
+Confere bloqueio, garantia automática, recompensas de bloco para primeira carteira
+e compradores, aprovação por chave correspondente, rejeição de uso por outra chave,
+proibição de autoaprovação, replay e liberação dos dois tipos de saldo na meta.
+Use os comandos da seção Lançamento inicial POVIX com Core v27. Os blocos de
+bootstrap na fixture remuneram os validadores para financiar operações posteriores
+sem desbloquear a recompensa inicial.

@@ -51,7 +51,7 @@ namespace PrivateCoin.Core
                 new TransactionOutput { AssetId = UsdcTokenId, Amount = 0, OneTimeAddress = provider },
                 new TransactionOutput { AssetId = UsdcTokenId, Amount = WalletUsdcReward, OneTimeAddress = recipient },
                 new TransactionOutput { AssetId = UsdtTokenId, Amount = FundingTokenSupply, OneTimeAddress = recipient },
-                new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = recipient } } };
+                new TransactionOutput { Amount = Blockchain.WalletCreationReward, OneTimeAddress = recipient, InitialLaunchLocked = true } } };
             tx.Id = tx.CalculateId(); return tx;
         }
         internal static long NextWalletUsdcReward(IDictionary<string, UnspentOutput> utxo)
@@ -93,14 +93,15 @@ namespace PrivateCoin.Core
             if (tx.InitialLaunchIdentity != null && tx.Kind != TransactionKind.InitialLaunchPurchase)
                 throw new InvalidOperationException("Only an initial launch purchase may carry its wallet identity proof.");
             for (int i = 0; i < tx.Outputs.Count; i++)
-                if (tx.Outputs[i].InitialLaunchLocked && (tx.Kind != TransactionKind.InitialLaunchPurchase || i != 2))
-                    throw new InvalidOperationException("Only purchased initial POVIX can use the launch lock.");
+                if (tx.Outputs[i].InitialLaunchLocked && !(tx.Kind == TransactionKind.InitialLaunchPurchase && i == 2 ||
+                    version >= 27 && tx.Kind == TransactionKind.InitialLaunchCreate && i == 4))
+                    throw new InvalidOperationException("Only initial wallet rewards and purchased initial POVIX can use the launch lock.");
             foreach (var input in tx.Inputs)
             {
                 UnspentOutput source;
                 if (!utxo.TryGetValue(input.TransactionId + ":" + input.OutputIndex.ToString(CultureInfo.InvariantCulture), out source)) continue;
                 if (source.OutputIndex < 0) throw new InvalidOperationException("Protocol state cannot be spent.");
-                if (!IsUnlocked(source, utxo)) throw new InvalidOperationException("Purchased POVIX remain locked until the launch target is reached.");
+                if (!IsUnlocked(source, utxo)) throw new InvalidOperationException("Initial POVIX rewards and purchases remain locked until the launch target is reached.");
             }
         }
 

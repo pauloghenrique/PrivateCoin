@@ -888,7 +888,7 @@ namespace PrivateCoin.Desktop
         {
             var queue = SnapshotPending();
             initialLaunchLabel.Text = WalletRegistration.LaunchStatus(blockchain, queue);
-            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX bloqueados por 1 USDC local. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
+            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Os 600 POVIX da primeira carteira e os POVIX comprados ficam em garantia automática de validação e criação de blocos até a meta. Cada identidade compra uma vez: 6 POVIX bloqueados por 1 USDC local. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
         }
 
         private void RefreshValidatorState()

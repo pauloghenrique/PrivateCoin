@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 26;
+        public const int ConsensusVersion = 27;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -694,7 +694,7 @@ namespace PrivateCoin.Core
                     !ProofOfStake.VerifyVote(record.PublicKey, CreateVotePayload(block), record.VoteSignature))
                     throw new InvalidOperationException("Invalid individual validator vote signature.");
                 bool collateralExists = StakesFromUtxo(collateral, block.ConsensusVersion).Any(item =>
-                    item.PublicKey == record.PublicKey && item.RewardAddress == record.RewardAddress &&
+                    item.ValidatorId == record.ValidatorId && item.RewardAddress == record.RewardAddress &&
                     item.LockedAmount == record.LockedAmount);
                 if (!collateralExists) throw new InvalidOperationException("The validator collateral is not globally locked on chain.");
             }
@@ -746,13 +746,13 @@ namespace PrivateCoin.Core
                 var collateral = BuildPendingUtxo(BuildUtxo(), pending, blocks, transaction.Id);
                 ValidatorStake[] globallyEligible = ExcludeTransactionParticipants(StakesFromUtxo(collateral), new[] { transaction }, false).ToArray();
                 ValidatorStake[] owned = localValidators.Where(local => globallyEligible.Any(global =>
-                    global.ValidatorId == local.ValidatorId && global.PublicKey == local.PublicKey &&
+                    global.ValidatorId == local.ValidatorId && (global.PublicKey == null || global.PublicKey == local.PublicKey) &&
                     global.RewardAddress == local.RewardAddress && global.LockedAmount == local.LockedAmount)).ToArray();
                 if (owned.Length == 0) return null;
                 Block anchor = blocks.Last();
                 ValidatorStake validator = SelectTransactionValidator(owned, transaction, anchor.Hash, anchor.Height + 1);
                 UnspentOutput locked = collateral.Values.First(item => IsValidatorCollateral(item, collateral, ConsensusVersion) &&
-                    item.ValidatorPublicKey == validator.PublicKey && item.ValidatorRewardAddress == validator.RewardAddress);
+                    CollateralIdentity(item) == validator.ValidatorId && item.ValidatorRewardAddress == validator.RewardAddress);
                 var validation = new TransactionApproval { AnchorHeight = anchor.Height, AnchorHash = anchor.Hash,
                     CollateralTransactionId = locked.TransactionId, CollateralOutputIndex = locked.OutputIndex,
                     Proof = new TransactionValidation { TransactionId = transaction.Id, ValidatorId = validator.ValidatorId,
@@ -830,11 +830,12 @@ namespace PrivateCoin.Core
                 history[validation.AnchorHeight].Hash != validation.AnchorHash ||
                 !collateral.TryGetValue(Key(validation.CollateralTransactionId, validation.CollateralOutputIndex), out locked) ||
                 !IsValidatorCollateral(locked, collateral, consensusVersion) || locked.Output.Amount <= 0 ||
-                proof.TransactionId != transaction.Id || proof.PublicKey != locked.ValidatorPublicKey ||
+                proof.TransactionId != transaction.Id || (locked.ValidatorPublicKey != null && proof.PublicKey != locked.ValidatorPublicKey) ||
+                proof.ValidatorId != CollateralIdentity(locked) ||
                 proof.RewardAddress != locked.ValidatorRewardAddress || proof.ValidatorId != Crypto.Sha256(proof.PublicKey))
                 throw new InvalidOperationException("A movement requires a valid approval backed by locked tokens.");
             var validator = StakesFromUtxo(collateral, consensusVersion).Single(item =>
-                item.PublicKey == proof.PublicKey && item.RewardAddress == proof.RewardAddress);
+                item.ValidatorId == proof.ValidatorId && item.RewardAddress == proof.RewardAddress);
             if (!ExcludeTransactionParticipants(new[] { validator }, new[] { transaction }, false).Any() ||
                 !ProofOfStake.VerifyVote(proof.PublicKey, CreateTransactionApprovalPayload(transaction, validation), proof.Signature))
                 throw new InvalidOperationException("Invalid movement validator signature or participation.");
@@ -927,20 +928,27 @@ namespace PrivateCoin.Core
         private static bool IsValidatorCollateral(UnspentOutput item, IDictionary<string, UnspentOutput> utxo, int version)
         {
             return item.TransactionKind == TransactionKind.StakeLock ||
-                version >= LaunchValidatorVersion && item.OutputIndex == 2 && item.Output.AssetId == null &&
-                item.Output.Amount > 0 && item.Output.InitialLaunchLocked && !InitialLaunch.IsUnlocked(item, utxo) &&
-                !string.IsNullOrEmpty(item.ValidatorPublicKey);
+                version >= LaunchValidatorVersion && item.Output.AssetId == null && item.Output.Amount > 0 &&
+                item.Output.InitialLaunchLocked && !InitialLaunch.IsUnlocked(item, utxo) &&
+                (item.OutputIndex == 2 && !string.IsNullOrEmpty(item.ValidatorPublicKey) ||
+                 version >= 27 && item.OutputIndex == 4 && item.Output.Amount == WalletCreationReward);
         }
+
+        // The first wallet registration commits its address rather than a public key.
+        // Its validator must reveal the matching key in a signed vote/approval.
+        private static string CollateralIdentity(UnspentOutput item) =>
+            item.ValidatorPublicKey == null ? item.Output.OneTimeAddress : Crypto.Sha256(item.ValidatorPublicKey);
 
         private static ValidatorStake[] StakesFromUtxo(IDictionary<string, UnspentOutput> utxo, int version = ConsensusVersion)
         {
             return utxo.Values.Where(item => IsValidatorCollateral(item, utxo, version))
-                .GroupBy(item => item.ValidatorPublicKey, StringComparer.Ordinal)
+                .GroupBy(CollateralIdentity, StringComparer.Ordinal)
                 .Select(group => {
                     var primary = group.FirstOrDefault(item => item.TransactionKind == TransactionKind.StakeLock) ?? group.First();
-                    return new ValidatorStake(Crypto.Sha256(primary.ValidatorPublicKey), primary.ValidatorRewardAddress,
+                    return new ValidatorStake(group.Key, primary.ValidatorRewardAddress,
                         group.Aggregate(0L, (sum, item) => checked(sum + item.Output.Amount)),
-                        group.SelectMany(item => item.ValidatorOwnedAddresses).Distinct(StringComparer.Ordinal), primary.ValidatorPublicKey, null);
+                        group.SelectMany(item => item.ValidatorOwnedAddresses).Distinct(StringComparer.Ordinal),
+                        group.Select(item => item.ValidatorPublicKey).FirstOrDefault(key => key != null), null);
                 }).OrderBy(item => item.ValidatorId, StringComparer.Ordinal).ToArray();
         }
 
@@ -1245,8 +1253,8 @@ namespace PrivateCoin.Core
                     PoolParticipation = i < 2 ? transaction.PoolParticipation?.Copy() : null,
                     PoolBurnPolicy = i < 2 ? transaction.PoolBurnPolicy?.Copy() : null,
                     ValidatorPublicKey = i == 2 && transaction.Kind == TransactionKind.InitialLaunchPurchase ? transaction.InitialLaunchIdentity.PublicKey : i == 0 ? transaction.ValidatorPublicKey : null,
-                    ValidatorRewardAddress = i == 2 && transaction.Kind == TransactionKind.InitialLaunchPurchase ? transaction.Outputs[2].OneTimeAddress : i == 0 ? transaction.ValidatorRewardAddress : null,
-                    ValidatorOwnedAddresses = i == 2 && transaction.Kind == TransactionKind.InitialLaunchPurchase ? new List<string> { transaction.Outputs[2].OneTimeAddress } : i == 0 ? transaction.ValidatorOwnedAddresses : null });
+                    ValidatorRewardAddress = i == 4 && transaction.Kind == TransactionKind.InitialLaunchCreate ? transaction.Outputs[4].OneTimeAddress : i == 2 && transaction.Kind == TransactionKind.InitialLaunchPurchase ? transaction.Outputs[2].OneTimeAddress : i == 0 ? transaction.ValidatorRewardAddress : null,
+                    ValidatorOwnedAddresses = i == 4 && transaction.Kind == TransactionKind.InitialLaunchCreate ? new List<string> { transaction.Outputs[4].OneTimeAddress } : i == 2 && transaction.Kind == TransactionKind.InitialLaunchPurchase ? new List<string> { transaction.Outputs[2].OneTimeAddress } : i == 0 ? transaction.ValidatorOwnedAddresses : null });
         }
 
         private static void AddValidationFee(Transaction transaction, IDictionary<string, UnspentOutput> utxo)

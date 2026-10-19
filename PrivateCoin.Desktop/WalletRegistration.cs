@@ -31,7 +31,7 @@ namespace PrivateCoin.Desktop
             if (!IsRegistration(tx)) throw new ArgumentException("Operação não é um registro de carteira.");
             long reward = Reward(tx).Amount;
             if (tx.Kind == TransactionKind.InitialLaunchCreate)
-                return "A primeira carteira receberá " + Coins(reward) + " POVIX após a confirmação. A mesma operação cria a pool com " +
+                return "A primeira carteira receberá " + Coins(reward) + " POVIX bloqueados após a confirmação, como garantia automática de validação e criação de blocos até a meta da pool. A mesma operação cria a pool com " +
                     Coins(InitialLaunch.ReserveSupply) + " POVIX e credita 100 USDC locais e 1.000.000 de USDT local nesta carteira.";
             if (reward == 0 && tx.Outputs.Count == 2) return "Registro com 100 USDC locais, disponíveis após confirmação em bloco.";
             return reward == 0 ? "Registro sem recompensa em POVIX: os 600 POVIX são exclusivos da primeira carteira confirmada." :
@@ -41,7 +41,7 @@ namespace PrivateCoin.Desktop
         {
             var state = chain.GetInitialLaunchStatus();
             if (!state.Created) return pending.Any(tx => tx.Kind == TransactionKind.InitialLaunchCreate) ?
-                "600 POVIX e criação da pool aguardando confirmação." : "Primeira carteira: 600 POVIX e criação automática da pool.";
+                "600 POVIX bloqueados e pool aguardando confirmação." : "Primeira carteira: 600 POVIX em garantia até a meta da pool.";
             if (state.Active) return "Pool aberta: negociação liberada; liquidez principal permanente.";
             return "Pool criada · " + state.Purchases.ToString("N0", CultureInfo.CurrentCulture) + "/" + InitialLaunch.MaximumPurchases.ToString("N0", CultureInfo.CurrentCulture) +
                 " compras\nReserva de lançamento: " + Coins(state.Remaining) + " POVIX";
