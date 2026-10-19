@@ -1,4 +1,4 @@
-# Lançamento inicial POVIX — consenso v22
+# Lançamento inicial POVIX — consenso v28
 
 Implementação no Core: `InitialLaunch`, `TokenExchange`, `Blockchain` e `Wallet`.
 A criação é automática na confirmação da 1ª carteira recompensada; a compra está disponível pelas APIs assinadas do Core. A carteira
@@ -39,8 +39,8 @@ Não existe soma de reservas USDC e USDT no mesmo par nem troca do par na capta�
 Cada identidade registrada pode comprar uma vez, inclusive a primeira, que
 recebeu a distribuição inicial. Uma compra deposita exatamente 1 unidade do
 token local selecionado e retira exatamente 6 POVIX da reserva de venda. Esses
-6 POVIX aparecem como um UTXO do comprador, bloqueado pelo consenso.
-A taxa de rede é paga à parte em POVIX livres; os 6 comprados não podem pagá-la.
+6 POVIX brutos têm a taxa de rede descontada antes de gerar o UTXO líquido
+do comprador, bloqueado pelo consenso. Não é necessário ter POVIX livres para comprar.
 
 A identidade é a chave original do endereço que recebeu a operação `WalletCreate`.
 A compra exige uma assinatura dessa chave além das assinaturas dos fundos. Usar
@@ -120,13 +120,21 @@ taxas e contabilização pública. Os testes de fronteira usam uma fixture do es
 antes da última compra e executam o validador real; não mineram 29.950 compras.
 
 
-## Inicialização dos validadores com garantias automáticas (v27)
+## Inicialização dos validadores com garantias automáticas (v28)
 
 Os 600 POVIX da primeira carteira ficam bloqueados até a meta, mas já contam
-como garantia de validação e criação de blocos. A primeira compra confirmada de
-outra identidade cria a segunda garantia automática. Registros e compras iniciais
-continuam auto-validados; a rede não precisa gastar os 600 POVIX para inicializar
-outros validadores. Blocos PoS exigem o conjunto elegível e ao menos dois validadores,
+como garantia de validação e criação de blocos. A primeira compra confirma sem aprovação nem recompensa de bloco para um
+validador. Sua taxa descontada sai de circulação por não haver destinatário.
+
+As compras seguintes exigem aprovação e bloco assinado por compradores com
+recibos bloqueados já confirmados. Para esses blocos, exclusivamente de compras,
+basta um comprador elegível e não participante, mesmo havendo outros offline.
+Os 600 iniciais e o staking manual não substituem um recibo de compra nesse regime.
+O criador sozinho recebe a recompensa de bloco vigente integral; a taxa da compra
+vai ao validador que a aprovou. Com vários validadores, vale a divisão normal.
+Assinaturas, saldo USDC e limite de uma compra por identidade continuam obrigatórios.
+
+As demais operações mantêm o conjunto elegível e o mínimo de dois validadores,
 sem participação nas operações, conforme as regras de consenso existentes.
 
 A primeira garantia registra o endereço da carteira. O voto ou a aprovação revela
@@ -155,10 +163,15 @@ sem criar dois validadores. Ao confirmar a compra que atinge a meta, o bloqueio
 do lançamento deixa de valer: o saldo comprado fica movimentável e sai da garantia
 automática, enquanto eventual staking manual continua ativo.
 
-Esta é uma alteração de consenso v26. O genesis compromete a versão e os fontes
-do Core, portanto a identidade da rede muda. DEX e nós precisam da mesma versão;
-esta alteração não migra automaticamente cadeias v25 e não deve ser tratada como
-uma atualização apenas visual. O PR não publica nem reinicia a rede existente.
+Ao atingir a meta, termina a elegibilidade automática dos recebimentos e dos
+600 POVIX iniciais. Ambos ficam livres, e o staking manual continua ativo.
+As negociações seguem o mínimo normal de dois validadores e a mesma tabela
+de recompensas vigente por altura, sem reinício da emissão.
+
+A regra atual exige consenso v28. O genesis compromete a versão e os fontes do
+Core, portanto a identidade da rede muda. DEX e nós precisam da mesma versão;
+esta alteração não migra automaticamente cadeias anteriores. O PR não publica
+nem reinicia a rede existente.
 
 
 ## Bloqueio da primeira recompensa (consenso v27)

@@ -629,23 +629,22 @@ namespace PrivateCoin.Desktop
                 {
                     await ApprovePendingTransactions();
                     Transaction[] ready = blockchain.GetApprovedTransactions(SnapshotPending()).ToArray();
-                    ValidatorStake[] confirmedValidators = blockchain.GetActiveValidators().ToArray();
                     Transaction[] batch = blockScheduler.SelectBatch(ready,
-                        candidate => candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate, confirmedValidators).Length >= 2).ToArray();
+                        candidate => Blockchain.HasCompatibleValidatorRules(candidate) && (candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate).Length >= Blockchain.MinimumValidatorsForTransactions(candidate))).ToArray();
                     if (batch.Length == 0) break;
 
-                    ValidatorStake[] activeValidators = EligibleValidators(batch, confirmedValidators);
+                    ValidatorStake[] activeValidators = EligibleValidators(batch);
                     bool selfValidatedOnly = batch.All(Blockchain.IsSelfValidatedOperation);
-                    if (!selfValidatedOnly && activeValidators.Length < 2)
+                    if (!selfValidatedOnly && activeValidators.Length < Blockchain.MinimumValidatorsForTransactions(batch))
                     {
-                        miningStatusLabel.Text = "Aguardando 2 validadores sem participação na transferência";
-                        Log("O bloco aguarda dois validadores elegíveis: remetentes e destinatários não podem criar nem confirmar o bloco.", false);
+                        miningStatusLabel.Text = "Aguardando " + Blockchain.MinimumValidatorsForTransactions(batch) + " validador(es) elegível(is)";
+                        Log("O bloco aguarda validadores elegíveis sem participação na operação.", false);
                         break;
                     }
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
                     Log("Criação de bloco iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) aprovada(s).", true);
 
-                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && activeValidators.Length < 2 ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < 2 || batch.Any(Blockchain.IsFirstLaunchPurchase)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -659,8 +658,8 @@ namespace PrivateCoin.Desktop
                         BlockValidator creator = block.Validators.Single(item => item.IsCreator);
                         decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
                         Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
-                            "”, confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) +
-                            " validador(es) e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
+                            "”" + (block.Validators.Count == 1 ? ", como único validador elegível neste bloco" : ", confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) + " validador(es)") +
+                            " e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
                     }
                     else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) validada(s): " + ShortId(block.Hash) + ".", true);
                     SaveState();
@@ -698,7 +697,7 @@ namespace PrivateCoin.Desktop
             {
                 Transaction[] pending = SnapshotPending();
                 if (blockchain.HasValidTransactionApproval(transaction, pending)) continue;
-                ValidatorStake[] active = blockchain.GetActiveValidators(pending).ToArray();
+                ValidatorStake[] active = blockchain.GetValidatorsForTransactions(new[] { transaction }).ToArray();
                 ValidatorStake[] owned = wallets.Where(wallet => !wallet.Wallet.IsParticipant(transaction))
                     .SelectMany(wallet => active.Where(stake => wallet.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress))
                         .Select(stake => wallet.Wallet.CreateValidatorStake(stake.RewardAddress, stake.LockedAmount))).ToArray();
@@ -711,16 +710,14 @@ namespace PrivateCoin.Desktop
             }
         }
 
-        private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions, ValidatorStake[] eligible)
+        private ValidatorStake[] EligibleValidators(IEnumerable<Transaction> transactions)
         {
             Transaction[] batch = transactions.ToArray();
-            return wallets.Where(item => eligible.Any(stake => item.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress)) &&
-                    !batch.Any(item.Wallet.IsParticipant))
-                .Select(item =>
-                {
-                    ValidatorStake stake = eligible.Single(value => item.Wallet.OwnedOneTimeAddresses.Contains(value.RewardAddress));
-                    return item.Wallet.CreateValidatorStake(stake.RewardAddress, stake.LockedAmount);
-                }).ToArray();
+            var eligible = blockchain.GetValidatorsForTransactions(batch);
+            return wallets.Where(item => !batch.Any(item.Wallet.IsParticipant))
+                .SelectMany(item => eligible.Where(stake => item.Wallet.OwnedOneTimeAddresses.Contains(stake.RewardAddress))
+                    .Select(stake => item.Wallet.CreateValidatorStake(stake.RewardAddress, stake.LockedAmount)))
+                .GroupBy(stake => stake.ValidatorId).Select(group => group.First()).ToArray();
         }
 
         private async void CreateTransactionButtonClick(object sender, EventArgs e)
@@ -888,7 +885,7 @@ namespace PrivateCoin.Desktop
         {
             var queue = SnapshotPending();
             initialLaunchLabel.Text = WalletRegistration.LaunchStatus(blockchain, queue);
-            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Os 600 POVIX da primeira carteira e os POVIX comprados ficam em garantia automática de validação e criação de blocos até a meta. Cada identidade compra uma vez: 6 POVIX bloqueados por 1 USDC local. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
+            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX brutos menos a taxa por 1 USDC local. Durante a captação, um comprador com POVIX bloqueados confirmados pode validar e criar blocos de compras. Após a meta, valem as regras normais de staking. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
         }
 
         private void RefreshValidatorState()

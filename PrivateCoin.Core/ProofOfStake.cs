@@ -175,12 +175,15 @@ namespace PrivateCoin.Core
             IEnumerable<ValidatorStake> confirmingValidators)
         {
             if (creator == null) throw new ArgumentNullException(nameof(creator));
-            ValidatorStake[] confirmers = Normalize(confirmingValidators);
+            if (confirmingValidators == null) throw new ArgumentNullException(nameof(confirmingValidators));
+            var candidates = confirmingValidators.ToArray();
+            ValidatorStake[] confirmers = candidates.Length == 0 ? candidates : Normalize(candidates);
             if (confirmers.Any(item => item.ValidatorId == creator.ValidatorId))
                 throw new ArgumentException("The creator cannot also confirm the same block.", nameof(confirmingValidators));
 
             long reward = GetBlockReward(height);
             if (reward == 0) return new ValidatorReward[0];
+            if (confirmers.Length == 0) return new[] { new ValidatorReward(creator.ValidatorId, creator.RewardAddress, reward, true) };
             long creatorAmount = reward * CreatorPercentage / 100L;
             long confirmerPool = reward - creatorAmount;
             long totalStake = confirmers.Aggregate(0L, (total, validator) => checked(total + validator.LockedAmount));
