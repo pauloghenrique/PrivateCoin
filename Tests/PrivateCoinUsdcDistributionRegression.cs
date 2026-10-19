@@ -20,7 +20,8 @@ class PrivateCoinUsdcDistributionRegression
     }
     public static void Main() {
         var chain = new Blockchain();
-        string first = new Wallet().CreateReceiveAddress(), second = new Wallet().CreateReceiveAddress();
+        var firstWallet = new Wallet();
+        string first = firstWallet.CreateReceiveAddress(), second = new Wallet().CreateReceiveAddress();
         var bootstrap = chain.CreateWalletCreationTransaction(first, new Transaction[0]);
         Check(bootstrap.Outputs[2].Amount == 100 * InitialLaunch.FundingUnit);
         chain.AddBlock(new[] { bootstrap });
@@ -29,7 +30,7 @@ class PrivateCoinUsdcDistributionRegression
         Check(pending.Outputs.Count == 2 && pending.Outputs[1].Amount == InitialLaunch.WalletUsdcReward);
         Check(chain.GetTokenBalance(new[] { second }, InitialLaunch.UsdcTokenId) == 0);
         Reject(() => chain.CreateWalletCreationTransaction(second, new[] { pending }));
-        chain.AddBlock(new[] { pending });
+        chain.AddProofOfStakeBlock(new[] { pending }, new[] { firstWallet.CreateValidatorStake(first, Blockchain.WalletCreationReward) });
         Check(chain.GetTokenBalance(new[] { second }, InitialLaunch.UsdcTokenId) == InitialLaunch.WalletUsdcReward);
         var state = (Dictionary<string, UnspentOutput>)typeof(Blockchain).GetMethod("BuildUtxo", Hidden).Invoke(chain, null);
         Reject(() => Apply(Registration(second, true), state));

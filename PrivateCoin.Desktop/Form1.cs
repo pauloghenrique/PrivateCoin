@@ -622,6 +622,7 @@ namespace PrivateCoin.Desktop
             blockProductionTimer.Stop();
             if (!networkReadiness.IsReady || !IsNetworkConnected()) return;
             miningInProgress = true;
+            bool waitingForRegistrationValidator = false;
             try
             {
                 RecoverWalletCreationReceipts();
@@ -634,12 +635,17 @@ namespace PrivateCoin.Desktop
                     Func<Transaction, bool> freshRegistration = tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null;
                     Transaction[] batch = blockScheduler.SelectBatch(ready,
                         candidate => (!separateRegistrations || !candidate.Any(freshRegistration) || candidate.All(freshRegistration)) &&
-                            Blockchain.HasCompatibleValidatorRules(candidate) && (candidate.All(Blockchain.IsSelfValidatedOperation) || EligibleValidators(candidate).Length >= blockchain.GetMinimumValidatorsForTransactions(candidate))).ToArray();
-                    if (batch.Length == 0) break;
+                            Blockchain.HasCompatibleValidatorRules(candidate) && (blockchain.CanCreateUnsignedBlock(candidate) || EligibleValidators(candidate).Length >= blockchain.GetMinimumValidatorsForTransactions(candidate))).ToArray();
+                    if (batch.Length == 0)
+                    {
+                        if (ready.Any(tx => tx.Kind == TransactionKind.WalletCreate && !blockchain.CanCreateUnsignedBlock(new[] { tx })))
+                            waitingForRegistrationValidator = true;
+                        break;
+                    }
 
                     ValidatorStake[] activeValidators = EligibleValidators(batch);
-                    bool selfValidatedOnly = batch.All(Blockchain.IsSelfValidatedOperation);
-                    if (!selfValidatedOnly && activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch))
+                    bool unsignedAllowed = blockchain.CanCreateUnsignedBlock(batch);
+                    if (!unsignedAllowed && activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch))
                     {
                         miningStatusLabel.Text = "Aguardando " + blockchain.GetMinimumValidatorsForTransactions(batch) + " validador(es) elegível(is)";
                         Log("O bloco aguarda validadores elegíveis sem participação na operação.", false);
@@ -648,7 +654,7 @@ namespace PrivateCoin.Desktop
                     miningStatusLabel.Text = "Criando e validando " + batch.Length.ToString(CultureInfo.InvariantCulture) + " transação(ões)...";
                     Log("Criação de bloco iniciada com " + batch.Length.ToString(CultureInfo.InvariantCulture) + " operação(ões) aprovada(s).", true);
 
-                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => selfValidatedOnly && (activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
+                    Block block = await Task.Run(() => ExecuteNetworkOperation(() => unsignedAllowed && (activeValidators.Length < blockchain.GetMinimumValidatorsForTransactions(batch)) ? blockchain.AddBlock(batch) : blockchain.AddProofOfStakeBlock(batch, activeValidators)));
                     lock (pendingSync)
                     {
                         foreach (Transaction transaction in batch)
@@ -680,7 +686,9 @@ namespace PrivateCoin.Desktop
             {
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
-                miningStatusLabel.Text = blockScheduler.RemainingWait > TimeSpan.Zero
+                miningStatusLabel.Text = waitingForRegistrationValidator
+                    ? "Registro aguardando bloco assinado de um validador elegível; recompensa preservada"
+                    : blockScheduler.RemainingWait > TimeSpan.Zero
                     ? "Aguardando até 20 operações ou " + Math.Ceiling(blockScheduler.RemainingWait.TotalSeconds).ToString(CultureInfo.InvariantCulture) + " s para criar o bloco"
                     : remaining.Length > 0
                         ? "Operações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "  |  Aguardando aprovações e validadores elegíveis"

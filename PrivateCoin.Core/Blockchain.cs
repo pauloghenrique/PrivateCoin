@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 31;
+        public const int ConsensusVersion = 32;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -67,8 +67,8 @@ namespace PrivateCoin.Core
                 var pending = OrderByFeePriority(transactions).ToList();
                 ValidateTransactions(pending);
                 ValidateBatch(pending);
-                if (pending.Any(item => !IsSelfValidatedOperation(item)))
-                    throw new InvalidOperationException("Transfers and token operations require signed validator approvals.");
+                if (!CanCreateUnsignedBlock(pending))
+                    throw new InvalidOperationException("This batch requires an eligible validator's signed block; it cannot confirm without its reward.");
                 var block = new Block { ConsensusVersion = ConsensusVersion, Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
                 Mine(block);
                 blocks.Add(block);
@@ -238,6 +238,7 @@ namespace PrivateCoin.Core
         public static bool HasCompatibleValidatorRules(IEnumerable<Transaction> transactions)
         {
             var batch = transactions.ToArray();
+            if (batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchCreate)) return batch.Length == 1;
             return !batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchPurchase) || IsLaunchValidationBatch(batch);
         }
 
@@ -249,6 +250,27 @@ namespace PrivateCoin.Core
             if (state == null || !state.Created || state.Active) return false;
             var batch = transactions.ToArray();
             return batch.Length > 0 && batch.All(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null);
+        }
+
+        private static bool RequiresSignedRegistrationBlock(IEnumerable<Transaction> transactions, IDictionary<string, UnspentOutput> utxo, int version)
+        {
+            var state = InitialLaunch.State(utxo);
+            if (state == null || !state.Created || state.Active) return false;
+            var registrations = transactions.Where(tx => tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null).ToArray();
+            if (registrations.Length == 0) return false;
+            var confirmed = StakesFromUtxo(utxo, version);
+            return registrations.Any(tx => ExcludeTransactionParticipants(confirmed, new[] { tx }).Any());
+        }
+
+        public bool CanCreateUnsignedBlock(IEnumerable<Transaction> transactions)
+        {
+            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
+            lock (sync)
+            {
+                var batch = transactions.ToArray();
+                return batch.Length > 0 && HasCompatibleValidatorRules(batch) && batch.All(IsSelfValidatedOperation) &&
+                    !RequiresSignedRegistrationBlock(batch, BuildUtxo(), ConsensusVersion);
+            }
         }
 
         public int GetMinimumValidatorsForTransactions(IEnumerable<Transaction> transactions)
@@ -395,7 +417,7 @@ namespace PrivateCoin.Core
         private static void ValidateBatch(IList<Transaction> transactions, int consensusVersion = ConsensusVersion)
         {
             if (consensusVersion >= 28 && !HasCompatibleValidatorRules(transactions))
-                throw new InvalidOperationException("Validated launch purchases require a launch-only block.");
+                throw new InvalidOperationException("Operations with different validator rules require separate blocks.");
             int minimum = consensusVersion >= VariableBatchVersion ? 1 : consensusVersion == BlockConfirmationVersion ? 1 : LegacyValidationsPerBlock;
             int maximum = consensusVersion >= VariableBatchVersion ? MaxOperationsPerBlock : minimum;
             if (transactions.Count < minimum || transactions.Count > maximum ||
@@ -719,6 +741,8 @@ namespace PrivateCoin.Core
                 {
                     ValidateBatch(block.Transactions, block.ConsensusVersion);
                     if (block.Transactions.Any(tx => !IsSelfValidatedOperation(tx))) throw new InvalidOperationException("Unsigned blocks can contain only self-validated operations.");
+                    if (block.ConsensusVersion >= 32 && RequiresSignedRegistrationBlock(block.Transactions, utxo, block.ConsensusVersion))
+                        throw new InvalidOperationException("A confirmed eligible validator must sign the registration block and receive its scheduled reward.");
                 }
                 if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.ConsensusVersion < SelfValidatedVersion && (block.Validators == null || block.Validators.Count == 0) &&
                     block.Transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate) && !block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))

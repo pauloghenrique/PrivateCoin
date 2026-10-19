@@ -30,7 +30,9 @@ class PrivateCoinLaunchValidatorsRegression
     public static void Main() {
         var chain=new Blockchain(); var a=new Wallet();var b=new Wallet();var c=new Wallet();var d=new Wallet();
         string aa=a.CreateReceiveAddress(),bb=b.CreateReceiveAddress(),cc=c.CreateReceiveAddress(),dd=d.CreateReceiveAddress();
-        foreach(var address in new[]{aa,bb,cc,dd}) chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])});
+        chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(aa,new Transaction[0])});
+        var founderStake = a.CreateValidatorStake(aa, Blockchain.WalletCreationReward);
+        foreach(var address in new[]{bb,cc,dd}) chain.AddProofOfStakeBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])}, new[]{founderStake});
         var first=a.CreateInitialLaunchPurchase(chain,new Transaction[0],aa,aa,1);
         Check(Blockchain.IsFirstLaunchPurchase(first)&&Blockchain.IsSelfValidatedOperation(first),"first purchase bootstraps without validators");
         Reject(()=>chain.AddProofOfStakeBlock(new[]{first},new ValidatorStake[0]),"first purchase cannot claim a validator block reward");

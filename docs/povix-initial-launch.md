@@ -243,3 +243,26 @@ compra. As garantias ficam bloqueadas até a meta e deixam de conferir elegibili
 automática na ativação; a liquidez principal continua permanente. Core, Desktop e
 DEX passam a consenso v31, alterando o compromisso do genesis e a identidade da
 rede; o PR não migra, reinicia nem publica a cadeia existente.
+
+
+## Registros aguardam a assinatura do validador (consenso v32)
+
+Durante a captação, havendo garantia confirmada elegível e não participante de
+um novo registro, esse registro exige bloco assinado com a recompensa vigente.
+Um nó sem a chave dessa garantia deve aguardar a confirmação pelo validador;
+a ausência de carteiras locais não autoriza mais confirmar sem recompensa.
+O Core aplica a regra também na verificação de cadeias recebidas, impedindo que
+um bloco concorrente sem assinatura suprima o pagamento. Misturar operações
+com o registro não contorna essa exigência.
+
+O Desktop usa a mesma decisão do Core e mostra que está aguardando o validador.
+O bootstrap inicial mantém seu caminho sem recompensa, antes de existir garantia
+confirmada, mas deve ocupar um bloco próprio. Registros seguintes que já estejam
+na fila aguardam esse bloco para usar a garantia recém-confirmada. A recompensa continua sendo uma por bloco, mesmo se ele registrar
+várias carteiras, dentro da tabela e do teto já previstos de 18.180.000 POVIX.
+Os 600 iniciais e a reserva principal permanecem preservados. Não há pagamento
+retroativo dos blocos anteriores.
+
+A regra exige consenso v32 em nós, Desktop e DEX, com nova identidade no genesis;
+não migra nem reinicia a rede existente. É preciso recompilar e distribuir os
+componentes atualizados a todos os nós que produzem blocos.
