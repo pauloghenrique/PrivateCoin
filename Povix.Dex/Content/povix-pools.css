@@ -56,3 +56,5 @@
 }
 
 .pool-create-choices { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.pool-create-choices a[aria-disabled="true"] { opacity:.45; cursor:not-allowed; box-shadow:none; }
