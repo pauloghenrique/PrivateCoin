@@ -34,6 +34,7 @@ namespace PrivateCoin.Desktop
         private System.Windows.Forms.Button tokensButton;
         private System.Windows.Forms.Button walletFolderButton;
         private System.Windows.Forms.Label initialLaunchLabel;
+        private System.Windows.Forms.Label launchLockedBalanceLabel;
 
         protected override void Dispose(bool disposing)
         {
@@ -57,6 +58,8 @@ namespace PrivateCoin.Desktop
             this.createWalletButton = CreateButton("Criar carteira", true);
             this.recoverWalletButton = CreateButton("Recuperar", false);
             this.balanceLabel = CreateValueLabel("0,00000000 POVIX");
+            this.launchLockedBalanceLabel = CreateMutedLabel("");
+            this.launchLockedBalanceLabel.Visible = false;
             this.newAddressButton = CreateButton("Novo endereço", false);
             this.copyAddressButton = CreateButton("Copiar", false);
             this.destinationTextBox = CreateTextBox("");
@@ -98,6 +101,11 @@ namespace PrivateCoin.Desktop
             balanceLabel.ForeColor = UiTheme.PrimaryDark;
             balanceLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             balanceLabel.SetBounds(326, 87, 286, 40);
+            launchLockedBalanceLabel.SetBounds(326, 128, 286, 20);
+            launchLockedBalanceLabel.Font = new System.Drawing.Font("Segoe UI", 8F);
+            launchLockedBalanceLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            launchLockedBalanceLabel.AutoEllipsis = true;
+            launchLockedBalanceLabel.ForeColor = UiTheme.PrimaryDark;
             AddFieldLabel(walletCard, "CRIAR OU RECUPERAR", 24, 137, 220);
             walletNameTextBox.SetBounds(24, 159, 292, 27);
             walletNameTextBox.PlaceholderTextCompat("Nome da nova carteira");
@@ -115,7 +123,7 @@ namespace PrivateCoin.Desktop
             feeComboBox.SetBounds(438, 287, 174, 28);
             feePolicyLabel.SetBounds(24, 323, 398, 22);
             createTransactionButton.SetBounds(438, 320, 174, 32);
-            walletCard.Controls.AddRange(new System.Windows.Forms.Control[] { walletComboBox, balanceLabel, walletNameTextBox,
+            walletCard.Controls.AddRange(new System.Windows.Forms.Control[] { walletComboBox, balanceLabel, launchLockedBalanceLabel, walletNameTextBox,
                 createWalletButton, recoverWalletButton, receiveAddressTextBox, copyAddressButton, newAddressButton,
                 destinationTextBox, amountTextBox, feeComboBox, feePolicyLabel, createTransactionButton, tokensButton, walletFolderButton });
             tokensButton.BringToFront();

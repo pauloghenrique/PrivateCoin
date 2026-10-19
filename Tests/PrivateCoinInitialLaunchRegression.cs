@@ -101,6 +101,8 @@ internal static class PrivateCoinInitialLaunchRegression
                 var reserves = chain.GetUnspentOutputs(new[] { q }).Where(item => item.TransactionId == status.ReserveTransactionId && item.OutputIndex < 2).OrderBy(item => item.OutputIndex).ToArray();
                 Check(reserves.Length == 2 && reserves[1].Output.Amount == 0 && reserves.All(item => item.InitialLaunchCollecting), "zero funding reserve is paired and locked before the first purchase");
                 Check(chain.GetBalance(new[] { b }) == 0, "launch buyer starts with zero POVIX");
+                Check(WalletBalanceSummary.Read(chain, buyer, new Transaction[0]).LaunchLockText == string.Empty,
+                    "Desktop has no launch lock notice before receiving a purchase");
                 var purchase = buyer.CreateInitialLaunchPurchase(chain, new Transaction[0], b, b, 1);
                 Check(purchase.Outputs[2].Amount == InitialLaunch.PurchaseAmount - purchase.Fee && purchase.Inputs.Count == 3,
                     "purchase funds only USDC and deducts fee from the six-POVIX receipt");
@@ -123,6 +125,11 @@ internal static class PrivateCoinInitialLaunchRegression
                 Check(chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply - InitialLaunch.PurchaseAmount && chain.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount - purchase.Fee, "first buyer owns six locked POVIX and sale reserve decreases by six");
                 Check(!chain.GetSpendableOutputs(new[] { b }, new Transaction[0]).Any(item => item.TransactionId == purchase.Id && item.OutputIndex == 2), "locked purchase is excluded from spendable balances");
                 Check(WalletBalanceSummary.Read(chain, buyer, new Transaction[0]).LaunchLocked == InitialLaunch.PurchaseAmount - purchase.Fee, "desktop displays locked launch balance separately");
+                var desktopBalance = WalletBalanceSummary.Read(chain, buyer, new Transaction[0]);
+                Check(desktopBalance.LaunchLockText.Contains("Bloqueado no lançamento") &&
+                    desktopBalance.LaunchLockDescription.Contains("validação e criação de blocos") &&
+                    desktopBalance.LaunchLockDescription.Contains("atingir a meta"),
+                    "Desktop announces the received balance as already locked validator collateral until the pool target");
                 var restored = new Blockchain(Copy(chain.Blocks.ToArray()));
                 Check(restored.IsValid() && restored.GetInitialLaunchLockedBalance(new[] { b }) == InitialLaunch.PurchaseAmount - purchase.Fee, "serialization and full-chain replay preserve escrow, supply and wallet locks");
                 Reject(() => chain.ValidatePendingTransactions(new[] { buyer.CreateInitialLaunchPurchase(chain, new Transaction[0], b, b, 1) }), "registered wallet cannot buy twice");
@@ -259,6 +266,8 @@ internal static class PrivateCoinInitialLaunchRegression
                     "additional provider withdraws its entire position at the current reserves including accrued fees");
                 var before = new Blockchain(prePurchaseBlocks);
                 Check(before.GetInitialLaunchStatus().Purchases == 0 && before.GetInitialLaunchLockedBalance(new[] { b }) == 0 && !before.GetActiveValidators().Any(item => item.ValidatorId == b), "replay of the parent chain revokes the orphaned purchase and lock");
+                Check(WalletBalanceSummary.Read(before, buyer, new Transaction[0]).LaunchLockText == string.Empty,
+                    "Desktop clears the launch lock notice when the received purchase is removed by replay");
                 var query = new BlockchainQueryApi(chain);
                 Check(query.GetLedger(0, 1000).Single(entry => entry.TransactionId == creation.Id).IssuedAmount == InitialLaunch.ReserveSupply + Blockchain.WalletCreationReward && chain.Blocks[0].Rules.TotalSupplyAtomicUnits == Blockchain.MaximumSupply + ProofOfStake.MaximumSupply, "public emission accounting includes the launch reserve exactly once");
             }

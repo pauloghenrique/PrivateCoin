@@ -21,6 +21,12 @@ namespace PrivateCoin.Desktop
         public long PendingChange { get; }
         public long LaunchLocked { get; }
         public long Total => checked(Available + PendingChange + LaunchLocked);
+        public string LaunchLockText => LaunchLocked > 0
+            ? "Bloqueado no lançamento: " + ((decimal)LaunchLocked / Blockchain.OneCoin).ToString("N8", CultureInfo.CurrentCulture) + " POVIX"
+            : string.Empty;
+        public string LaunchLockDescription => LaunchLocked > 0
+            ? LaunchLockText + ". O recebimento já está em garantia para validação e criação de blocos. Só será liberado para movimentação quando a pool atingir a meta. Mantenha a carteira e o nó conectados para participar."
+            : string.Empty;
 
         public static WalletBalanceSummary Read(Blockchain chain, Wallet wallet, IEnumerable<Transaction> pending)
         {
