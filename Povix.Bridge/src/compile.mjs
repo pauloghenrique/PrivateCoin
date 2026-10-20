@@ -2,7 +2,8 @@ import solc from 'solc';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-export const root = fileURLToPath(new URL('../', import.meta.url));
+import { root } from './paths.mjs';
+export { root } from './paths.mjs';
 export function compile(source = "contracts/UsdtVault.sol", name = "UsdtVault") {
   const input = { language: 'Solidity', sources: { [name + '.sol']: { content: readFileSync(path.join(root, source), 'utf8') } }, settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'shanghai', outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } } } };
   const output = JSON.parse(solc.compile(JSON.stringify(input), { import: name => {
@@ -18,5 +19,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(path.join(root, 'build'), { recursive: true });
   writeFileSync(path.join(root, 'build/UsdtVault.json'), JSON.stringify(compile(), null, 2));
   writeFileSync(path.join(root, 'build/AssetVaultFactory.json'), JSON.stringify(compile('contracts/AssetVaultFactory.sol', 'AssetVaultFactory'), null, 2));
-  console.log('Compiled test vault and multi-asset factory.');
+  for (const name of ['ProductionVault', 'ProductionVaultFactory']) writeFileSync(path.join(root, 'build', name + '.json'), JSON.stringify(compile('contracts/' + name + '.sol', name), null, 2));
+  console.log('Compiled test and production vaults/factories.');
 }

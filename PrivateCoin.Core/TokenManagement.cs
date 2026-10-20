@@ -9,7 +9,7 @@ namespace PrivateCoin.Core
     {
         public static UnsignedTokenManagement Prepare(Blockchain chain, IEnumerable<Transaction> pending,
             IEnumerable<string> publicKeys, string tokenId, string operation, long amount, string destination,
-            string changeAddress, long fee, IEnumerable<string> excludedInputs = null, TokenPolicy bridgePolicy = null)
+            string changeAddress, long fee, IEnumerable<string> excludedInputs = null, TokenPolicy bridgePolicy = null, string bridgeDepositId = null, string bridgeBlockHash = null)
         {
             if (chain == null || pending == null || publicKeys == null) throw new ArgumentNullException();
             if ((fee < Blockchain.TransferFeeStep && !(NativeBridge.IsAssetId(tokenId) && fee == 0)) || fee > Blockchain.MaximumTransferFee || !TokenPolicy.Address(changeAddress))
@@ -39,7 +39,7 @@ namespace PrivateCoin.Core
             var funding = fee == 0 ? new List<UnspentOutput>() : Select(chain.GetSpendableOutputs(keys.Keys, queue).Where(available), fee);
             var selected = new List<UnspentOutput>(funding);
             var tx = new Transaction { Kind = TransactionKind.TokenManage, TimestampUtcTicks = DateTime.UtcNow.Ticks, Fee = fee,
-                TokenCommand = new TokenCommand { TokenId = tokenId, Operation = operation, Amount = amount, Revision = state.Revision, BridgePolicy = bridgePolicy?.Copy() },
+                TokenCommand = new TokenCommand { TokenId = tokenId, Operation = operation, Amount = amount, Revision = state.Revision, BridgePolicy = bridgePolicy?.Copy(), BridgeDepositId = bridgeDepositId, BridgeBlockHash = bridgeBlockHash },
                 TokenAuthorizations = admins.Select(address => new TokenAuthorization { PublicKey = keys[address] }).ToList() };
             if (operation == "mint") tx.Outputs.Add(new TransactionOutput { AssetId = tokenId, Amount = amount, OneTimeAddress = destination });
             if (operation == "burn")
@@ -75,7 +75,8 @@ namespace PrivateCoin.Core
         { transaction = tx; InputAddresses = Array.AsReadOnly(inputs); AdministratorAddresses = Array.AsReadOnly(administrators); }
         private Transaction Copy() => new Transaction { Kind = transaction.Kind, Fee = transaction.Fee, TimestampUtcTicks = transaction.TimestampUtcTicks,
             TokenCommand = new TokenCommand { TokenId = transaction.TokenCommand.TokenId, Operation = transaction.TokenCommand.Operation,
-                Amount = transaction.TokenCommand.Amount, Revision = transaction.TokenCommand.Revision, BridgePolicy = transaction.TokenCommand.BridgePolicy?.Copy() },
+                Amount = transaction.TokenCommand.Amount, Revision = transaction.TokenCommand.Revision, BridgePolicy = transaction.TokenCommand.BridgePolicy?.Copy(),
+                BridgeDepositId = transaction.TokenCommand.BridgeDepositId, BridgeBlockHash = transaction.TokenCommand.BridgeBlockHash },
             Inputs = transaction.Inputs.Select(input => new TransactionInput { TransactionId = input.TransactionId, OutputIndex = input.OutputIndex, PublicKey = input.PublicKey }).ToList(),
             Outputs = transaction.Outputs.Select(output => new TransactionOutput { Amount = output.Amount, AssetId = output.AssetId, OneTimeAddress = output.OneTimeAddress }).ToList(),
             TokenAuthorizations = transaction.TokenAuthorizations.Select(proof => new TokenAuthorization { PublicKey = proof.PublicKey }).ToList() };

@@ -1,10 +1,10 @@
-import { Contract, Wallet, JsonRpcProvider, getAddress, sha256, toUtf8Bytes, verifyTypedData } from 'ethers';
+import { Contract, Wallet, JsonRpcProvider, getAddress, sha256, toUtf8Bytes, verifyTypedData, keccak256, FetchRequest } from 'ethers';
 import { readFileSync, statSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { root } from './compile.mjs';
+import { root } from './paths.mjs';
 // Native ticks/int64 fields are signed. Preserve their exact JSON digits through JavaScript.
 export const parseJson = text => JSON.parse(text, (key, value, context) =>
   typeof value === 'number' && !Number.isSafeInteger(value) ? JSON.rawJSON(context.source) : value);
@@ -15,26 +15,38 @@ export const types = {
   Release: [{ name: 'burnId', type: 'bytes32' }, { name: 'recipient', type: 'address' }, { name: 'nativeAmount', type: 'uint256' }, { name: 'deadline', type: 'uint256' }],
   Pause: [{ name: 'paused', type: 'bool' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }]
 };
-export const domain = config => ({ name: 'POVIX USDT Bridge', version: '1', chainId: config.chainId, verifyingContract: config.bridge });
+export const domain = config => ({ name: config.mode === "production" ? "POVIX Asset Bridge" : "POVIX USDT Bridge", version: config.mode === "production" ? "2" : "1", chainId: config.chainId, verifyingContract: config.bridge });
 export const networkHash = config => sha256(toUtf8Bytes(config.nativeNetwork));
+export const productionTypes = { ...types, Release: [...types.Release, { name: 'nonce', type: 'uint256' }] };
+export const signingTypes = (c, kind) => ({ [kind]: (c.mode === 'production' ? productionTypes : types)[kind] });
 export function validateConfig(c) {
-  if (![97, 31337].includes(c.chainId) || typeof c.nativeNetwork !== 'string' || !c.nativeNetwork.startsWith('povix-mainnet-rules-v1-') ||
+  if (c.chainId === 56 && c.mode !== 'production') throw Error('Mainnet requires explicit production mode.');
+  if (![56, 97, 31337].includes(c.chainId) || typeof c.nativeNetwork !== 'string' || !c.nativeNetwork.startsWith('povix-mainnet-rules-v1-') ||
       !Number.isInteger(c.nativeConfirmations) || c.nativeConfirmations < 12 || !Number.isInteger(c.bscConfirmations) || c.bscConfirmations < 15 ||
-      (c.nativeToken !== protocolToken && (c.nativeToken !== representationId(c.chainId, c.asset) || !Number.isInteger(c.nativeDecimals) || c.nativeDecimals < 0 || c.nativeDecimals > 8 || !/^p[A-Z0-9]{1,9}$/.test(c.nativeSymbol))) || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < 3 ||
+      (c.nativeToken !== protocolToken && (c.nativeToken !== representationId(c.chainId, c.asset) || !Number.isInteger(c.nativeDecimals) || c.nativeDecimals < 0 || c.nativeDecimals > 8 || !/^p[A-Z0-9]{1,9}$/.test(c.nativeSymbol))) || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < (c.mode === "production" ? 2 : 3) ||
       c.nativeAdministrators.some(a => !/^[a-f0-9]{64}$/.test(a)) || new Set(c.nativeAdministrators).size !== c.nativeAdministrators.length ||
       !Number.isInteger(c.nativeThreshold) || c.nativeThreshold <= c.nativeAdministrators.length / 2 || c.nativeThreshold > c.nativeAdministrators.length ||
-      !Array.isArray(c.operators) || c.operators.length < 3 || c.operators.length > 10 ||
+      !Array.isArray(c.operators) || c.operators.length < (c.mode === "production" ? 2 : 3) || c.operators.length > 10 ||
       !Number.isInteger(c.threshold) || c.threshold <= c.operators.length / 2 || c.threshold > c.operators.length)
-    throw Error('Invalid test USDT bridge config; require 12 native / 15 BSC confirmations and majority operators.');
+    throw Error('Invalid bridge config; require 12 native / 15 BSC confirmations and majority operators.');
   const members = c.operators.map(getAddress);
   if (new Set(members).size !== members.length || members.includes('0x' + '0'.repeat(40))) throw Error('Invalid operator addresses.');
-  if (!/^[1-9][0-9]*$/.test(c.reserveCap) || !/^[1-9][0-9]*$/.test(c.dailyReleaseCap) || BigInt(c.dailyReleaseCap) > BigInt(c.reserveCap)) throw Error('Invalid caps (native 8-decimal atomic units).');
+  if (!/^[1-9][0-9]*$/.test(c.reserveCap) || !/^[1-9][0-9]*$/.test(c.dailyReleaseCap) || BigInt(c.dailyReleaseCap) > BigInt(c.reserveCap) || BigInt(c.reserveCap) > 9223372036854775807n) throw Error('Invalid caps (native 8-decimal atomic units).');
   for (const address of [c.asset, ...(c.bridge === null ? [] : [c.bridge])]) {
     if (!/^0x[a-f0-9]{40}$/.test(address) || /^0x0{40}$/.test(address)) throw Error('Use lowercase nonzero BSC addresses.');
   }
   const url = new URL(c.rpcUrl);
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) throw Error('Use HTTPS RPC or loopback.');
   if (typeof c.nativeSnapshot !== 'string') throw Error('Native snapshot path required.');
+  if (c.mode === 'production') {
+    if ((c.operators.length !== 2 && (c.operators.length < 5 || c.threshold < 3)) || (c.nativeAdministrators.length !== 2 && (c.nativeAdministrators.length < 5 || c.nativeThreshold < 3)) ||
+        c.nativeConfirmations < (c.chainId === 31337 ? 12 : 120) || c.bscConfirmations < (c.chainId === 31337 ? 15 : 64) || !Array.isArray(c.rpcUrls) || c.rpcUrls.length < 2 ||
+        new Set(c.rpcUrls).size !== c.rpcUrls.length || !/^0x[a-f0-9]{64}$/.test(c.assetCodeHash || '') ||
+        c.bridge !== null && !/^0x[a-f0-9]{64}$/.test(c.vaultCodeHash || '') || c.factory && !/^0x[a-f0-9]{64}$/.test(c.factoryCodeHash || '')) throw Error('Production requires two unanimous operators or five-plus majority operators, 120 native / 64 BNB confirmations, independent RPCs and pinned code hashes.');
+    const urls = c.rpcUrls.map(value => new URL(value));
+    if (!c.rpcUrls.includes(c.rpcUrl) || urls.some(url => url.protocol !== 'https:' && !(c.chainId === 31337 && url.protocol === 'http:' && ['127.0.0.1','localhost'].includes(url.hostname))) ||
+        c.chainId === 56 && new Set(urls.map(url => url.hostname)).size < 2) throw Error('Use two independent HTTPS RPC hosts.');
+  }
   return c;
 }
 export function journal(filename, config) {
@@ -52,22 +64,33 @@ export function recordDecision(db, id, value) {
   if (old && old.payload !== payload) throw Error('Conflicting authorization for an existing burn.');
   db.prepare('INSERT OR IGNORE INTO decisions VALUES (?, ?)').run(id, payload);
 }
-export async function connect(config, signer = null) {
+export function rpcProvider(url) {
+  const request = new FetchRequest(url); request.timeout = 15000;
+  return new JsonRpcProvider(request, undefined, { cacheTimeout: -1 });
+}
+export async function connect(config, signer = null, suppliedProvider = null) {
   validateConfig(config);
-  if (!config.bridge) throw Error('Deploy the test vault and pin its address first.');
-  const provider = new JsonRpcProvider(config.rpcUrl);
-  if ((await provider.getNetwork()).chainId !== BigInt(config.chainId)) throw Error('Wrong RPC chain.');
-  const artifact = JSON.parse(readFileSync(path.join(root, 'build/UsdtVault.json'), 'utf8'));
-  const contract = new Contract(config.bridge, artifact.abi, signer ? signer.connect(provider) : provider);
-  if (await provider.getCode(config.bridge) === '0x' || await contract.nativeNetwork() !== networkHash(config) ||
-      await contract.nativeToken() !== '0x' + config.nativeToken || getAddress(await contract.asset()) !== getAddress(config.asset) ||
-      await contract.threshold() !== BigInt(config.threshold) || await contract.reserveCap() !== BigInt(config.reserveCap) ||
-      await contract.dailyReleaseCap() !== BigInt(config.dailyReleaseCap)) throw Error('Vault does not match pinned configuration.');
-  for (let i = 0; i < config.operators.length; i++) if (getAddress(await contract.operators(i)) !== getAddress(config.operators[i])) throw Error('Unexpected operators.');
-  const token = new Contract(config.asset, ['function decimals() view returns(uint8)'], provider);
-  const decimals = Number(await token.decimals()), expected = config.nativeToken === protocolToken ? 8 : config.nativeDecimals;
-  if (decimals > 18 || expected !== Math.min(8, decimals) || await contract.scale() !== 10n ** BigInt(decimals - expected)) throw Error('Invalid asset precision.');
-  return { provider, contract };
+  if (!config.bridge) throw Error('Deploy the configured vault and pin its address first.');
+  const provider = suppliedProvider || rpcProvider(config.rpcUrl);
+  try {
+    if ((await provider.getNetwork()).chainId !== BigInt(config.chainId)) throw Error('Wrong RPC chain.');
+    const artifact = JSON.parse(readFileSync(path.join(root, config.mode === 'production' ? 'build/ProductionVault.json' : 'build/UsdtVault.json'), 'utf8'));
+    const contract = new Contract(config.bridge, artifact.abi, signer ? signer.connect(provider) : provider);
+    if (await provider.getCode(config.bridge) === '0x' || await contract.nativeNetwork() !== networkHash(config) ||
+        await contract.nativeToken() !== '0x' + config.nativeToken || getAddress(await contract.asset()) !== getAddress(config.asset) ||
+        await contract.threshold() !== BigInt(config.threshold) || await contract.reserveCap() !== BigInt(config.reserveCap) ||
+        await contract.dailyReleaseCap() !== BigInt(config.dailyReleaseCap)) throw Error('Vault does not match pinned configuration.');
+    for (let i = 0; i < config.operators.length; i++) if (getAddress(await contract.operators(i)) !== getAddress(config.operators[i])) throw Error('Unexpected operators.');
+    if (config.mode === 'production') {
+      if (keccak256(await provider.getCode(config.asset)) !== config.assetCodeHash || keccak256(await provider.getCode(config.bridge)) !== config.vaultCodeHash ||
+          await contract.bridgeVersion() !== 2n || await contract.releaseDelay() !== 86400n) throw Error('Production bytecode/version/delay mismatch.');
+    }
+    if (config.mode === 'production' && config.factory && keccak256(await provider.getCode(config.factory)) !== config.factoryCodeHash) throw Error('Production factory bytecode mismatch.');
+    const token = new Contract(config.asset, ['function decimals() view returns(uint8)'], provider);
+    const decimals = Number(await token.decimals()), expected = config.nativeToken === protocolToken ? 8 : config.nativeDecimals;
+    if (decimals > 18 || expected !== Math.min(8, decimals) || await contract.scale() !== 10n ** BigInt(decimals - expected)) throw Error('Invalid asset precision.');
+    return { provider, contract };
+  } catch (error) { if (!suppliedProvider) await provider.destroy(); throw error; }
 }
 export function native(config, command, request, keysFile) {
   if (Date.now() - statSync(config.nativeSnapshot).mtimeMs > 300000) throw Error('Refresh the independent native snapshot (older than five minutes).');
@@ -81,11 +104,12 @@ export function native(config, command, request, keysFile) {
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 export async function loadWallet(filename) {
+  if (process.platform !== 'win32' && (statSync(filename).mode & 0o077) !== 0) throw Error('Operator keystore must be private (chmod 600).');
   if (!process.env.BRIDGE_KEYSTORE_PASSWORD) throw Error('Set BRIDGE_KEYSTORE_PASSWORD locally to unlock the encrypted EVM keystore.');
   return Wallet.fromEncryptedJson(readFileSync(filename, 'utf8'), process.env.BRIDGE_KEYSTORE_PASSWORD);
 }
 export function sortSignatures(config, kind, value, signatures) {
-  const recovered = signatures.map(signature => ({ signature, address: verifyTypedData(domain(config), { [kind]: types[kind] }, value, signature) }));
+  const recovered = signatures.map(signature => ({ signature, address: verifyTypedData(domain(config), signingTypes(config, kind), value, signature) }));
   recovered.sort((a, b) => BigInt(a.address) < BigInt(b.address) ? -1 : 1);
   const allowed = new Set(config.operators.map(getAddress));
   if (recovered.length < config.threshold || new Set(recovered.map(s => s.address)).size !== recovered.length || recovered.some(s => !allowed.has(s.address))) throw Error('Invalid operator quorum.');
@@ -105,6 +129,7 @@ export async function verifyDeposit(provider, contract, config, transactionHash,
   return { depositId: decoded.args.depositId, recipient: decoded.args.nativeRecipient.slice(2), amount: decoded.args.nativeAmount.toString(), blockHash: block.hash };
 }
 export async function prepareMint(db, provider, contract, config, reference, keysFile, fee, nativeCall = native) {
+  if (config.mode === 'production' || config.chainId === 56) throw Error('Use independent production proposals/signatures instead of consolidated keys.');
   if (!/^[a-f0-9]{64}$/.test(config.nativeToken || '')) throw Error('Pin a native token before preparing issuance.');
   const deposit = await verifyDeposit(provider, contract, config, reference.transactionHash, reference.logIndex);
   db.exec('BEGIN IMMEDIATE');
@@ -130,6 +155,7 @@ export async function resolveAssetConfig(base, asset) {
   if (base.nativeToken !== protocolToken) throw Error('Resolve assets from the primary pUSDT bridge configuration.');
   await connect(base);
   asset = getAddress(asset).toLowerCase();
+  if (base.mode === 'production') throw Error('Use an explicitly reviewed per-asset production configuration.');
   if (!base.factory || !/^0x[a-f0-9]{40}$/.test(base.factory)) throw Error('Pin the test factory address.');
   const provider = new JsonRpcProvider(base.rpcUrl);
   const factory = new Contract(base.factory, ['function nativeNetwork() view returns(bytes32)', 'function vaults(address) view returns(address)', 'function representation(address) view returns(bytes32)'], provider);

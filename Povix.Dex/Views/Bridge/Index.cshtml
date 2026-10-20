@@ -1,17 +1,17 @@
 @{ ViewBag.Title = "Swap BNB → POVIX"; }
 <main id="bridge-app" data-config-url="@Url.Action("Configuration", "Bridge")">
     <div class="page-intro"><span class="eyebrow">PONTE BNB → POVIX</span><h1>Traga seus tokens para a POVIX.</h1><p>Deposite um token BNB compatível e receba sua representação lastreada na POVIX.</p></div>
-    <div class="notice"><strong>Ambiente de teste · BNB Smart Chain Testnet</strong><p>Use somente tokens de teste. Tokens com taxa de transferência ou saldo variável não são suportados. A ponte ainda não opera com USDT real. A emissão de pUSDT depende da confirmação do depósito e da validação pelos operadores.</p></div>
+    <div class="notice"><strong id="bridge-environment">Verificando ambiente da ponte…</strong><p id="bridge-environment-note">Aguarde a validação da configuração antes de conectar sua carteira.</p></div>
     <form id="bridge-form" class="card token-form">
-        <section class="form-section"><h2>BNB <span aria-hidden="true">→</span> POVIX</h2><p>Conversão de 1 token original para 1 token representado. Você precisa de BNB de teste para pagar o gás.</p>
+        <section class="form-section"><h2>BNB <span aria-hidden="true">→</span> POVIX</h2><p>Conversão de 1 token original para 1 token representado. Você precisa de BNB da rede selecionada para pagar o gás.</p>
             <button id="bridge-connect" class="button" type="button" disabled>Conectar carteira BNB</button><p id="bridge-account">Carteira BNB desconectada</p>
             <div id="bridge-asset-picker" hidden>
-                <label for="bridge-asset">Contrato do token na BNB Testnet</label><input id="bridge-asset" placeholder="0x…" maxlength="42" autocomplete="off" />
+                <label for="bridge-asset">Contrato do token na BNB Smart Chain</label><input id="bridge-asset" placeholder="0x…" maxlength="42" autocomplete="off" />
                 <button id="bridge-load" class="button" type="button" disabled>Selecionar token / criar cofre</button>
                 <p>Um token novo terá um cofre próprio. Os operadores precisam ativá-lo antes do depósito. O registro na POVIX será preparado automaticamente após o primeiro depósito confirmado.</p>
             </div>
             <p id="bridge-selected">USDT → pUSDT</p>
-            <label for="bridge-amount">Enviar tokens de teste</label><input id="bridge-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" maxlength="32" required disabled />
+            <label for="bridge-amount">Enviar tokens</label><input id="bridge-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" maxlength="32" required disabled />
             <label for="bridge-recipient">Receber na carteira POVIX</label><input id="bridge-recipient" autocomplete="off" placeholder="Endereço público POVIX de 64 caracteres" minlength="64" maxlength="64" pattern="[0-9a-fA-F]{64}" required disabled />
             <p>Confira o endereço: o depósito não pode ser cancelado. Nunca informe sua chave privada.</p>
             <p>Você receberá: <strong id="bridge-quote">— pUSDT</strong></p>
@@ -23,6 +23,6 @@
     <p><a href="@Url.Action("Index", "Liquidity")">Ver pools POVIX/pUSDT</a></p>
 </main>
 @section scripts {
-    <script src="@Url.Content("~/Scripts/ethers-6.15.0.umd.min.js")"></script>
+    <script src="@Url.Content("~/Scripts/ethers-6.17.0.umd.min.js")"></script>
     <script src="@Scripts.Url("~/bundles/povix-bridge")"></script>
 }

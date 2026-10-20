@@ -21,6 +21,8 @@ namespace Povix.Bridge
     }
     [DataContract] public sealed class NativeConfig {
         [DataMember] public string nativeNetwork;
+        [DataMember] public string mode;
+        [DataMember] public string[] nativeSigningPublicKeys;
         [DataMember] public long chainId;
         [DataMember] public string bridge;
         [DataMember] public string nativeToken;
@@ -28,6 +30,7 @@ namespace Povix.Bridge
         [DataMember] public int nativeDecimals = 8;
         [DataMember] public string nativeSymbol;
         [DataMember] public string reserveCap;
+        [DataMember] public string dailyReleaseCap;
         [DataMember] public string[] nativeAdministrators;
         [DataMember] public int nativeThreshold;
         [DataMember] public int nativeConfirmations;
@@ -61,11 +64,27 @@ namespace Povix.Bridge
         static bool HexAddress(string value, int size) { return value != null && value.Length == size && value.All(c => c >= '0' && c <= '9' || c >= 'a' && c <= 'f'); }
         static bool BscAddress(string value) { return value != null && value.StartsWith("0x", StringComparison.Ordinal) && HexAddress(value.Substring(2), 40) && value != "0x" + new string('0', 40); }
         public static void ValidateConfig(NativeConfig config) {
-            if (config == null || config.nativeNetwork != Blockchain.NetworkId || (config.chainId != 97 && config.chainId != 31337) ||
+            if (config == null || config.nativeNetwork != Blockchain.NetworkId || (config.chainId != 56 && config.chainId != 97 && config.chainId != 31337) ||
                 !BscAddress(config.bridge) || config.nativeConfirmations < 12 || config.nativeConfirmations > 100000 ||
-                (!NativeBridge.IsAssetId(config.nativeToken) || config.nativeToken != InitialLaunch.PusdtTokenId && config.nativeToken != NativeBridge.RepresentationId(config.chainId, config.asset)) || config.nativeAdministrators == null || config.nativeAdministrators.Length < 3 ||
+                (!NativeBridge.IsAssetId(config.nativeToken) || config.nativeToken != InitialLaunch.PusdtTokenId && config.nativeToken != NativeBridge.RepresentationId(config.chainId, config.asset)) || config.nativeAdministrators == null || config.nativeAdministrators.Length < (config.mode == "production" ? 2 : 3) ||
                 config.nativeThreshold <= config.nativeAdministrators.Length / 2 || config.nativeThreshold > config.nativeAdministrators.Length)
                 throw new InvalidOperationException("Invalid test USDT bridge config; minimum 12 native confirmations and majority administrators required.");
+        }
+        public static void ValidateProduction(Blockchain chain, NativeConfig config) {
+            ValidateConfig(config);
+            if (config.mode != "production" || config.nativeAdministrators.Length != 2 && (config.nativeAdministrators.Length < 5 || config.nativeThreshold < 3) || config.nativeConfirmations < (config.chainId == 31337 ? 12 : 120) ||
+                config.nativeSigningPublicKeys == null || config.nativeSigningPublicKeys.Length < config.nativeThreshold ||
+                config.nativeSigningPublicKeys.Select(Hash).Distinct().Count() != config.nativeSigningPublicKeys.Length ||
+                config.nativeSigningPublicKeys.Any(k => !config.nativeAdministrators.Contains(Hash(k))))
+                throw new InvalidOperationException("Production requires two unanimous administrators or five-plus majority administrators, quorum public keys and 120 native confirmations.");
+            foreach (var publicKey in config.nativeSigningPublicKeys) using (var rsa = new RSACryptoServiceProvider()) {
+                rsa.PersistKeyInCsp = false; rsa.FromXmlString(publicKey);
+                if (rsa.KeySize < 3072 || rsa.KeySize > 4096 || rsa.ToXmlString(false) != publicKey)
+                    throw new InvalidOperationException("Production signing configuration requires canonical public-only RSA keys of 3072-4096 bits.");
+            }
+            var age = DateTime.UtcNow.Ticks - chain.Blocks.Last().TimestampUtcTicks;
+            if (age > TimeSpan.FromMinutes(5).Ticks || age < -TimeSpan.FromMinutes(1).Ticks)
+                throw new InvalidOperationException("Independent native chain tip is stale or in the future.");
         }
         public static TokenDefinition VerifyToken(Blockchain chain, NativeConfig config) {
             ValidateConfig(config);
@@ -79,7 +98,7 @@ namespace Povix.Bridge
         }
         public static string BindingPayload(Binding binding) {
             if (binding == null || !HexAddress(binding.transactionId, 64) || binding.outputIndex < 0 ||
-                !BscAddress(binding.bridge) || !BscAddress(binding.recipient) || (binding.chainId != 97 && binding.chainId != 31337))
+                !BscAddress(binding.bridge) || !BscAddress(binding.recipient) || (binding.chainId != 56 && binding.chainId != 97 && binding.chainId != 31337))
                 throw new InvalidOperationException("Invalid burn binding (use lowercase BSC addresses).");
             return string.Join("|", new[] { "povix-usdt-burn-binding-v1", Blockchain.NetworkId, binding.chainId.ToString(CultureInfo.InvariantCulture),
                 binding.bridge, binding.transactionId, binding.outputIndex.ToString(CultureInfo.InvariantCulture), binding.recipient });
@@ -125,12 +144,15 @@ namespace Povix.Bridge
         // Test harness only: native administrators' private keys must not be consolidated for production.
         public static Transaction PrepareOperation(Blockchain chain, NativeConfig config, ReleaseRequest request, string[] privateKeys) {
             ValidateConfig(config);
+            if (config.chainId == 56 && request.operation == "mint") throw new InvalidOperationException("Mainnet mint requires separate operator signatures.");
             var registration = (request.pending ?? new List<Transaction>()).FirstOrDefault(t => NativeBridge.IsRegistration(t) && t.TokenCommand.TokenId == config.nativeToken);
             bool registering = chain.GetTokenRuntime(config.nativeToken) == null && registration != null;
             if (!registering) VerifyToken(chain, config);
             long amount;
             if ((request.operation != "burn" && request.operation != "mint") || !long.TryParse(request.amount, NumberStyles.None, CultureInfo.InvariantCulture, out amount) || amount <= 0)
                 throw new InvalidOperationException("Invalid native token operation.");
+            if (config.mode == "production" && request.operation == "burn" && amount > long.Parse(config.dailyReleaseCap, CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("Split the redemption into burns no larger than the daily release cap before burning.");
             var keys = new Dictionary<string, RSACryptoServiceProvider>();
             try {
                 foreach (string xml in privateKeys) {
@@ -161,6 +183,7 @@ namespace Povix.Bridge
         }
         public static Transaction Register(Blockchain chain, NativeConfig config, string[] privateKeys) {
             ValidateConfig(config);
+            if (config.chainId == 56) throw new InvalidOperationException("Mainnet registration requires separate operator signatures.");
             var existing = chain.GetTokenRuntime(config.nativeToken);
             if (existing != null) { VerifyToken(chain, config); return null; }
             var keys = new Dictionary<string, RSACryptoServiceProvider>();
@@ -196,13 +219,79 @@ namespace Povix.Bridge
             using (var sha = SHA256.Create()) if (Hex(sha.ComputeHash(data)) != state.Sha256) throw new InvalidOperationException("Native snapshot checksum mismatch.");
             using (var stream = new MemoryStream(data)) return new Blockchain(((StoredData)new DataContractJsonSerializer(typeof(StoredData)).ReadObject(stream)).Blocks);
         }
+        [DataContract] public sealed class Proposal {
+            [DataMember] public string kind;
+            [DataMember] public Transaction draft;
+            [DataMember] public DepositEvidence deposit;
+            [DataMember] public List<NativeSignature> signatures;
+        }
+        [DataContract] public sealed class NativeSignature {
+            [DataMember] public string address;
+            [DataMember] public string signature;
+        }
+        public static Transaction DraftProposal(Blockchain chain, NativeConfig config, Proposal request) {
+            ValidateProduction(chain, config);
+            Transaction tx;
+            if (request.kind == "register") {
+                if (chain.GetTokenRuntime(config.nativeToken) != null) throw new InvalidOperationException("Representation is already registered.");
+                tx = NativeBridge.PrepareRegistration(chain, config.chainId, config.asset, config.bridge, config.nativeDecimals,
+                    config.nativeSymbol, long.Parse(config.reserveCap, CultureInfo.InvariantCulture), config.nativeSigningPublicKeys);
+            } else if (request.kind == "mint") {
+                VerifyToken(chain, config);
+                var evidence = request.deposit;
+                if (evidence == null || evidence.depositId == null || !evidence.depositId.StartsWith("0x") || !HexAddress(evidence.depositId.Substring(2), 64) ||
+                    evidence.blockHash == null || !evidence.blockHash.StartsWith("0x") || !HexAddress(evidence.blockHash.Substring(2), 64) ||
+                    !HexAddress(evidence.recipient, 64) || evidence.recipient == new string('0', 64) || chain.HasBridgeDeposit(config.nativeToken, evidence.depositId.Substring(2)))
+                    throw new InvalidOperationException("Invalid or already claimed deposit evidence.");
+                var draft = TokenManagement.Prepare(chain, new Transaction[0], config.nativeSigningPublicKeys, config.nativeToken,
+                    "mint", long.Parse(evidence.amount, CultureInfo.InvariantCulture), evidence.recipient, Hash(config.nativeSigningPublicKeys[0]), 0, null, null,
+                    evidence.depositId.Substring(2), evidence.blockHash.Substring(2));
+                tx = draft.Preview;
+            } else if (request.kind == "pause" || request.kind == "resume") {
+                VerifyToken(chain, config);
+                tx = TokenManagement.Prepare(chain, new Transaction[0], config.nativeSigningPublicKeys, config.nativeToken,
+                    request.kind, 0, null, Hash(config.nativeSigningPublicKeys[0]), 0).Preview;
+            } else throw new InvalidOperationException("Expected mint, register, pause or resume proposal.");
+            return tx;
+        }
+        public static string ReviewProposal(Blockchain chain, NativeConfig config, Proposal request) {
+            var expected = DraftProposal(chain, config, request);
+            if (request.draft == null || request.draft.Inputs.Count != 0 || request.draft.TokenAuthorizations == null ||
+                DateTime.UtcNow.Ticks - request.draft.TimestampUtcTicks > TimeSpan.FromMinutes(10).Ticks ||
+                request.draft.TimestampUtcTicks > DateTime.UtcNow.AddMinutes(1).Ticks)
+                throw new InvalidOperationException("Invalid or expired proposal.");
+            expected.TimestampUtcTicks = request.draft.TimestampUtcTicks;
+            if (NativeBridge.Payload(expected) != NativeBridge.Payload(request.draft)) throw new InvalidOperationException("Proposal differs from independent native policy or deposit evidence.");
+            return NativeBridge.Payload(expected);
+        }
+        public static Transaction CompleteProposal(Blockchain chain, NativeConfig config, Proposal request) {
+            ReviewProposal(chain, config, request);
+            if (request.signatures == null || request.signatures.Select(s => s.address).Distinct().Count() != request.signatures.Count)
+                throw new InvalidOperationException("Missing or duplicate operator signatures.");
+            var tx = NativeBridge.Authorize(request.draft, (address, payload) => request.signatures.Single(s => s.address == address).signature);
+            chain.ValidatePendingTransactions(new[] { tx }); return tx;
+        }
+        [DataContract] public sealed class ProductionStatus {
+            [DataMember] public long supply;
+            [DataMember] public long issued;
+            [DataMember] public long revision;
+            [DataMember] public bool paused;
+        }
         static void Print(object value) { if (value == null) { Console.WriteLine("null"); return; } using (var stream = new MemoryStream()) { new DataContractJsonSerializer(value.GetType()).WriteObject(stream, value); Console.WriteLine(Encoding.UTF8.GetString(stream.ToArray())); } }
         public static int Main(string[] args) {
             try {
                 if (args.Length == 1 && args[0] == "network") { Console.WriteLine(Blockchain.NetworkId); return 0; }
                 if (args.Length < 4) throw new ArgumentException("verify|bind|operation <Blockchain.json> <config.json> <request.json> [keys.json]");
                 var chain = LoadChain(args[1]); var config = Read<NativeConfig>(args[2]); ValidateConfig(config);
-                if (args[0] == "register" && args.Length == 5) Print(Register(chain, config, Read<string[]>(args[4])));
+                if (config.mode == "production") ValidateProduction(chain, config);
+                if (args[0] == "production-status") {
+                    ValidateProduction(chain, config); VerifyToken(chain, config); var state = chain.GetTokenRuntime(config.nativeToken);
+                    Print(new ProductionStatus { supply = state.Supply, issued = state.Issued, revision = state.Revision, paused = state.Paused });
+                }
+                else if (args[0] == "production-draft") Print(DraftProposal(chain, config, Read<Proposal>(args[3])));
+                else if (args[0] == "production-review") Print(ReviewProposal(chain, config, Read<Proposal>(args[3])));
+                else if (args[0] == "production-complete") Print(CompleteProposal(chain, config, Read<Proposal>(args[3])));
+                else if (args[0] == "register" && args.Length == 5) Print(Register(chain, config, Read<string[]>(args[4])));
                 else if (args[0] == "configure" && args.Length == 5) Print(Configure(chain, config, Read<string[]>(args[4])));
                 else if (args[0] == "verify") Print(VerifyBurn(chain, config, Read<Binding>(args[3])));
                 else if (args[0] == "bind" && args.Length == 5) Print(SignBinding(chain, Read<Binding>(args[3]), Read<string[]>(args[4])));

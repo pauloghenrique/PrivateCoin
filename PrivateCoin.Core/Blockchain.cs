@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 37;
+        public const int ConsensusVersion = 38;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -1329,6 +1329,13 @@ namespace PrivateCoin.Core
                 return new TokenDefinition { Id = token.Id, Name = token.Name, Symbol = token.Symbol,
                     Decimals = token.Decimals, Supply = state.Supply, Policy = token.Policy?.Copy() };
             }).ToArray();
+        }
+
+        public bool HasBridgeDeposit(string tokenId, string depositId) {
+            lock (sync) {
+                var utxo = BuildUtxo(); var policy = TokenGovernance.State(utxo, tokenId)?.Token.Policy;
+                return policy?.BridgeBinding != null && utxo.ContainsKey(NativeBridge.ClaimKey(policy.BridgeBinding, depositId));
+            }
         }
 
         public TokenRuntime GetTokenRuntime(string tokenId)
