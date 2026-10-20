@@ -3,6 +3,7 @@
   "rpcUrl": "https://YOUR-BSC-TESTNET-RPC.example",
   "asset": "0x1111111111111111111111111111111111111111",
   "bridge": null,
+  "factory": null,
   "nativeNetwork": "povix-mainnet-rules-v1-REPLACE_WITH_NETWORK_ID",
   "nativeToken": "c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d",
   "nativeAdministrators": [

@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 36;
+        public const int ConsensusVersion = 37;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -1188,7 +1188,7 @@ namespace PrivateCoin.Core
             if (NativeBridge.IsFeeFree(transaction) && consensusVersion < 36) throw new InvalidOperationException("Native bridge bootstrap requires consensus v36.");
             InitialLaunch.ValidateEnvelope(transaction, utxo, consensusVersion);
             TokenGovernance.Validate(transaction, utxo, height, consensusVersion);
-            if (NativeBridge.IsConfiguration(transaction)) { AddOutputs(transaction, utxo); return; }
+            if (NativeBridge.IsConfiguration(transaction) || NativeBridge.IsRegistration(transaction)) { AddOutputs(transaction, utxo); return; }
             if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution)
             {
                 if (allowMint != (transaction.Kind == TransactionKind.WalletDistribution) || transaction.Inputs.Count != 0 || transaction.Fee != 0 || transaction.Outputs.Count < 1 || transaction.Outputs.Count > 2 ||
@@ -1394,7 +1394,7 @@ namespace PrivateCoin.Core
                 foreach (UnspentOutput output in BuildUtxo().Values.Where(item => item.Output.AssetId != null && owned.Contains(item.Output.OneTimeAddress)))
                     AddAssetAmount(amounts, output.Output.AssetId, output.Output.Amount);
                 var definitions = GetTokens().ToDictionary(token => token.Id, StringComparer.Ordinal);
-                return blocks.SelectMany(block => block.Transactions.Where(tx => tx.Kind == TransactionKind.TokenCreate || tx.Kind == TransactionKind.InitialLaunchCreate)
+                return blocks.SelectMany(block => block.Transactions.Where(tx => tx.Kind == TransactionKind.TokenCreate || tx.Kind == TransactionKind.InitialLaunchCreate || NativeBridge.IsRegistration(tx))
                     .SelectMany(tx => (tx.Kind == TransactionKind.InitialLaunchCreate ? InitialLaunch.FundingTokens(InitialLaunch.WalletAddress(tx)) : new[] { tx.Token })
                     .Select(token => new TokenBalance(definitions[token.Id], amounts.ContainsKey(token.Id) ? amounts[token.Id] : 0,
                         block.Height, blocks[blocks.Count - 1].Height - block.Height + 1,

@@ -25,6 +25,8 @@ namespace Povix.Bridge
         [DataMember] public string bridge;
         [DataMember] public string nativeToken;
         [DataMember] public string asset;
+        [DataMember] public int nativeDecimals = 8;
+        [DataMember] public string nativeSymbol;
         [DataMember] public string reserveCap;
         [DataMember] public string[] nativeAdministrators;
         [DataMember] public int nativeThreshold;
@@ -61,14 +63,14 @@ namespace Povix.Bridge
         public static void ValidateConfig(NativeConfig config) {
             if (config == null || config.nativeNetwork != Blockchain.NetworkId || (config.chainId != 97 && config.chainId != 31337) ||
                 !BscAddress(config.bridge) || config.nativeConfirmations < 12 || config.nativeConfirmations > 100000 ||
-                config.nativeToken != InitialLaunch.PusdtTokenId || config.nativeAdministrators == null || config.nativeAdministrators.Length < 3 ||
+                (!NativeBridge.IsAssetId(config.nativeToken) || config.nativeToken != InitialLaunch.PusdtTokenId && config.nativeToken != NativeBridge.RepresentationId(config.chainId, config.asset)) || config.nativeAdministrators == null || config.nativeAdministrators.Length < 3 ||
                 config.nativeThreshold <= config.nativeAdministrators.Length / 2 || config.nativeThreshold > config.nativeAdministrators.Length)
                 throw new InvalidOperationException("Invalid test USDT bridge config; minimum 12 native confirmations and majority administrators required.");
         }
         public static TokenDefinition VerifyToken(Blockchain chain, NativeConfig config) {
             ValidateConfig(config);
             var token = chain.GetTokens().SingleOrDefault(t => t.Id == config.nativeToken);
-            if (token == null || token.Decimals != 8 || token.Policy == null || !token.Policy.Mintable || !token.Policy.Burnable ||
+            if (token == null || token.Decimals != (config.nativeToken == InitialLaunch.PusdtTokenId ? 8 : config.nativeDecimals) || token.Policy == null || !token.Policy.Mintable || !token.Policy.Burnable ||
                 !token.Policy.Pausable || token.Policy.HasAutomaticBurn || token.Policy.VestingTranches != 0 ||
                 token.Policy.RequiredSignatures != config.nativeThreshold || token.Policy.BridgeBinding != NativeBridge.Binding(config.chainId, config.asset, config.bridge) ||
                 !token.Policy.Administrators.OrderBy(a => a).SequenceEqual(config.nativeAdministrators.OrderBy(a => a)))
@@ -122,7 +124,10 @@ namespace Povix.Bridge
         }
         // Test harness only: native administrators' private keys must not be consolidated for production.
         public static Transaction PrepareOperation(Blockchain chain, NativeConfig config, ReleaseRequest request, string[] privateKeys) {
-            VerifyToken(chain, config);
+            ValidateConfig(config);
+            var registration = (request.pending ?? new List<Transaction>()).FirstOrDefault(t => NativeBridge.IsRegistration(t) && t.TokenCommand.TokenId == config.nativeToken);
+            bool registering = chain.GetTokenRuntime(config.nativeToken) == null && registration != null;
+            if (!registering) VerifyToken(chain, config);
             long amount;
             if ((request.operation != "burn" && request.operation != "mint") || !long.TryParse(request.amount, NumberStyles.None, CultureInfo.InvariantCulture, out amount) || amount <= 0)
                 throw new InvalidOperationException("Invalid native token operation.");
@@ -133,11 +138,37 @@ namespace Povix.Bridge
                 }
                 var confirmed = new HashSet<string>(chain.Blocks.SelectMany(b => b.Transactions).Select(t => t.Id));
                 var pending = (request.pending ?? new List<Transaction>()).Where(t => !confirmed.Contains(t.Id)).ToArray();
+                if (registering) {
+                    if (request.operation != "mint" || request.fee != 0 || registration.Token.Policy.BridgeBinding != NativeBridge.Binding(config.chainId, config.asset, config.bridge) ||
+                        registration.Token.Decimals != config.nativeDecimals || amount > registration.Token.Policy.MaximumSupply)
+                        throw new InvalidOperationException("Invalid first issuance.");
+                    var root = chain.GetTokenRuntime(InitialLaunch.PusdtTokenId).Token.Policy;
+                    var firstMint = new Transaction { Kind = TransactionKind.TokenManage, TimestampUtcTicks = DateTime.UtcNow.Ticks,
+                        TokenCommand = new TokenCommand { TokenId = config.nativeToken, Operation = "mint", Amount = amount },
+                        Outputs = new List<TransactionOutput> { new TransactionOutput { AssetId = config.nativeToken, Amount = amount, OneTimeAddress = request.recipient } },
+                        TokenAuthorizations = root.Administrators.Where(keys.ContainsKey).Take(root.RequiredSignatures).Select(a => new TokenAuthorization { PublicKey = keys[a].ToXmlString(false) }).ToList() };
+                    Sign(firstMint, keys); chain.ValidatePendingTransactions(pending.Concat(new[] { firstMint })); return firstMint;
+                }
                 var draft = TokenManagement.Prepare(chain, pending, keys.Values.Select(k => k.ToXmlString(false)), config.nativeToken,
                     request.operation, amount, request.recipient, keys.Keys.First(), request.fee);
                 Func<string, string> sign = address => Convert.ToBase64String(keys[address].SignData(draft.SigningPayload, "SHA256"));
                 var tx = draft.Complete(draft.InputAddresses.Select(sign), draft.AdministratorAddresses.Select(sign));
                 chain.ValidatePendingTransactions(pending.Concat(new[] { tx })); return tx;
+            } finally { foreach (var key in keys.Values) key.Dispose(); }
+        }
+        static void Sign(Transaction tx, Dictionary<string, RSACryptoServiceProvider> keys) {
+            NativeBridge.Authorize(tx, (address, payload) => Convert.ToBase64String(keys[address].SignData(payload, "SHA256")));
+        }
+        public static Transaction Register(Blockchain chain, NativeConfig config, string[] privateKeys) {
+            ValidateConfig(config);
+            var existing = chain.GetTokenRuntime(config.nativeToken);
+            if (existing != null) { VerifyToken(chain, config); return null; }
+            var keys = new Dictionary<string, RSACryptoServiceProvider>();
+            try {
+                foreach (var xml in privateKeys) { var key = new RSACryptoServiceProvider(); key.PersistKeyInCsp = false; key.FromXmlString(xml); keys.Add(Hash(key.ToXmlString(false)), key); }
+                var tx = NativeBridge.PrepareRegistration(chain, config.chainId, config.asset, config.bridge, config.nativeDecimals,
+                    config.nativeSymbol, long.Parse(config.reserveCap, CultureInfo.InvariantCulture), keys.Values.Select(k => k.ToXmlString(false)));
+                Sign(tx, keys); chain.ValidatePendingTransactions(new[] { tx }); return tx;
             } finally { foreach (var key in keys.Values) key.Dispose(); }
         }
         public static Transaction Configure(Blockchain chain, NativeConfig config, string[] founderKeys) {
@@ -165,13 +196,14 @@ namespace Povix.Bridge
             using (var sha = SHA256.Create()) if (Hex(sha.ComputeHash(data)) != state.Sha256) throw new InvalidOperationException("Native snapshot checksum mismatch.");
             using (var stream = new MemoryStream(data)) return new Blockchain(((StoredData)new DataContractJsonSerializer(typeof(StoredData)).ReadObject(stream)).Blocks);
         }
-        static void Print(object value) { using (var stream = new MemoryStream()) { new DataContractJsonSerializer(value.GetType()).WriteObject(stream, value); Console.WriteLine(Encoding.UTF8.GetString(stream.ToArray())); } }
+        static void Print(object value) { if (value == null) { Console.WriteLine("null"); return; } using (var stream = new MemoryStream()) { new DataContractJsonSerializer(value.GetType()).WriteObject(stream, value); Console.WriteLine(Encoding.UTF8.GetString(stream.ToArray())); } }
         public static int Main(string[] args) {
             try {
                 if (args.Length == 1 && args[0] == "network") { Console.WriteLine(Blockchain.NetworkId); return 0; }
                 if (args.Length < 4) throw new ArgumentException("verify|bind|operation <Blockchain.json> <config.json> <request.json> [keys.json]");
                 var chain = LoadChain(args[1]); var config = Read<NativeConfig>(args[2]); ValidateConfig(config);
-                if (args[0] == "configure" && args.Length == 5) Print(Configure(chain, config, Read<string[]>(args[4])));
+                if (args[0] == "register" && args.Length == 5) Print(Register(chain, config, Read<string[]>(args[4])));
+                else if (args[0] == "configure" && args.Length == 5) Print(Configure(chain, config, Read<string[]>(args[4])));
                 else if (args[0] == "verify") Print(VerifyBurn(chain, config, Read<Binding>(args[3])));
                 else if (args[0] == "bind" && args.Length == 5) Print(SignBinding(chain, Read<Binding>(args[3]), Read<string[]>(args[4])));
                 else if (args[0] == "operation" && args.Length == 5) Print(PrepareOperation(chain, config, Read<ReleaseRequest>(args[3]), Read<string[]>(args[4])));

@@ -124,7 +124,7 @@ internal static class PrivateCoinTwentyYearEmissionRegression
                 summary.RemainingValidatorRewardAmount == ProofOfStake.MaximumSupply - 45757598L,
                 "reorganization restores exact confirmed reward count and budget");
             var rules = chain.Blocks[0].Rules;
-            Check(rules.SchemaVersion == 9 && rules.ConsensusVersion == 36 && rules.EmissionRule.Contains("not chain heights") &&
+            Check(rules.SchemaVersion == 10 && rules.ConsensusVersion == 37 && rules.EmissionRule.Contains("not chain heights") &&
                 rules.RewardPhases.Sum(x => x.TotalRewardAtomicUnits) == ProofOfStake.MaximumSupply && rules.RewardPhases[0].RemainderAtomicUnits == 12677600L &&
                 CoreConfiguration.Manifest.Contains("RewardPhase.1.RemainderAtomicUnits") && CoreConfiguration.Manifest.Contains("RewardPhase.4.TotalReward"),
                 "genesis binds reward ordinals, exact phase budgets and remainder rule");

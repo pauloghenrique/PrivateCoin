@@ -16,6 +16,7 @@ namespace Povix.Dex.Controllers
         {
             Response.Cache.SetNoStore();
             var asset = ConfigurationManager.AppSettings["BridgeTestAsset"] ?? "";
+            var factory = ConfigurationManager.AppSettings["BridgeTestFactory"] ?? "";
             var vault = ConfigurationManager.AppSettings["BridgeTestVault"] ?? "";
             var address = new Regex("^0x[0-9a-fA-F]{40}$");
             bool enabled = ConfigurationManager.AppSettings["BridgeTestEnabled"] == "true"
@@ -25,6 +26,7 @@ namespace Povix.Dex.Controllers
                 && !String.Equals(asset, vault, StringComparison.OrdinalIgnoreCase);
             return Json(new { enabled, chainId = 97, confirmations = 15,
                 asset = enabled ? asset : null, vault = enabled ? vault : null,
+                factory = enabled && address.IsMatch(factory) && factory != "0x0000000000000000000000000000000000000000" ? factory : null,
                 network = Blockchain.NetworkId, token = InitialLaunch.PusdtTokenId }, JsonRequestBehavior.AllowGet);
         }
     }

@@ -12,7 +12,7 @@ namespace PrivateCoin.Core
             string changeAddress, long fee, IEnumerable<string> excludedInputs = null, TokenPolicy bridgePolicy = null)
         {
             if (chain == null || pending == null || publicKeys == null) throw new ArgumentNullException();
-            if ((fee < Blockchain.TransferFeeStep && !(tokenId == InitialLaunch.PusdtTokenId && fee == 0)) || fee > Blockchain.MaximumTransferFee || !TokenPolicy.Address(changeAddress))
+            if ((fee < Blockchain.TransferFeeStep && !(NativeBridge.IsAssetId(tokenId) && fee == 0)) || fee > Blockchain.MaximumTransferFee || !TokenPolicy.Address(changeAddress))
                 throw new ArgumentException("Invalid fee or change address.");
             var state = chain.GetTokenRuntime(tokenId);
             if (state?.Token.Policy == null) throw new InvalidOperationException("Token has no management policy.");

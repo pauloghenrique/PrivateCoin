@@ -13,6 +13,7 @@ namespace Povix.Dex
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 
+            routes.MapRoute("BridgeMultiSwap", "swap-bnb", new { controller = "Bridge", action = "Index" });
             routes.MapRoute("BridgeSwap", "swap-usdt", new { controller = "Bridge", action = "Index" });
 
             routes.MapRoute("TokenList", "tokens", new { controller = "Tokens", action = "Index" });

@@ -91,7 +91,7 @@ A mudança do lançamento exige Core, Desktop e DEX v36 e genesis esquema 9. A i
 
 ## Tela de depósito no Povix.Dex
 
-Acesse `/swap-usdt` pelo menu **Swap USDT**. A carteira EVM assina a autorização e o depósito diretamente, sem enviar chaves ao DEX. A tela aceita somente BNB Smart Chain Testnet (97), com 15 confirmações; não oferece USDT real da mainnet.
+Acesse `/swap-bnb` pelo menu **Swap BNB** (a rota `/swap-usdt` continua disponível). Sem uma factory configurada, a tela mantém o fluxo USDT → pUSDT. A carteira EVM assina a autorização e o depósito diretamente, sem enviar chaves ao DEX. A tela aceita somente BNB Smart Chain Testnet (97), com 15 confirmações; não oferece USDT real da mainnet.
 
 Após publicar e verificar o `UsdtVault` de teste, configurar a política nativa correspondente e ativar os operadores, defina em `Povix.Dex/Web.config`:
 
@@ -106,3 +106,36 @@ O usuário informa o endereço público POVIX (64 caracteres hexadecimais). A en
 O hash da transação e o identificador do evento `Deposited` devem ser preservados pelo usuário. A tela comprova o recibo BNB e informa **aguardando emissão**, sem afirmar que o saldo nativo já foi creditado. Os operadores continuam utilizando `prepare-mint` e submetendo a transação nativa pelo fluxo existente; esta tela não inicia um coordenador e não publica um endpoint privilegiado de emissão. Se houver timeout ou mudança de rede depois do envio, consulte o hash BNB antes de repetir qualquer operação. O histórico fica disponível na carteira EVM e no explorador de teste, inclusive após recarregar a página.
 
 Verificação da interface: `node Tests/PovixBridgeSwapRegression.js` na raiz (usa o jsdom instalado em `work/liquidity-tools/node_modules/jsdom` e ethers de `Povix.Bridge/node_modules`). O teste usa carteiras e contratos simulados; o build .NET valida o controlador. Nenhuma dessas verificações publica contratos nem movimenta fundos reais.
+
+## Ponte de múltiplos tokens BNB (protótipo de teste)
+
+A tela `/swap-bnb` (também disponível em `/swap-usdt`) permite informar o **endereço do contrato** de um BEP-20. Nome e símbolo não são usados para localizar reservas nem para identificar tokens. Cada contrato possui um cofre próprio e um identificador nativo derivado de `chainId + endereço do contrato`; dois contratos com o mesmo símbolo continuam sendo ativos distintos. O USDT principal mantém o identificador pUSDT reservado pelo protocolo e não pode ganhar uma segunda representação.
+
+### Configurar a factory e os operadores
+
+1. Compile com `npm run build`. Configure e publique a ponte pUSDT de teste pelo fluxo anterior, incluindo a política nativa e sua maioria de pelo menos três administradores.
+2. Execute `node src/cli.mjs deploy-factory config.local.json operador.local.json`. A factory copia o domínio nativo, operadores, quorum e limites do cofre principal. Salve o endereço retornado no campo `factory` da configuração da ponte e em `BridgeTestFactory` no Web.config do DEX. Configure também os três campos anteriores do cofre principal. Nenhuma chave é colocada no DEX.
+3. Na tela, conecte a carteira e informe o contrato BNB Testnet. Se o cofre ainda não existir, o usuário confirma uma transação `createVault` na carteira e paga o gás de criação. Essa etapa não deposita nem emite tokens. A factory permite somente um cofre por contrato e todos os novos cofres começam pausados.
+4. Os operadores precisam analisar o ativo (inclusive possibilidade de taxas, rebases, bloqueios e mudanças de implementação) e ativar o cofre com a maioria das assinaturas `sign-pause`/`pause`. Para gerar sua configuração use `node src/cli.mjs asset-config config.local.json 0xCONTRATO`. O resultado pode ser salvo em `asset.local.json` e usado nos comandos de pausa, que também funcionam enquanto o cofre está pausado. Depois da ativação, selecione o token novamente na tela e deposite.
+
+Tokens padrão com `decimals` entre 0 e 18 são aceitos pelo contrato de custódia. A representação usa `min(decimals, 8)` casas: seis casas continuam seis, zero continua zero, e tokens de 18 casas precisam de quantidades exatamente representáveis com oito casas. A ponte recusa poeira, sem arredondar. A interface identifica o contrato de origem e exibe um símbolo `p` + até nove caracteres A–Z/0–9; a identidade permanece o ID e o vínculo no registro nativo, mesmo quando símbolos coincidem.
+
+### Primeiro depósito e registro automático
+
+Depois das confirmações BNB, o coordenador executa:
+
+```sh
+node src/cli.mjs prepare-asset-mint config.local.json 0xCONTRATO referencia.json state/ativo.sqlite administradores.local.json 0
+```
+
+`referencia.json` contém `transactionHash` e `logIndex` do evento de depósito, como no fluxo pUSDT. O comando resolve o cofre pela factory configurada, verifica sua configuração e o depósito canônico e, se necessário, prepara automaticamente duas transações nativas **em ordem**: registro com oferta zero, seguido da emissão da quantidade depositada. A saída nesse caso tem a forma `{ "transactions": [registro, emissao] }`. Submeta ambas ao nó POVIX, nesta ordem. Quando o registro já está confirmado, o comando usa a representação existente; não altera tokens comuns previamente criados na POVIX. O journal deve ser exclusivo por ativo/cofre e conservado para impedir dupla emissão. Repetições retornam as mesmas transações assinadas; um lote retornado pode incluir um registro já confirmado, que não deve ser submetido novamente.
+
+O registro é autorizado pela maioria dos administradores da ponte principal. O consenso vincula o identificador ao contrato BNB, impede registro duplicado ou oferta inicial positiva e exige a mesma federação. Nome nativo contém o endereço de origem (`BNB 0x…`). A emissão e o resgate seguem a confiança federada já existente: os nós POVIX não validam diretamente recibos BNB. O coordenador continua sendo operado por CLI, sem daemon ou chave de emissão no servidor do DEX; a tela informa que o crédito aguarda os operadores. O tratamento de eventos não é um serviço automático instalado por esta PR.
+
+Para retornar à BNB, use a configuração `asset.local.json` com `prepare-burn`, `bind-burn`, `sign-release` e `release`. O cofre é parte do domínio das assinaturas; uma autorização de um token não pode resgatar outro. O saldo de reserva e o limite diário são independentes por cofre. O cap nativo continua limitando emissão cumulativa, incluindo quantidades posteriormente queimadas; queimar não reabre esse orçamento.
+
+**Compatibilidade:** consenso **v37**, manifesto **schema 10**. A alteração do Core muda o compromisso da implementação e o genesis/NetworkId. É necessário atualizar Core, Desktop, DEX e coordenador juntos, em uma rede de teste nova, e publicar/configurar cofres com o novo domínio nativo. Não há migração de saldos nem apagamento automático de dados. Não reutilize snapshots, journals ou cofres de uma rede anterior para emitir na nova. Esta implementação não ativa BNB mainnet e não movimenta fundos reais.
+
+Tokens com taxa de transferência são rejeitados pelo depósito; o resgate também confere os saldos exatos do cofre e do destinatário, revertendo taxas e transferências não padronizadas. Tokens com saldo variável ou contratos maliciosos não recebem suporte garantido: a pausa inicial e a análise dos operadores continuam necessárias. A detecção genérica de todo comportamento futuro de um contrato não é possível.
+
+Validação adicional: `node Tests/PovixMultiAssetSwapRegression.js` na raiz e `npm test` em `Povix.Bridge`, após `npm run test:native-build` com o toolchain Mono. Os testes multiativos executam Ganache e um ledger POVIX real local, cobrindo origem por contrato/rede, símbolos iguais, cofres separados, 0/6/18 casas, criação pausada, registro sem oferta, primeira emissão, rejeição de registro duplicado/forjado, replay de snapshots, idempotência do journal e queima/resgate do ativo correto.

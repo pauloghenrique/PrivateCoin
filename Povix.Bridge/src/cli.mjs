@@ -2,7 +2,7 @@ import { Wallet, JsonRpcProvider, ContractFactory, Contract } from 'ethers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { root } from './compile.mjs';
-import { parseJson, types, domain, networkHash, validateConfig, connect, journal, recordDecision, native, loadWallet, sortSignatures, prepareMint } from './bridge.mjs';
+import { parseJson, types, domain, networkHash, validateConfig, connect, journal, recordDecision, native, loadWallet, sortSignatures, prepareMint, resolveAssetConfig } from './bridge.mjs';
 const read = filename => parseJson(readFileSync(filename, 'utf8'));
 const output = value => console.log(JSON.stringify(value, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
 const deadlineCheck = value => { if (!Number.isSafeInteger(value) || value <= Date.now() / 1000 || value > Date.now() / 1000 + 600) throw Error('Use a common deadline within ten minutes.'); };
@@ -13,7 +13,19 @@ try {
     const wallet = Wallet.createRandom(); writeFileSync(configFile, await wallet.encrypt(process.env.BRIDGE_KEYSTORE_PASSWORD), { mode: 0o600, flag: 'wx' }); output({ address: wallet.address });
   } else {
     const config = validateConfig(read(configFile));
-    if (command === 'deploy') {
+    if (command === 'deploy-factory') {
+      const { provider } = await connect(config), wallet = (await loadWallet(args[0])).connect(provider);
+      const artifact = read(path.join(root, 'build/AssetVaultFactory.json'));
+      const factory = await new ContractFactory(artifact.abi, artifact.bytecode, wallet).deploy(config.bridge);
+      await factory.waitForDeployment(); output({ factory: (await factory.getAddress()).toLowerCase(), transactionHash: factory.deploymentTransaction().hash });
+    } else if (command === 'asset-config') {
+      output(await resolveAssetConfig(config, args[0]));
+    } else if (command === 'prepare-asset-mint') {
+      const resolved = await resolveAssetConfig(config, args[0]), { provider, contract } = await connect(resolved);
+      const fee = Number(args[4]); if (fee !== 0) throw Error('First asset issuance uses zero native fee.');
+      const db = journal(args[2], resolved);
+      try { output(await prepareMint(db, provider, contract, resolved, read(args[1]), args[3], fee)); } finally { db.close(); }
+    } else if (command === 'deploy') {
       const provider = new JsonRpcProvider(config.rpcUrl);
       if (config.bridge !== null || (await provider.getNetwork()).chainId !== BigInt(config.chainId)) throw Error('Deployment requires test chain and bridge:null.');
       const wallet = (await loadWallet(args[0])).connect(provider), artifact = read(path.join(root, 'build/UsdtVault.json'));
@@ -70,6 +82,6 @@ try {
       if (!value || value.nonce !== (await contract.pauseNonce()).toString() || auth.some(a => JSON.stringify(a.value) !== JSON.stringify(value))) throw Error('Pause authorization mismatch.');
       const signatures = sortSignatures(config, 'Pause', value, auth.map(a => a.signature));
       output({ transactionHash: (await (await contract.setPaused(value.paused, value.deadline, signatures)).wait()).hash });
-    } else throw Error('Commands: create-operator, deploy, deposit, configure-native, prepare-mint, prepare-burn, bind-burn, verify-burn, sign-release, release, sign-pause, pause. See README.md.');
+    } else throw Error('Commands: create-operator, deploy, deploy-factory, asset-config, deposit, configure-native, prepare-mint, prepare-asset-mint, prepare-burn, bind-burn, verify-burn, sign-release, release, sign-pause, pause. See README.md.');
   }
 } catch (error) { console.error(error.shortMessage || error.message); process.exitCode = 1; }

@@ -8,6 +8,9 @@ import { root } from './compile.mjs';
 // Native ticks/int64 fields are signed. Preserve their exact JSON digits through JavaScript.
 export const parseJson = text => JSON.parse(text, (key, value, context) =>
   typeof value === 'number' && !Number.isSafeInteger(value) ? JSON.rawJSON(context.source) : value);
+export const protocolToken = 'c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d';
+export const representationId = (chainId, asset) => 'b9b0' + sha256(toUtf8Bytes('povix-bnb-token-v1|' + chainId + '|' + asset.toLowerCase())).slice(6);
+export const nativeSymbol = symbol => 'p' + (String(symbol).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 9) || 'TOKEN');
 export const types = {
   Release: [{ name: 'burnId', type: 'bytes32' }, { name: 'recipient', type: 'address' }, { name: 'nativeAmount', type: 'uint256' }, { name: 'deadline', type: 'uint256' }],
   Pause: [{ name: 'paused', type: 'bool' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }]
@@ -17,7 +20,7 @@ export const networkHash = config => sha256(toUtf8Bytes(config.nativeNetwork));
 export function validateConfig(c) {
   if (![97, 31337].includes(c.chainId) || typeof c.nativeNetwork !== 'string' || !c.nativeNetwork.startsWith('povix-mainnet-rules-v1-') ||
       !Number.isInteger(c.nativeConfirmations) || c.nativeConfirmations < 12 || !Number.isInteger(c.bscConfirmations) || c.bscConfirmations < 15 ||
-      c.nativeToken !== 'c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d' || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < 3 ||
+      (c.nativeToken !== protocolToken && (c.nativeToken !== representationId(c.chainId, c.asset) || !Number.isInteger(c.nativeDecimals) || c.nativeDecimals < 0 || c.nativeDecimals > 8 || !/^p[A-Z0-9]{1,9}$/.test(c.nativeSymbol))) || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < 3 ||
       c.nativeAdministrators.some(a => !/^[a-f0-9]{64}$/.test(a)) || new Set(c.nativeAdministrators).size !== c.nativeAdministrators.length ||
       !Number.isInteger(c.nativeThreshold) || c.nativeThreshold <= c.nativeAdministrators.length / 2 || c.nativeThreshold > c.nativeAdministrators.length ||
       !Array.isArray(c.operators) || c.operators.length < 3 || c.operators.length > 10 ||
@@ -36,7 +39,7 @@ export function validateConfig(c) {
 }
 export function journal(filename, config) {
   const db = new DatabaseSync(filename);
-  db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS scope (id INTEGER PRIMARY KEY, value TEXT); CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mints (id TEXT PRIMARY KEY, tx TEXT NOT NULL UNIQUE);');
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS scope (id INTEGER PRIMARY KEY, value TEXT); CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS registrations (id TEXT PRIMARY KEY, tx TEXT NOT NULL); CREATE TABLE IF NOT EXISTS mints (id TEXT PRIMARY KEY, tx TEXT NOT NULL UNIQUE);');
   if (config) {
     const value = JSON.stringify([config.chainId, config.bridge, config.nativeNetwork, config.nativeToken]);
     db.prepare('INSERT OR IGNORE INTO scope VALUES (1, ?)').run(value);
@@ -61,6 +64,9 @@ export async function connect(config, signer = null) {
       await contract.threshold() !== BigInt(config.threshold) || await contract.reserveCap() !== BigInt(config.reserveCap) ||
       await contract.dailyReleaseCap() !== BigInt(config.dailyReleaseCap)) throw Error('Vault does not match pinned configuration.');
   for (let i = 0; i < config.operators.length; i++) if (getAddress(await contract.operators(i)) !== getAddress(config.operators[i])) throw Error('Unexpected operators.');
+  const token = new Contract(config.asset, ['function decimals() view returns(uint8)'], provider);
+  const decimals = Number(await token.decimals()), expected = config.nativeToken === protocolToken ? 8 : config.nativeDecimals;
+  if (decimals > 18 || expected !== Math.min(8, decimals) || await contract.scale() !== 10n ** BigInt(decimals - expected)) throw Error('Invalid asset precision.');
   return { provider, contract };
 }
 export function native(config, command, request, keysFile) {
@@ -99,14 +105,43 @@ export async function verifyDeposit(provider, contract, config, transactionHash,
   return { depositId: decoded.args.depositId, recipient: decoded.args.nativeRecipient.slice(2), amount: decoded.args.nativeAmount.toString(), blockHash: block.hash };
 }
 export async function prepareMint(db, provider, contract, config, reference, keysFile, fee, nativeCall = native) {
+  if (!/^[a-f0-9]{64}$/.test(config.nativeToken || '')) throw Error('Pin a native token before preparing issuance.');
   const deposit = await verifyDeposit(provider, contract, config, reference.transactionHash, reference.logIndex);
   db.exec('BEGIN IMMEDIATE');
   try {
     const prior = db.prepare('SELECT tx FROM mints WHERE id=?').get(deposit.depositId);
-    if (prior) { db.exec('COMMIT'); return parseJson(prior.tx); }
+    const registrationRow = db.prepare('SELECT tx FROM registrations WHERE id=?').get(config.nativeToken);
+    let registration = registrationRow ? parseJson(registrationRow.tx) : null;
+    if (prior) { db.exec('COMMIT'); return registration ? { transactions: [registration, parseJson(prior.tx)] } : parseJson(prior.tx); }
+    if (config.nativeToken !== protocolToken && !registration) {
+      registration = nativeCall(config, 'register', {}, keysFile);
+      if (registration) db.prepare('INSERT INTO registrations VALUES (?, ?)').run(config.nativeToken, JSON.stringify(registration));
+    }
     const pending = db.prepare('SELECT tx FROM mints').all().map(row => parseJson(row.tx));
+    if (registration) pending.unshift(registration);
     const tx = nativeCall(config, 'operation', { operation: 'mint', recipient: deposit.recipient, amount: deposit.amount, fee, pending }, keysFile);
     db.prepare('INSERT INTO mints VALUES (?, ?)').run(deposit.depositId, JSON.stringify(tx));
-    db.exec('COMMIT'); return tx;
+    db.exec('COMMIT'); return registration ? { transactions: [registration, tx] } : tx;
   } catch (error) { db.exec('ROLLBACK'); throw error; }
+}
+
+// Resolve a source contract through the canonical factory, never by symbol.
+export async function resolveAssetConfig(base, asset) {
+  if (base.nativeToken !== protocolToken) throw Error('Resolve assets from the primary pUSDT bridge configuration.');
+  await connect(base);
+  asset = getAddress(asset).toLowerCase();
+  if (!base.factory || !/^0x[a-f0-9]{40}$/.test(base.factory)) throw Error('Pin the test factory address.');
+  const provider = new JsonRpcProvider(base.rpcUrl);
+  const factory = new Contract(base.factory, ['function nativeNetwork() view returns(bytes32)', 'function vaults(address) view returns(address)', 'function representation(address) view returns(bytes32)'], provider);
+  if (await provider.getCode(base.factory) === '0x' || await factory.nativeNetwork() !== networkHash(base) ||
+      (await factory.vaults(base.asset)).toLowerCase() !== base.bridge) throw Error('Factory differs from the pinned primary bridge.');
+  const bridge = (await factory.vaults(asset)).toLowerCase();
+  if (/^0x0{40}$/.test(bridge)) throw Error('Create and activate the test vault first.');
+  const token = new Contract(asset, ['function decimals() view returns(uint8)', 'function symbol() view returns(string)'], provider);
+  const decimals = Number(await token.decimals());
+  if (decimals < 0 || decimals > 18) throw Error('Unsupported decimals.');
+  let symbol; try { symbol = await token.symbol(); } catch { symbol = 'TOKEN'; }
+  const resolved = { ...base, asset, bridge, nativeToken: asset === base.asset ? protocolToken : representationId(base.chainId, asset), nativeDecimals: Math.min(8, decimals), nativeSymbol: nativeSymbol(symbol) };
+  if (await factory.representation(asset) !== '0x' + resolved.nativeToken) throw Error('Factory representation differs from source contract.');
+  await connect(resolved); return resolved;
 }

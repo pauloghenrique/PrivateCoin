@@ -118,7 +118,7 @@ namespace PrivateCoin.Core
         {
             if (string.IsNullOrWhiteSpace(Name) || Name.Length > MaximumNameLength || Name.Any(char.IsControl) ||
                 string.IsNullOrEmpty(Symbol) || Symbol.Length > MaximumSymbolLength ||
-                Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > MaximumDecimals || Supply <= 0)
+                NativeBridge.IsRepresentationId(Id) || Symbol.Any(c => c < 'A' || c > 'Z') || Decimals < 0 || Decimals > MaximumDecimals || Supply <= 0)
                 throw new InvalidOperationException("Invalid token: name up to 64 characters, symbol A-Z up to 10, decimals 0-8, positive atomic supply required.");
             Policy?.Validate(Supply);
         }

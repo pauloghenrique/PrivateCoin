@@ -92,7 +92,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 4)] public long Revision { get; set; }
         [DataMember(Order = 5, EmitDefaultValue = false)] public TokenPolicy BridgePolicy { get; set; }
         internal string Canonical() => TokenId + ":" + Operation + ":" + Amount.ToString(CultureInfo.InvariantCulture) + ":" + Revision.ToString(CultureInfo.InvariantCulture) + (BridgePolicy == null ? "" : "|bridge-policy-v1|" + BridgePolicy.Canonical()) +
-            (TokenId == InitialLaunch.PusdtTokenId ? "|native-bridge-domain-v1|" + Blockchain.NetworkId : "");
+            (NativeBridge.IsAssetId(TokenId) ? "|native-bridge-domain-v1|" + Blockchain.NetworkId : "");
     }
     [DataContract]
     public sealed class TokenAuthorization
@@ -164,7 +164,7 @@ namespace PrivateCoin.Core
                         Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
                         TokenRuntime = new TokenRuntime { Token = token, Supply = 0, Issued = 0 } };
             TokenRuntime next = null;
-            if (tx.Token != null && tx.Kind == TransactionKind.TokenCreate)
+            if (tx.Token != null && (tx.Kind == TransactionKind.TokenCreate || NativeBridge.IsRegistration(tx)))
                 next = new TokenRuntime { Token = tx.Token, Supply = tx.Token.Supply, Issued = tx.Token.Supply };
             else if (tx.Kind == TransactionKind.TokenManage && tx.TokenCommand != null)
             {
@@ -222,7 +222,7 @@ namespace PrivateCoin.Core
             }
             foreach (var output in tx.Outputs.Where(output => output.AssetId != null))
                 if (State(utxo, output.AssetId)?.Paused == true && tx.Kind != TransactionKind.LaunchRefund) throw new InvalidOperationException("Token transfers are paused.");
-            if (tx.Token?.Policy?.BridgeBinding != null) throw new InvalidOperationException("Bridge binding belongs only to the protocol pUSDT configuration.");
+            if (tx.Token?.Policy?.BridgeBinding != null && !NativeBridge.IsRegistration(tx)) throw new InvalidOperationException("Bridge binding belongs only to the protocol pUSDT configuration.");
             if (tx.Kind == TransactionKind.TokenCreate && tx.Token?.Policy != null)
             {
                 var policy = tx.Token.Policy;
@@ -241,6 +241,10 @@ namespace PrivateCoin.Core
             }
             if (tx.TokenCommand == null) return;
             var cmd = tx.TokenCommand;
+            if (NativeBridge.IsRegistration(tx)) {
+                var authority = NativeBridge.ValidateRegistration(tx, utxo, version);
+                ValidateSignatures(tx, authority); return;
+            }
             var state = State(utxo, cmd.TokenId);
             if (tx.Kind != TransactionKind.TokenManage || state?.Token.Policy == null || cmd.Revision != state.Revision ||
                 !TokenPolicy.Address(cmd.TokenId) || tx.Token != null || tx.TokenAuthorizations == null)
@@ -269,6 +273,10 @@ namespace PrivateCoin.Core
                 if (!rules.Pausable || cmd.Amount != 0 || state.Paused == (cmd.Operation == "pause")) throw new InvalidOperationException("Invalid pause transition.");
             }
             else throw new InvalidOperationException("Unknown token command.");
+            ValidateSignatures(tx, rules);
+        }
+        private static void ValidateSignatures(Transaction tx, TokenPolicy rules) {
+            var cmd = tx.TokenCommand;
             var signers = new HashSet<string>(StringComparer.Ordinal);
             foreach (var proof in tx.TokenAuthorizations)
             {
