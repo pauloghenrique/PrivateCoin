@@ -837,3 +837,17 @@ da tabela, não por mineração de uma cadeia completa de vinte anos.
 
 Reexecute também as regressões de dificuldade dinâmica, registro sem recompensa,
 Desktop, propagação e lançamento. O verificador do navegador exige consenso v35.
+
+
+## Produção imediata sem espera fixa (v35)
+
+```sh
+mcs -out:work/ImmediateProduction.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinBlockProductionRegression.cs Tests/LegacyConsensusFixture.cs Tests/ValidationBatchFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/ImmediateProduction.exe --scheduler-only
+```
+
+Verifica produção imediata de lotes parciais e do excedente, máximo de vinte,
+prioridade, dependências, rejeição de duplicadas e preservação da elegibilidade.
+O relógio legado não é consultado. O manifesto declara espera zero; a meta
+da dificuldade continua em dez segundos. `--scheduler-only` isola esta política
+local das fixtures históricas da suíte, anteriores ao novo genesis v35.

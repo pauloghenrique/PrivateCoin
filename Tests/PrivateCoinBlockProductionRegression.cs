@@ -23,49 +23,29 @@ internal static class PrivateCoinBlockProductionRegression
     }
     private static void Schedule()
     {
-        var chain = new Blockchain(); TimeSpan now = TimeSpan.Zero;
-        var scheduler = new BlockProductionScheduler(() => now);
-        Transaction[] ready = Registrations(chain, 35, "clock-");
+        var scheduler = new BlockProductionScheduler(() => { throw new Exception("collection clock must not be consulted"); });
+        Transaction[] ready = Enumerable.Range(0, 35).Select(i => new Transaction { Id = "ready-" + i, Fee = i + 1, TimestampUtcTicks = i }).ToArray();
         Check(scheduler.SelectBatch(new Transaction[0]).Count == 0 && scheduler.CandidateCount == 0, "an empty queue never produces a block");
-        Check(scheduler.SelectBatch(ready.Take(3)).Count == 0 && scheduler.RemainingWait.TotalSeconds == 10, "three ready operations start the ten-second wait");
-        now = TimeSpan.FromSeconds(9);
-        Check(scheduler.SelectBatch(ready.Take(4)).Count == 0 && scheduler.RemainingWait.TotalSeconds == 1, "a new arrival does not restart the original deadline");
-        now = TimeSpan.FromSeconds(10);
-        Check(scheduler.SelectBatch(ready.Take(4)).Count == 4 && scheduler.RemainingWait == TimeSpan.Zero, "a partial block becomes due at ten seconds");
-        scheduler.SelectBatch(new Transaction[0]);
-        now = TimeSpan.FromSeconds(11);
-        Check(scheduler.SelectBatch(ready.Take(1)).Count == 0, "a removed operation starts a fresh wait if it becomes ready again");
-        now = TimeSpan.FromSeconds(21);
-        Check(scheduler.SelectBatch(ready.Take(1)).Count == 1, "one operation is sufficient after its deadline");
-
-        scheduler = new BlockProductionScheduler(() => now);
-        Check(scheduler.SelectBatch(ready.Take(19)).Count == 0, "nineteen operations wait before the deadline");
-        now += TimeSpan.FromSeconds(3);
-        Check(scheduler.SelectBatch(ready.Take(20)).Count == 20, "the twentieth operation triggers production before the deadline");
-
-        scheduler = new BlockProductionScheduler(() => now);
+        Check(scheduler.SelectBatch(ready.Take(1)).Count == 1 && scheduler.RemainingWait == TimeSpan.Zero, "one ready operation starts production immediately");
+        Check(scheduler.SelectBatch(ready.Take(3)).Count == 3, "partial batches do not wait for more operations");
+        Check(scheduler.SelectBatch(ready.Take(19)).Count == 19, "nineteen operations do not wait for the twentieth");
         Transaction[] full = scheduler.SelectBatch(ready).ToArray();
-        Check(full.Length == 20 && full.Select(tx => tx.Id).SequenceEqual(Blockchain.OrderByFeePriority(ready).Take(20).Select(tx => tx.Id)), "a full block caps the queue at twenty in priority order");
+        Check(full.Length == 20 && scheduler.CandidateCount == 20, "a batch never exceeds twenty operations");
+        Check(full.Select(tx => tx.Id).SequenceEqual(Blockchain.OrderByFeePriority(ready).Take(20).Select(tx => tx.Id)), "immediate batching retains fee priority");
         Transaction[] overflow = ready.Where(tx => full.All(included => included.Id != tx.Id)).ToArray();
-        now += TimeSpan.FromSeconds(6);
-        Check(scheduler.SelectBatch(overflow).Count == 0 && scheduler.RemainingWait.TotalSeconds == 4, "overflow retains the time observed before the first block");
-        now += TimeSpan.FromSeconds(4);
-        Check(scheduler.SelectBatch(overflow).Count == 15, "the remaining fifteen operations become due at their original deadline");
-        Check(scheduler.SelectBatch(new Transaction[0]).Count == 0, "draining the queue creates no empty follow-up block");
-
-        scheduler = new BlockProductionScheduler(() => now);
-        Check(scheduler.SelectBatch(ready.Take(2), batch => false).Count == 0 && scheduler.CandidateCount == 0, "time cannot bypass unavailable validators");
-        now += TimeSpan.FromSeconds(10);
-        Check(scheduler.SelectBatch(ready.Take(2), batch => batch.Count <= 1).Count == 1, "an eligible smaller batch keeps its deadline when the combined batch cannot be produced");
-        Reject(() => scheduler.SelectBatch(new[] { ready[0], ready[0] }), "duplicate ready operations cannot inflate the block threshold");
-
+        Check(scheduler.SelectBatch(overflow).Count == 15, "overflow can start its next batch immediately");
+        Check(scheduler.SelectBatch(new Transaction[0]).Count == 0 && scheduler.RemainingWait == TimeSpan.Zero, "draining the queue creates no empty follow-up block");
+        Check(scheduler.SelectBatch(ready.Take(2), batch => false).Count == 0 && scheduler.CandidateCount == 0, "removing the wait cannot bypass unavailable validators");
+        Check(scheduler.SelectBatch(ready.Take(2), batch => batch.Count <= 1).Count == 1, "an eligible smaller batch starts without waiting for incompatible operations");
+        Reject(() => scheduler.SelectBatch(new[] { ready[0], ready[0] }), "duplicate ready operations remain rejected");
         var parent = new Transaction { Id = "parent", Fee = 3, TimestampUtcTicks = long.MaxValue };
         var child = new Transaction { Id = "child", Fee = 4, TimestampUtcTicks = 1 };
         child.Inputs.Add(new TransactionInput { TransactionId = parent.Id, OutputIndex = 0 });
-        scheduler = new BlockProductionScheduler(() => now);
-        scheduler.SelectBatch(new[] { parent, child }); now += TimeSpan.FromSeconds(10);
-        Check(scheduler.SelectBatch(new[] { parent, child }).Select(tx => tx.Id).SequenceEqual(new[] { "parent", "child" }), "the deadline uses local observation while dependencies determine ordering");
-        Check(scheduler.SelectBatch(new[] { parent, child }, batch => batch.All(tx => tx.Id != parent.Id)).Count == 0, "a dependent operation cannot bypass a skipped prerequisite");
+        Check(scheduler.SelectBatch(new[] { parent, child }).Select(tx => tx.Id).SequenceEqual(new[] { "parent", "child" }), "dependencies precede children even when child has higher priority");
+        Check(scheduler.SelectBatch(new[] { parent, child }, batch => batch.All(tx => tx.Id != parent.Id)).Count == 0, "a child cannot bypass an ineligible prerequisite");
+        Check(Blockchain.BlockWaitSeconds == 0 && ProofOfWork.TargetBlockSeconds == 10, "collection delay is zero while dynamic mining still targets ten seconds");
+        var rules = new Blockchain().Blocks[0].Rules;
+        Check(rules.BlockWaitSeconds == 0 && rules.BlockProductionRule.Contains("without a fixed collection wait"), "genesis declares immediate collection policy");
     }
     private static void Consensus()
     {
@@ -140,9 +120,9 @@ internal static class PrivateCoinBlockProductionRegression
             Check(chain.GetActiveValidators().Count == 0 && new Blockchain(Copy(chain.Blocks.ToList())).IsValid(), "a confirmed release batch deactivates its validators exactly once");
         }
     }
-    public static int Main()
+    public static int Main(string[] args)
     {
-        try { Schedule(); Consensus(); Console.WriteLine(checks + " block production checks passed"); return 0; }
+        try { Schedule(); if (!args.Contains("--scheduler-only")) Consensus(); Console.WriteLine(checks + " block production checks passed"); return 0; }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
 }

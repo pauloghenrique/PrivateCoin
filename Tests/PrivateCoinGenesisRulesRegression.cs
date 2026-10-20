@@ -87,7 +87,7 @@ internal static class PrivateCoinGenesisRulesRegression
         Check(rules.WalletRewardAtomicUnits == 600L * Blockchain.OneCoin && rules.RewardedWalletLimit == 1 && rules.RewardPhases.Count == 4 &&
             rules.RewardPhases.Sum(phase => phase.TotalRewardAtomicUnits) == rules.ValidatorSupplyAtomicUnits,
             "distribution and all emission phases agree with executable policy");
-        Check(rules.MaxOperationsPerBlock == 20 && rules.BlockWaitSeconds == 10 && rules.ProofOfWorkDifficultyBits == 12 &&
+        Check(rules.MaxOperationsPerBlock == 20 && rules.BlockWaitSeconds == 0 && rules.ProofOfWorkDifficultyBits == 12 &&
             rules.CreatorPercentage + rules.ConfirmerPercentage == 100 && rules.ImplementationHash.Length == 64, "production, validation and implementation rules are public");
         Check(Copy<Block[]>(chain.Blocks.ToArray())[0].Rules.CalculateHash() == Blockchain.RulesHash, "JSON roundtrip preserves the canonical rule commitment");
         foreach (PropertyInfo property in typeof(GenesisRules).GetProperties())
@@ -116,7 +116,7 @@ internal static class PrivateCoinGenesisRulesRegression
         Check(original.Contains("\"Genesis\"") && original.Contains("\"TotalSupplyAtomicUnits\":1818000000000000"), "Blockchain.json contains readable genesis rules");
         List<Transaction> pending;
         Check(store.LoadNetwork(out pending).IsValid() && pending.Count == 0, "real Desktop storage reloads the manifest");
-        File.WriteAllText(file, original.Replace("\"BlockWaitSeconds\":10", "\"BlockWaitSeconds\":11"));
+        File.WriteAllText(file, original.Replace("\"BlockWaitSeconds\":0", "\"BlockWaitSeconds\":1"));
         Reject(() => store.LoadNetwork(out pending), "readable genesis tampering is rejected even with intact payload checksum");
         File.WriteAllText(file, original);
 

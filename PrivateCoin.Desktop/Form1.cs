@@ -690,16 +690,13 @@ namespace PrivateCoin.Desktop
                 Transaction[] remaining = SnapshotPending();
                 miningStatusLabel.Text = waitingForRegistrationValidator
                     ? "Registro aguardando bloco assinado de um validador elegível; sem recompensa por registro"
-                    : blockScheduler.RemainingWait > TimeSpan.Zero
-                    ? "Aguardando até 20 operações ou " + Math.Ceiling(blockScheduler.RemainingWait.TotalSeconds).ToString(CultureInfo.InvariantCulture) + " s para criar o bloco"
                     : remaining.Length > 0
                         ? "Operações pendentes: " + remaining.Length.ToString(CultureInfo.InvariantCulture) + "  |  Aguardando aprovações e validadores elegíveis"
-                        : "Até 20 operações por bloco  |  Espera máxima: 10 s";
+                        : "Até 20 operações por bloco  |  Sem espera fixa";
                 UpdateChainSummary();
                 if (!IsDisposed && !Disposing && remaining.Length > 0 && networkReadiness.IsReady && IsNetworkConnected())
                 {
-                    blockProductionTimer.Interval = blockScheduler.RemainingWait > TimeSpan.Zero
-                        ? (int)Math.Max(1, Math.Min(1000, Math.Ceiling(blockScheduler.RemainingWait.TotalMilliseconds))) : 1000;
+                    blockProductionTimer.Interval = 1000;
                     blockProductionTimer.Start();
                 }
             }
