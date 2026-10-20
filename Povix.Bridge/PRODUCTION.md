@@ -6,7 +6,7 @@ A ponte continua federada: nós POVIX verificam assinaturas, política e unicida
 
 ## Onde definir os operadores
 
-Copie `production.config.example.json` para `production.local.json`, dentro de `Povix.Bridge`. Os placeholders são intencionalmente inválidos. Cada operador deve ser uma pessoa/organização responsável por sua própria máquina, fontes de dados e chaves. Cinco servidores administrados pela mesma pessoa não constituem cinco controles independentes.
+Copie `production.config.example.json` para `production.local.json`, dentro de `Povix.Bridge`. Os placeholders são intencionalmente inválidos. Cada operador deve ser uma pessoa/organização responsável por sua própria máquina, fontes de dados e chaves. Duas carteiras ou servidores administrados pela mesma pessoa continuam sob um único controle. O exemplo usa **dois operadores e exige ambas as assinaturas (2 de 2)**. Se um deles ficar indisponível ou perder a chave, emissão, retomada e autorizações de resgate ficam bloqueadas; sem recuperação da chave, os fundos podem ficar bloqueados permanentemente. Pausa emergencial e cancelamento de filas continuam disponíveis a qualquer operador. Também é aceito o modelo anterior de cinco ou mais operadores com maioria estrita de pelo menos três.
 
 Cada operador gera **localmente**:
 
@@ -19,10 +19,10 @@ Informe as senhas no ambiente local `NATIVE_KEYSTORE_PASSWORD` e `BRIDGE_KEYSTOR
 
 Preencha:
 
-- `operators`: cinco endereços EVM distintos (BNB), na ordem que será publicada no contrato;
-- `nativeAdministrators`: os cinco endereços POVIX, hashes das chaves públicas RSA;
-- `nativeSigningPublicKeys`: as três chaves públicas RSA escolhidas para um lote de assinaturas. Nunca são XMLs privados. Para trocar o grupo signatário por indisponibilidade, use outro subconjunto válido da mesma federação e refaça a proposta;
-- `threshold` / `nativeThreshold`: pelo menos 3 e sempre maioria estrita do respectivo grupo;
+- `operators`: dois endereços EVM distintos (BNB), na ordem que será publicada no contrato;
+- `nativeAdministrators`: os dois endereços POVIX, hashes das chaves públicas RSA;
+- `nativeSigningPublicKeys`: as duas chaves públicas RSA dos operadores. Nunca são XMLs privados. No modelo 2 de 2 não há operador substituto. Em uma federação maior, outro subconjunto válido pode refazer a proposta;
+- `threshold` / `nativeThreshold`: ambos iguais a 2 no modelo de dois operadores; para cinco ou mais, maioria estrita de pelo menos 3;
 - `nativeNetwork`: NetworkId efetivo, obtido do Core compilado (`mono build/native/BridgeNative.exe network`);
 - `nativeSnapshots`: exports atuais de pelo menos dois nós POVIX operados independentemente; `nativeSnapshot` aponta para um desses arquivos;
 - `rpcUrls`: pelo menos dois RPCs BNB HTTPS de provedores independentes; `rpcUrl` é um deles. Domínios diferentes são exigidos em chain 56, mas independência organizacional precisa ser conferida pelos operadores;
@@ -37,8 +37,8 @@ Os contratos e a política nativa guardam as identidades e limites publicados. E
 
 Compile com dependências fixadas (`npm ci --ignore-scripts`, `npm run build`, `npm run test:native-build`) usando Node >=22.13 e o toolchain .NET Framework/Mono documentado no README. A versão do compilador Solidity é fixa. Não publicar um artefato diferente do revisado. Para as máquinas dos operadores, gere `npm run package:production -- /caminho/novo/pacote`; a pasta deve ser nova. O pacote contém somente o código de execução, binários nativos, artefatos de produção, configuração de exemplo e um manifesto SHA-256. Instale com `npm ci --omit=dev --ignore-scripts` dentro do pacote, usando seu lockfile mínimo próprio. Ele não depende de solc, Ganache nem dos testes. A revisão desta mudança atualizou ethers para 6.17.0/ws 8.21.0 e a auditoria npm do pacote mínimo retornou zero alertas conhecidos. A árvore de desenvolvimento Ganache mantém alertas em dependências empacotadas legadas: não a instalar em servidores de operadores nem a usar com chaves ou fundos reais. Reauditar versões no momento da implantação; zero alertas conhecidos não comprova segurança.
 
-1. Concluir a revisão independente e o ensaio com cinco operadores em testnet. Preservar código, lockfile, versão do compilador, hashes dos artefatos e relatório da revisão.
-2. Com `bridge: null`, publicar `ProductionVault` usando `node src/cli.mjs deploy production.local.json relay-bnb.local.json`. O cofre nasce pausado. A ferramenta confere chain e hash do ativo em ambos os RPCs. Salvar endereço, hash runtime e transação retornados em `bridge` e `vaultCodeHash`, conferir no explorador e por ambos os RPCs. Para mainnet, o contrato exige ao menos cinco operadores, quorum majoritário >=3 e caps dentro de Int64.
+1. Concluir a revisão independente e o ensaio com os dois operadores em testnet. Preservar código, lockfile, versão do compilador, hashes dos artefatos e relatório da revisão.
+2. Com `bridge: null`, publicar `ProductionVault` usando `node src/cli.mjs deploy production.local.json relay-bnb.local.json`. O cofre nasce pausado. A ferramenta confere chain e hash do ativo em ambos os RPCs. Salvar endereço, hash runtime e transação retornados em `bridge` e `vaultCodeHash`, conferir no explorador e por ambos os RPCs. Para mainnet, o contrato exige dois operadores com quorum 2 de 2, ou cinco ou mais com quorum majoritário >=3 e caps dentro de Int64.
 3. Configurar uma única vez a política nativa do pUSDT pela carteira fundadora com `configure-native`. Esse bootstrap usa somente a chave da carteira fundadora, em máquina isolada, pelo formato local já documentado; não deve reunir as chaves dos operadores. Submeter a transação ao nó POVIX e confirmar em ambos os nós. Depois da configuração, a carteira fundadora deixa de ter autoridade exclusiva sobre a emissão.
 4. Opcionalmente publicar `ProductionVaultFactory` com `deploy-factory`. Salvar `factory` e `factoryCodeHash` retornados e conferir o código. A factory de produção requer quorum para aprovar cada ativo, código de origem e limites próprios; não há onboarding irrestrito por usuário.
 5. Rodar `node src/cli.mjs audit production.local.json` e conferir a política em ambos os nós, bytecodes, escala, reservas e limites. Um nó deve estar atualizado: o arquivo e o último bloco precisam ser recentes. Divergência ou indisponibilidade bloqueia a assinatura; não substituir uma fonte faltante por cópia controlada pelo coordenador.
@@ -65,7 +65,7 @@ node src/cli.mjs sign-native production.local.json proposta.json operador-povix.
 
 Cada operador confere código/configuração, recibo canônico e profundidade em dois RPCs BNB e recalcula o conteúdo assinado a partir de dois snapshots POVIX válidos e recentes. Endereço, valor, depósito e bloco de origem são vinculados ao payload. A chave privada permanece no processo local. O journal de cada operador registra fatos assinados e recusa decisões conflitantes. Uma proposta expira para assinatura após dez minutos; se expirar, use `refresh-native config.local.json proposta.json state/coordenador.sqlite`, que revalida os fatos, arquiva a proposta anterior e prepara outra com estado/revisão atual. Colete novas assinaturas. Não limpe decisões conflitantes para “forçar” aprovação.
 
-Reúna os três resultados públicos em um array `assinaturas.json` e execute:
+Reúna os dois resultados públicos (ou o quorum configurado para uma federação maior) em um array `assinaturas.json` e execute:
 
 ```sh
 node src/cli.mjs complete-native production.local.json proposta.json assinaturas.json
@@ -91,7 +91,7 @@ Divida resgates maiores que o limite diário antes de queimar: `prepare-burn` re
 
 `release` **agenda**, sem transferir fundos, uma retirada por burn. O saldo fica reservado e não pode ser comprometido em outro resgate. A espera mínima é **24 horas após autorização**. Depois, qualquer relay pode executar `execute-release config.local.json 0xBURN_ID relay-bnb.local.json`. O limite diário é cobrado na execução. O contrato verifica saldos exatos e proíbe transferências não padronizadas, replay e pagamento duplicado.
 
-Qualquer um dos cinco operadores pode usar `emergency-pause` imediatamente ou `cancel-release` para cancelar uma fila suspeita. A retomada exige a maioria. Pausar não apaga filas nem reinicia seu prazo: em alerta de retirada suspeita, cancele também as filas suspeitas e mantenha a observação antes de qualquer retomada. Cancelar libera a reserva e uma nova fila exige assinatura com novo nonce; autorização anterior não pode ser reutilizada. Uma chave comprometida pode causar indisponibilidade por esses controles, mas sozinha não consegue retirar fundos.
+Qualquer um dos operadores pode usar `emergency-pause` imediatamente ou `cancel-release` para cancelar uma fila suspeita. A retomada exige a maioria. Pausar não apaga filas nem reinicia seu prazo: em alerta de retirada suspeita, cancele também as filas suspeitas e mantenha a observação antes de qualquer retomada. Cancelar libera a reserva e uma nova fila exige assinatura com novo nonce; autorização anterior não pode ser reutilizada. Uma chave comprometida pode causar indisponibilidade por esses controles, mas sozinha não consegue retirar fundos.
 
 Manter observação contínua de `Deposited`, `ReleaseQueued`, `ReleaseCancelled`, `Released`, pausas, bytecodes/implementações do emissor e blocos de ambas as redes. Rodar `audit` em monitoramento: código de saída 2 significa reserva insuficiente para as obrigações observadas; falhas de consulta/divergências também encerram com erro. Reservas podem exceder oferta por depósitos ainda não emitidos ou queimas ainda não liberadas; a auditoria não exige igualdade. Ela é uma verificação de lastro agregado, não substitui conferência de cada autorização/queima.
 

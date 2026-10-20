@@ -47,7 +47,7 @@ contract ProductionVault is EIP712, ReentrancyGuard {
         require(token.code.length > 0 && network != bytes32(0) && representation != bytes32(0), "invalid asset or network");
         uint8 precision = IERC20Metadata(token).decimals();
         require(precision <= 18, "unsupported precision");
-        require(members.length >= 5 && members.length <= 10 && quorum >= 3 && quorum > members.length / 2 && quorum <= members.length, "majority required");
+        require((members.length == 2 || members.length >= 5 && quorum >= 3) && members.length <= 10 && quorum > members.length / 2 && quorum <= members.length, "majority required");
         require(cap > 0 && cap <= uint256(uint64(type(int64).max)) && dailyCap > 0 && dailyCap <= cap, "invalid caps");
         for (uint256 i; i < members.length; ++i) {
             require(members[i] != address(0) && !isOperator[members[i]], "invalid operator");

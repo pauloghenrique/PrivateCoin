@@ -27,7 +27,7 @@ contract ProductionVaultFactory is EIP712 {
         for (uint256 i; i < 10; ++i) {
             try primary.operators(i) returns (address member) { operators.push(member); isOperator[member] = true; } catch { break; }
         }
-        require(primary.bridgeVersion() == 2 && operators.length >= 5 && threshold > operators.length / 2, "invalid committee");
+        require(primary.bridgeVersion() == 2 && (operators.length == 2 || operators.length >= 5) && threshold > operators.length / 2, "invalid committee");
         primaryAsset = address(primary.asset()); vaults[primaryAsset] = primaryVault;
     }
     function representation(address asset) public view returns(bytes32) {

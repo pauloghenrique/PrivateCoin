@@ -29,6 +29,11 @@ internal static class ProductionNativeRegression {
         }
         var ledger=BridgeNative.LoadChain(Path.Combine(Dir,"chain.json"));var config=BridgeNative.Read<NativeConfig>(Path.Combine(Dir,"config.json"));
         if(args[0]=="configure") {
+            if(config.nativeAdministrators.Length == 2) {
+                var weak=BridgeNative.Read<NativeConfig>(Path.Combine(Dir,"config.json")); weak.chainId=56; weak.nativeThreshold=1;
+                try { BridgeNative.Configure(new Blockchain(ledger.Blocks),weak,BridgeNative.Read<string[]>(Path.Combine(Dir,"founder.local.json")));throw new Exception("Accepted 1-of-2 mainnet policy"); }
+                catch(InvalidOperationException) { Check(true,"native mainnet rejects 1-of-2 policy before configuration"); }
+            }
             var before=new Blockchain(ledger.Blocks);
             var mainnet=BridgeNative.Read<NativeConfig>(Path.Combine(Dir,"config.json")); mainnet.chainId=56;
             var root=BridgeNative.Configure(before,mainnet,BridgeNative.Read<string[]>(Path.Combine(Dir,"founder.local.json")));Confirm(before,root);

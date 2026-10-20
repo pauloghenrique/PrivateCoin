@@ -47,3 +47,28 @@ test('oversized native redemption is rejected before burning',()=>{
  const output=execFileSync(process.env.POVIX_MONO||'mono',[path.join(root,'build/native/ProductionBurnLimitRegression.exe')],{encoding:'utf8',timeout:120000});
  assert.match(output,/PASS production native preparation/);
 });
+
+test('two operators require both distinct signatures and preserve mainnet safeguards',async()=>{
+ const c={...config,chainId:56,rpcUrl:'https://one.example',rpcUrls:['https://one.example','https://two.example'],operators:config.operators.slice(0,2),nativeAdministrators:config.nativeAdministrators.slice(0,2),threshold:2,nativeThreshold:2};
+ assert.doesNotThrow(()=>validateConfig(c));
+ for(const patch of [{threshold:1},{nativeThreshold:1},{operators:[c.operators[0],c.operators[0]]},{nativeAdministrators:[c.nativeAdministrators[0],c.nativeAdministrators[0]]},{operators:c.operators.slice(0,1),threshold:1},{nativeAdministrators:c.nativeAdministrators.slice(0,1),nativeThreshold:1},{nativeConfirmations:12},{bscConfirmations:15},{operators:config.operators.slice(0,3)},{nativeAdministrators:config.nativeAdministrators.slice(0,3)}])assert.throws(()=>validateConfig({...c,...patch}));
+ const rpc=ganache.provider({chain:{chainId:31337},logging:{quiet:true},wallet:{totalAccounts:3}}),provider=new BrowserProvider(rpc,undefined,{cacheTimeout:-1});provider.pollingInterval=10;
+ try {
+  const wallets=Object.values(rpc.getInitialAccounts()).map(a=>new Wallet(a.secretKey)),signer=await provider.getSigner(0);
+  const mock=compile('test/MockAsset.sol','MockAsset'),artifact=compile('contracts/ProductionVault.sol','ProductionVault'),fa=compile('contracts/ProductionVaultFactory.sol','ProductionVaultFactory');
+  const deploy=async()=>{const t=await new ContractFactory(mock.abi,mock.bytecode,signer).deploy(6);await t.waitForDeployment();return t;};
+  const token=await deploy(),asset=await deploy(),members=wallets.slice(0,2).map(w=>w.address);
+  const vaultFactory=new ContractFactory(artifact.abi,artifact.bytecode,signer);
+  const args=[await token.getAddress(),'0x'+'a'.repeat(64),'0x'+protocolToken];
+  await assert.rejects(vaultFactory.deploy(...args,members,1,1000000,250000));
+  await assert.rejects(vaultFactory.deploy(...args,[members[0],members[0]],2,1000000,250000));
+  const vault=await vaultFactory.deploy(...args,members,2,1000000,250000);await vault.waitForDeployment();
+  const factory=await new ContractFactory(fa.abi,fa.bytecode,signer).deploy(await vault.getAddress());await factory.waitForDeployment();
+  const cfg={...config,factory:await factory.getAddress()},value={asset:await asset.getAddress(),codeHash:keccak256(await provider.getCode(await asset.getAddress())),cap:1000000,dailyCap:250000,deadline:Number((await provider.getBlock('latest')).timestamp)+300};
+  const signatures=(await Promise.all(wallets.slice(0,2).map(async w=>({address:w.address,signature:await w.signTypedData(assetDomain(cfg),assetTypes,value)})))).sort((a,b)=>BigInt(a.address)<BigInt(b.address)?-1:1).map(v=>v.signature);
+  await assert.rejects(factory.createVault(value.asset,value.codeHash,value.cap,value.dailyCap,value.deadline,signatures.slice(0,1)));
+  await assert.rejects(factory.createVault(value.asset,value.codeHash,value.cap,value.dailyCap,value.deadline,[signatures[0],signatures[0]]));
+  await(await factory.createVault(value.asset,value.codeHash,value.cap,value.dailyCap,value.deadline,signatures)).wait();
+  const child=new Contract(await factory.vaults(value.asset),artifact.abi,provider);assert.equal(await child.threshold(),2n);assert.equal(await child.operators(0),members[0]);assert.equal(await child.operators(1),members[1]);assert.equal(await child.paused(),true);
+ }finally {await provider.destroy();await rpc.disconnect();}
+});

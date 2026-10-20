@@ -86,10 +86,10 @@ namespace PrivateCoin.Core
             if (policy == null) throw new InvalidOperationException("Missing bridge policy.");
             policy.Validate(0);
             if (!policy.Mintable || !policy.Burnable || !policy.Pausable || policy.MaximumSupply <= 0 || policy.HasAutomaticBurn ||
-                policy.VestingTranches != 0 || policy.Administrators.Count < 3 || policy.RequiredSignatures <= policy.Administrators.Count / 2)
-                throw new InvalidOperationException("Bridge representations require a majority of at least three administrators and no transfer burn or vesting.");
-            if (policy.BridgeBinding?.StartsWith("56:", StringComparison.Ordinal) == true && (policy.Administrators.Count < 5 || policy.RequiredSignatures < 3))
-                throw new InvalidOperationException("Mainnet bridge requires at least five independent administrators and a majority of at least three.");
+                policy.VestingTranches != 0 || policy.Administrators.Count < 2 || policy.RequiredSignatures <= policy.Administrators.Count / 2)
+                throw new InvalidOperationException("Bridge representations require at least two administrators and a strict majority and no transfer burn or vesting.");
+            if (policy.BridgeBinding?.StartsWith("56:", StringComparison.Ordinal) == true && policy.Administrators.Count != 2 && (policy.Administrators.Count < 5 || policy.RequiredSignatures < 3))
+                throw new InvalidOperationException("Mainnet bridge requires two administrators with both signatures, or at least five administrators with a majority of at least three.");
             var parts = (policy.BridgeBinding ?? "").Split(':'); long chainId;
             if (parts.Length != 3 || !long.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out chainId) || Binding(chainId, parts[1], parts[2]) != policy.BridgeBinding)
                 throw new InvalidOperationException("Bridge representation must be bound to a BNB asset and vault.");

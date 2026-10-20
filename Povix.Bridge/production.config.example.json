@@ -16,25 +16,18 @@
   "nativeToken": "c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d",
   "nativeAdministrators": [
     "PUBLIC_POVIX_ADDRESS_OPERATOR_1",
-    "PUBLIC_POVIX_ADDRESS_OPERATOR_2",
-    "PUBLIC_POVIX_ADDRESS_OPERATOR_3",
-    "PUBLIC_POVIX_ADDRESS_OPERATOR_4",
-    "PUBLIC_POVIX_ADDRESS_OPERATOR_5"
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_2"
   ],
   "nativeSigningPublicKeys": [
     "PUBLIC_RSA_XML_OPERATOR_1",
-    "PUBLIC_RSA_XML_OPERATOR_2",
-    "PUBLIC_RSA_XML_OPERATOR_3"
+    "PUBLIC_RSA_XML_OPERATOR_2"
   ],
-  "nativeThreshold": 3,
+  "nativeThreshold": 2,
   "operators": [
     "PUBLIC_BNB_ADDRESS_OPERATOR_1",
-    "PUBLIC_BNB_ADDRESS_OPERATOR_2",
-    "PUBLIC_BNB_ADDRESS_OPERATOR_3",
-    "PUBLIC_BNB_ADDRESS_OPERATOR_4",
-    "PUBLIC_BNB_ADDRESS_OPERATOR_5"
+    "PUBLIC_BNB_ADDRESS_OPERATOR_2"
   ],
-  "threshold": 3,
+  "threshold": 2,
   "nativeSnapshot": "/var/lib/povix-node-1/Blockchain.json",
   "nativeSnapshots": [
     "/var/lib/povix-node-1/Blockchain.json",

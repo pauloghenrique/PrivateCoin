@@ -23,10 +23,10 @@ export function validateConfig(c) {
   if (c.chainId === 56 && c.mode !== 'production') throw Error('Mainnet requires explicit production mode.');
   if (![56, 97, 31337].includes(c.chainId) || typeof c.nativeNetwork !== 'string' || !c.nativeNetwork.startsWith('povix-mainnet-rules-v1-') ||
       !Number.isInteger(c.nativeConfirmations) || c.nativeConfirmations < 12 || !Number.isInteger(c.bscConfirmations) || c.bscConfirmations < 15 ||
-      (c.nativeToken !== protocolToken && (c.nativeToken !== representationId(c.chainId, c.asset) || !Number.isInteger(c.nativeDecimals) || c.nativeDecimals < 0 || c.nativeDecimals > 8 || !/^p[A-Z0-9]{1,9}$/.test(c.nativeSymbol))) || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < 3 ||
+      (c.nativeToken !== protocolToken && (c.nativeToken !== representationId(c.chainId, c.asset) || !Number.isInteger(c.nativeDecimals) || c.nativeDecimals < 0 || c.nativeDecimals > 8 || !/^p[A-Z0-9]{1,9}$/.test(c.nativeSymbol))) || !Array.isArray(c.nativeAdministrators) || c.nativeAdministrators.length < (c.mode === "production" ? 2 : 3) ||
       c.nativeAdministrators.some(a => !/^[a-f0-9]{64}$/.test(a)) || new Set(c.nativeAdministrators).size !== c.nativeAdministrators.length ||
       !Number.isInteger(c.nativeThreshold) || c.nativeThreshold <= c.nativeAdministrators.length / 2 || c.nativeThreshold > c.nativeAdministrators.length ||
-      !Array.isArray(c.operators) || c.operators.length < 3 || c.operators.length > 10 ||
+      !Array.isArray(c.operators) || c.operators.length < (c.mode === "production" ? 2 : 3) || c.operators.length > 10 ||
       !Number.isInteger(c.threshold) || c.threshold <= c.operators.length / 2 || c.threshold > c.operators.length)
     throw Error('Invalid bridge config; require 12 native / 15 BSC confirmations and majority operators.');
   const members = c.operators.map(getAddress);
@@ -39,10 +39,10 @@ export function validateConfig(c) {
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) throw Error('Use HTTPS RPC or loopback.');
   if (typeof c.nativeSnapshot !== 'string') throw Error('Native snapshot path required.');
   if (c.mode === 'production') {
-    if (c.operators.length < 5 || c.threshold < 3 || c.nativeAdministrators.length < 5 || c.nativeThreshold < 3 ||
+    if ((c.operators.length !== 2 && (c.operators.length < 5 || c.threshold < 3)) || (c.nativeAdministrators.length !== 2 && (c.nativeAdministrators.length < 5 || c.nativeThreshold < 3)) ||
         c.nativeConfirmations < (c.chainId === 31337 ? 12 : 120) || c.bscConfirmations < (c.chainId === 31337 ? 15 : 64) || !Array.isArray(c.rpcUrls) || c.rpcUrls.length < 2 ||
         new Set(c.rpcUrls).size !== c.rpcUrls.length || !/^0x[a-f0-9]{64}$/.test(c.assetCodeHash || '') ||
-        c.bridge !== null && !/^0x[a-f0-9]{64}$/.test(c.vaultCodeHash || '') || c.factory && !/^0x[a-f0-9]{64}$/.test(c.factoryCodeHash || '')) throw Error('Production requires five operators, majority quorum, 120 native / 64 BNB confirmations, independent RPCs and pinned code hashes.');
+        c.bridge !== null && !/^0x[a-f0-9]{64}$/.test(c.vaultCodeHash || '') || c.factory && !/^0x[a-f0-9]{64}$/.test(c.factoryCodeHash || '')) throw Error('Production requires two unanimous operators or five-plus majority operators, 120 native / 64 BNB confirmations, independent RPCs and pinned code hashes.');
     const urls = c.rpcUrls.map(value => new URL(value));
     if (!c.rpcUrls.includes(c.rpcUrl) || urls.some(url => url.protocol !== 'https:' && !(c.chainId === 31337 && url.protocol === 'http:' && ['127.0.0.1','localhost'].includes(url.hostname))) ||
         c.chainId === 56 && new Set(urls.map(url => url.hostname)).size < 2) throw Error('Use two independent HTTPS RPC hosts.');

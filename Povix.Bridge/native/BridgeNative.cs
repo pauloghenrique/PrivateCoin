@@ -66,17 +66,17 @@ namespace Povix.Bridge
         public static void ValidateConfig(NativeConfig config) {
             if (config == null || config.nativeNetwork != Blockchain.NetworkId || (config.chainId != 56 && config.chainId != 97 && config.chainId != 31337) ||
                 !BscAddress(config.bridge) || config.nativeConfirmations < 12 || config.nativeConfirmations > 100000 ||
-                (!NativeBridge.IsAssetId(config.nativeToken) || config.nativeToken != InitialLaunch.PusdtTokenId && config.nativeToken != NativeBridge.RepresentationId(config.chainId, config.asset)) || config.nativeAdministrators == null || config.nativeAdministrators.Length < 3 ||
+                (!NativeBridge.IsAssetId(config.nativeToken) || config.nativeToken != InitialLaunch.PusdtTokenId && config.nativeToken != NativeBridge.RepresentationId(config.chainId, config.asset)) || config.nativeAdministrators == null || config.nativeAdministrators.Length < (config.mode == "production" ? 2 : 3) ||
                 config.nativeThreshold <= config.nativeAdministrators.Length / 2 || config.nativeThreshold > config.nativeAdministrators.Length)
                 throw new InvalidOperationException("Invalid test USDT bridge config; minimum 12 native confirmations and majority administrators required.");
         }
         public static void ValidateProduction(Blockchain chain, NativeConfig config) {
             ValidateConfig(config);
-            if (config.mode != "production" || config.nativeAdministrators.Length < 5 || config.nativeThreshold < 3 || config.nativeConfirmations < (config.chainId == 31337 ? 12 : 120) ||
+            if (config.mode != "production" || config.nativeAdministrators.Length != 2 && (config.nativeAdministrators.Length < 5 || config.nativeThreshold < 3) || config.nativeConfirmations < (config.chainId == 31337 ? 12 : 120) ||
                 config.nativeSigningPublicKeys == null || config.nativeSigningPublicKeys.Length < config.nativeThreshold ||
                 config.nativeSigningPublicKeys.Select(Hash).Distinct().Count() != config.nativeSigningPublicKeys.Length ||
                 config.nativeSigningPublicKeys.Any(k => !config.nativeAdministrators.Contains(Hash(k))))
-                throw new InvalidOperationException("Production requires five administrators, quorum public keys and 120 native confirmations.");
+                throw new InvalidOperationException("Production requires two unanimous administrators or five-plus majority administrators, quorum public keys and 120 native confirmations.");
             foreach (var publicKey in config.nativeSigningPublicKeys) using (var rsa = new RSACryptoServiceProvider()) {
                 rsa.PersistKeyInCsp = false; rsa.FromXmlString(publicKey);
                 if (rsa.KeySize < 3072 || rsa.KeySize > 4096 || rsa.ToXmlString(false) != publicKey)
