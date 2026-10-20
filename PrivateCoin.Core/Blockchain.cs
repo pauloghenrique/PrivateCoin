@@ -34,7 +34,7 @@ namespace PrivateCoin.Core
         private const int LegacyHybridVersion = 7;
         private const int LegacySignedVersion = 4;
         public const int MaxOperationsPerBlock = 20;
-        public const int BlockWaitSeconds = 10;
+        public const int BlockWaitSeconds = 0;
         private const int LegacyValidationsPerBlock = 20;
         private static readonly Block canonicalGenesis = BuildCanonicalGenesis();
         public static readonly string GenesisHash = canonicalGenesis.Hash;

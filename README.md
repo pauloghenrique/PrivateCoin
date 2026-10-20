@@ -451,10 +451,12 @@ prazo de produção. O gênesis não emite moedas antecipadamente.
 `Blockchain.MaximumSupply` é o teto de 360.000 POVIX da distribuição gratuita mais a reserva de lançamento;
 `Rules.TotalSupplyAtomicUnits` explicita a soma desse teto com o dos validadores.
 
-O produtor escolhe até 20 operações prontas e elegíveis e inicia um lote ao
-atingir esse limite ou após 10 segundos desde a primeira observação local.
-O prazo local não pode ser comprovado por outro nó: tempo decorrido não dispensa
-aprovações, assinaturas, garantia confirmada, conservação de ativos nem mineração.
+O produtor inicia um lote assim que há operações prontas e elegíveis, com máximo
+de 20 por bloco e sem espera fixa de coleta (`BlockWaitSeconds = 0`).
+A meta média de dez segundos é regulada pela dificuldade dinâmica. A produção
+continua exigindo aprovações, assinaturas, garantia confirmada, conservação de
+ativos e mineração. O tempo de mineração e a disponibilidade dos validadores
+não garantem confirmação imediata.
 Filas vazias ou sem operações elegíveis não produzem blocos.
 
 Todos os fontes compilados do `PrivateCoin.Core` são incorporados como recursos.

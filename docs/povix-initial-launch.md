@@ -356,3 +356,8 @@ cadeia existente nem modifica recompensas já confirmadas automaticamente.
 O primeiro bloco após o novo genesis também precisa usar consenso v35. Começar
 uma cadeia v35 com uma versão antiga não permite recuperar recompensas maiores
 nem contornar o cronograma de vinte anos.
+
+A coleta local não espera dez segundos nem exige vinte operações: o produtor
+inicia assim que houver operações prontas e elegíveis, limitado a vinte por
+bloco. A meta média de dez segundos é controlada pela dificuldade dinâmica;
+mineração, aprovações e validadores continuam obrigatórios.
