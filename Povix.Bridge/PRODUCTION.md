@@ -4,6 +4,8 @@ Esta versão adiciona execução para BNB mainnet (chain 56). O projeto continua
 
 A ponte continua federada: nós POVIX verificam assinaturas, política e unicidade do depósito, mas não executam um light client BNB. Uma maioria comprometida pode inventar um novo depósito ou autorizar uma retirada indevida. Os controles abaixo limitam erros, replay e tempo de reação; não eliminam a confiança na federação.
 
+O cliente de operação agora é **C#/.NET Framework 4.8**, sem Node.js. Abra `Povix.Bridge.sln` e siga [VISUAL-STUDIO.md](VISUAL-STUDIO.md) para build, instalação e diferenças de journal. Os contratos permanecem Solidity.
+
 ## Onde definir os operadores
 
 Copie `production.config.example.json` para `production.local.json`, dentro de `Povix.Bridge`. Os placeholders são intencionalmente inválidos. Cada operador deve ser uma pessoa/organização responsável por sua própria máquina, fontes de dados e chaves. Duas carteiras ou servidores administrados pela mesma pessoa continuam sob um único controle. O exemplo usa **dois operadores e exige ambas as assinaturas (2 de 2)**. Se um deles ficar indisponível ou perder a chave, emissão, retomada e autorizações de resgate ficam bloqueadas; sem recuperação da chave, os fundos podem ficar bloqueados permanentemente. Pausa emergencial e cancelamento de filas continuam disponíveis a qualquer operador. Também é aceito o modelo anterior de cinco ou mais operadores com maioria estrita de pelo menos três.
@@ -11,8 +13,8 @@ Copie `production.config.example.json` para `production.local.json`, dentro de `
 Cada operador gera **localmente**:
 
 ```sh
-node src/cli.mjs create-native-operator operador-povix.local.json
-node src/cli.mjs create-operator operador-bnb.local.json
+Povix.Bridge.exe create-native-operator operador-povix.local.json
+Povix.Bridge.exe create-operator operador-bnb.local.json
 ```
 
 Informe as senhas no ambiente local `NATIVE_KEYSTORE_PASSWORD` e `BRIDGE_KEYSTORE_PASSWORD`, com pelo menos 16 caracteres. Não coloque senhas no comando, no Git, em mensagens ou no Web.config. A chave nativa usa RSA 3072, scrypt N=131072/r=8/p=1 e AES-256-GCM; a BNB usa keystore cifrado compatível com ethers. Os arquivos são exclusivos, criados com permissão 600 e não são sobrescritos. O comando imprime apenas os dados públicos. Para operadores existentes, não gere novas chaves sem registrar a identidade correta; esta versão não fornece rotação de operadores.
@@ -35,13 +37,13 @@ Os contratos e a política nativa guardam as identidades e limites publicados. E
 
 ## Compilar, publicar e vincular
 
-Compile com dependências fixadas (`npm ci --ignore-scripts`, `npm run build`, `npm run test:native-build`) usando Node >=22.13 e o toolchain .NET Framework/Mono documentado no README. A versão do compilador Solidity é fixa. Não publicar um artefato diferente do revisado. Para as máquinas dos operadores, gere `npm run package:production -- /caminho/novo/pacote`; a pasta deve ser nova. O pacote contém somente o código de execução, binários nativos, artefatos de produção, configuração de exemplo e um manifesto SHA-256. Instale com `npm ci --omit=dev --ignore-scripts` dentro do pacote, usando seu lockfile mínimo próprio. Ele não depende de solc, Ganache nem dos testes. A revisão desta mudança atualizou ethers para 6.17.0/ws 8.21.0 e a auditoria npm do pacote mínimo retornou zero alertas conhecidos. A árvore de desenvolvimento Ganache mantém alertas em dependências empacotadas legadas: não a instalar em servidores de operadores nem a usar com chaves ou fundos reais. Reauditar versões no momento da implantação; zero alertas conhecidos não comprova segurança.
+Compile a solução C# em Release após restaurar os pacotes NuGet fixados em `packages.config`, conforme VISUAL-STUDIO.md. Distribua a pasta completa de saída (`bin/CSharp/Release`), com DLLs, configuração e artefatos; não há instalação de npm, solc ou Ganache nos operadores. Artefatos de contrato pré-compilados e seu manifesto SHA-256 são versionados e conferidos ao carregar. Recompile/revise os contratos separadamente se houver alterações Solidity. NuGet e a nova persistência C# precisam de revisão independente antes da ativação. Os testes locais não comprovaram segurança de produção. A implementação JavaScript anterior e sua infraestrutura de desenvolvimento continuam disponíveis para comparação, sem participar da execução do cliente C#.
 
 1. Concluir a revisão independente e o ensaio com os dois operadores em testnet. Preservar código, lockfile, versão do compilador, hashes dos artefatos e relatório da revisão.
-2. Com `bridge: null`, publicar `ProductionVault` usando `node src/cli.mjs deploy production.local.json relay-bnb.local.json`. O cofre nasce pausado. A ferramenta confere chain e hash do ativo em ambos os RPCs. Salvar endereço, hash runtime e transação retornados em `bridge` e `vaultCodeHash`, conferir no explorador e por ambos os RPCs. Para mainnet, o contrato exige dois operadores com quorum 2 de 2, ou cinco ou mais com quorum majoritário >=3 e caps dentro de Int64.
+2. Com `bridge: null`, publicar `ProductionVault` usando `Povix.Bridge.exe deploy production.local.json relay-bnb.local.json`. O cofre nasce pausado. A ferramenta confere chain e hash do ativo em ambos os RPCs. Salvar endereço, hash runtime e transação retornados em `bridge` e `vaultCodeHash`, conferir no explorador e por ambos os RPCs. Para mainnet, o contrato exige dois operadores com quorum 2 de 2, ou cinco ou mais com quorum majoritário >=3 e caps dentro de Int64.
 3. Configurar uma única vez a política nativa do pUSDT pela carteira fundadora com `configure-native`. Esse bootstrap usa somente a chave da carteira fundadora, em máquina isolada, pelo formato local já documentado; não deve reunir as chaves dos operadores. Submeter a transação ao nó POVIX e confirmar em ambos os nós. Depois da configuração, a carteira fundadora deixa de ter autoridade exclusiva sobre a emissão.
 4. Opcionalmente publicar `ProductionVaultFactory` com `deploy-factory`. Salvar `factory` e `factoryCodeHash` retornados e conferir o código. A factory de produção requer quorum para aprovar cada ativo, código de origem e limites próprios; não há onboarding irrestrito por usuário.
-5. Rodar `node src/cli.mjs audit production.local.json` e conferir a política em ambos os nós, bytecodes, escala, reservas e limites. Um nó deve estar atualizado: o arquivo e o último bloco precisam ser recentes. Divergência ou indisponibilidade bloqueia a assinatura; não substituir uma fonte faltante por cópia controlada pelo coordenador.
+5. Rodar `Povix.Bridge.exe audit production.local.json` e conferir a política em ambos os nós, bytecodes, escala, reservas e limites. Um nó deve estar atualizado: o arquivo e o último bloco precisam ser recentes. Divergência ou indisponibilidade bloqueia a assinatura; não substituir uma fonte faltante por cópia controlada pelo coordenador.
 6. Cada operador assina `sign-pause` para `false` com sua chave EVM e o mesmo nonce/deadline; reunir a maioria e executar `pause`. Antes de assinar ativação em modo produção, a CLI exige auditoria de reserva aprovada. Senhas/keystores não saem das máquinas dos operadores.
 7. Só então configurar o DEX com `BridgeMode=production`, `BridgeEnabled=true`, `BridgeAsset`, `BridgeVault` e seus hashes. Para multiativos, também `BridgeFactory` e `BridgeFactoryCodeHash`; cadastrar pares de contrato/cofre e hashes já revisados em `Povix.Dex/App_Data/bridge-assets.json`, conforme o exemplo em `deploy/bridge-assets.example.json`. O servidor não recebe chaves privadas. Publicar o DEX em HTTPS e aplicar a configuração Release (debug desabilitado), com acesso administrativo restrito e monitoramento. Configuração ausente/inválida mantém depósitos desabilitados.
 
@@ -54,21 +56,21 @@ O usuário usa Swap BNB. Em produção, a tela exige chain 56, versão 2, hashes
 O coordenador guarda a referência `{ "transactionHash": "0x…", "logIndex": 0 }` e executa:
 
 ```sh
-node src/cli.mjs propose-native production.local.json mint referencia.json state/coordenador.sqlite
+Povix.Bridge.exe propose-native production.local.json mint referencia.json state/coordenador.journal
 ```
 
 Salve a proposta pública em um arquivo. Cada operador, **na sua máquina e com sua própria configuração de fontes**, executa:
 
 ```sh
-node src/cli.mjs sign-native production.local.json proposta.json operador-povix.local.json state/operador.sqlite
+Povix.Bridge.exe sign-native production.local.json proposta.json operador-povix.local.json state/operador.journal
 ```
 
-Cada operador confere código/configuração, recibo canônico e profundidade em dois RPCs BNB e recalcula o conteúdo assinado a partir de dois snapshots POVIX válidos e recentes. Endereço, valor, depósito e bloco de origem são vinculados ao payload. A chave privada permanece no processo local. O journal de cada operador registra fatos assinados e recusa decisões conflitantes. Uma proposta expira para assinatura após dez minutos; se expirar, use `refresh-native config.local.json proposta.json state/coordenador.sqlite`, que revalida os fatos, arquiva a proposta anterior e prepara outra com estado/revisão atual. Colete novas assinaturas. Não limpe decisões conflitantes para “forçar” aprovação.
+Cada operador confere código/configuração, recibo canônico e profundidade em dois RPCs BNB e recalcula o conteúdo assinado a partir de dois snapshots POVIX válidos e recentes. Endereço, valor, depósito e bloco de origem são vinculados ao payload. A chave privada permanece no processo local. O journal de cada operador registra fatos assinados e recusa decisões conflitantes. Uma proposta expira para assinatura após dez minutos; se expirar, use `refresh-native config.local.json proposta.json state/coordenador.journal`, que revalida os fatos, arquiva a proposta anterior e prepara outra com estado/revisão atual. Colete novas assinaturas. Não limpe decisões conflitantes para “forçar” aprovação.
 
 Reúna os dois resultados públicos (ou o quorum configurado para uma federação maior) em um array `assinaturas.json` e execute:
 
 ```sh
-node src/cli.mjs complete-native production.local.json proposta.json assinaturas.json
+Povix.Bridge.exe complete-native production.local.json proposta.json assinaturas.json
 ```
 
 O comando verifica assinatura RSA, identidade, quorum, payload e consenso nos dois nós e devolve a transação assinada para submissão ao nó POVIX pelo fluxo existente. Não recolhe senhas ou keystores dos outros operadores.
@@ -79,9 +81,9 @@ A CLI não instala um relayer automático nem serviço público de fila. A troca
 
 ## Outros ativos e controle nativo
 
-Cada perfil de ativo contém `asset`, `assetCodeHash`, `cap`, `dailyCap` (strings atômicas) e um `deadline` comum em segundos Unix. Operadores analisam contrato e governança; cada um usa `sign-asset production.local.json perfil.json operador-bnb.local.json state/operador.sqlite`. A maioria é reunida e um relay executa `create-asset production.local.json perfil.json assinaturas-ativo.json relay-bnb.local.json`. A factory verifica as assinaturas, hash runtime, limites e unicidade, criando o cofre pausado.
+Cada perfil de ativo contém `asset`, `assetCodeHash`, `cap`, `dailyCap` (strings atômicas) e um `deadline` comum em segundos Unix. Operadores analisam contrato e governança; cada um usa `sign-asset production.local.json perfil.json operador-bnb.local.json state/operador.journal`. A maioria é reunida e um relay executa `create-asset production.local.json perfil.json assinaturas-ativo.json relay-bnb.local.json`. A factory verifica as assinaturas, hash runtime, limites e unicidade, criando o cofre pausado.
 
-Use `production-asset-config production.local.json perfil.json` para obter configuração específica, validada pela factory e RPCs. Proponha `register` com `propose-native ativo.local.json register - state/coordenador-ativo.sqlite`; cada operador assina e o coordenador completa/submete como acima. O registro cria oferta zero. Depois da confirmação nos dois nós, auditar, ativar o cofre com quorum e cadastrar o ativo revisado no DEX. O usuário não é solicitado a depositar enquanto o ativo não estiver aprovado. Os journals são exclusivos por rede/cofre/token.
+Use `production-asset-config production.local.json perfil.json` para obter configuração específica, validada pela factory e RPCs. Proponha `register` com `propose-native ativo.local.json register - state/coordenador-ativo.journal`; cada operador assina e o coordenador completa/submete como acima. O registro cria oferta zero. Depois da confirmação nos dois nós, auditar, ativar o cofre com quorum e cadastrar o ativo revisado no DEX. O usuário não é solicitado a depositar enquanto o ativo não estiver aprovado. Os journals são exclusivos por rede/cofre/token. O novo formato `.journal` não importa SQLite automaticamente; uma instalação existente exige parada e reconciliação independente antes de mudar de cliente.
 
 Para pausar ou retomar operações nativas, `propose-native ... pause - ...` ou `resume` usa o mesmo fluxo de assinaturas independentes, ligado à revisão atual. A pausa do cofre BNB e a pausa do token POVIX são controles distintos; em um incidente é preciso avaliar ambos.
 
@@ -95,7 +97,7 @@ Qualquer um dos operadores pode usar `emergency-pause` imediatamente ou `cancel-
 
 Manter observação contínua de `Deposited`, `ReleaseQueued`, `ReleaseCancelled`, `Released`, pausas, bytecodes/implementações do emissor e blocos de ambas as redes. Rodar `audit` em monitoramento: código de saída 2 significa reserva insuficiente para as obrigações observadas; falhas de consulta/divergências também encerram com erro. Reservas podem exceder oferta por depósitos ainda não emitidos ou queimas ainda não liberadas; a auditoria não exige igualdade. Ela é uma verificação de lastro agregado, não substitui conferência de cada autorização/queima.
 
-Testar recuperação de backups cifrados e journals (SQLite WAL/backup consistente) antes de operar. Em perda de banco, não gerar novos mints com o procedimento antigo: reconstruir o estado dos nós e recibos canônicos; mints com claim já consumido serão rejeitados pelo consenso. Em reorganização profunda, parar emissão e resgates e reconciliar cada evento. Os parâmetros de confirmação reduzem risco, sem oferecer finalidade absoluta entre cadeias. Não executar retries cegos de transações que já possuem hash.
+Testar recuperação de backups cifrados e journals (backup consistente do arquivo fechado) antes de operar. Em perda de banco, não gerar novos mints com o procedimento antigo: reconstruir o estado dos nós e recibos canônicos; mints com claim já consumido serão rejeitados pelo consenso. Em reorganização profunda, parar emissão e resgates e reconciliar cada evento. Os parâmetros de confirmação reduzem risco, sem oferecer finalidade absoluta entre cadeias. Não executar retries cegos de transações que já possuem hash.
 
 ## Compatibilidade e validação
 

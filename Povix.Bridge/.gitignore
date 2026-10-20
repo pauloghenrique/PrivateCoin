@@ -3,3 +3,7 @@ build/
 state/
 .env
 *.local.json
+*.journal
+*.journal.*
+!contracts/artifacts/
+!contracts/artifacts/*.json

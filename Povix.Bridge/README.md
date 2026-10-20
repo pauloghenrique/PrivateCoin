@@ -1,3 +1,5 @@
+> **Cliente C# / Visual Studio, sem Node.js na operação:** abra `Povix.Bridge.sln` e siga [VISUAL-STUDIO.md](VISUAL-STUDIO.md). Os scripts JavaScript abaixo são a implementação anterior e infraestrutura de desenvolvimento.
+
 > **Candidato de produção:** consulte [PRODUCTION.md](PRODUCTION.md). O fluxo mainnet usa contratos v2, dois operadores com ambas as assinaturas (ou cinco ou mais com maioria), assinaturas separadas e claims de consenso. Os exemplos legados abaixo descrevem o protótipo de teste e não devem ser usados para produção. A ponte não está publicada nem ativada com fundos reais.
 
 # Ponte USDT BNB → POVIX (protótipo de teste)

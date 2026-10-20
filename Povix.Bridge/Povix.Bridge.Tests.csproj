@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <ProjectGuid>{5DDA7817-EBDC-47D1-A8F7-7FC1A612252E}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Povix.Bridge.CSharp</RootNamespace>
+    <AssemblyName>CSharpRegression</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartupObject>CSharpRegression</StartupObject>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <IntermediateOutputPath>obj\CSharpTests\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Tests\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Tests\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="Nethereum.Web3"><HintPath>..\packages\Nethereum.Web3.7.0.0\lib\net461\Nethereum.Web3.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Signer.EIP712"><HintPath>..\packages\Nethereum.Signer.EIP712.7.0.0\lib\net461\Nethereum.Signer.EIP712.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.ABI"><HintPath>..\packages\Nethereum.ABI.7.0.0\lib\net461\Nethereum.ABI.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Accounts"><HintPath>..\packages\Nethereum.Accounts.7.0.0\lib\net461\Nethereum.Accounts.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.BlockchainProcessing"><HintPath>..\packages\Nethereum.BlockchainProcessing.7.0.0\lib\net461\Nethereum.BlockchainProcessing.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Contracts"><HintPath>..\packages\Nethereum.Contracts.7.0.0\lib\net461\Nethereum.Contracts.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Hex"><HintPath>..\packages\Nethereum.Hex.7.0.0\lib\net461\Nethereum.Hex.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.JsonRpc.RpcClient"><HintPath>..\packages\Nethereum.JsonRpc.RpcClient.7.0.0\lib\net461\Nethereum.JsonRpc.RpcClient.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.KeyStore"><HintPath>..\packages\Nethereum.KeyStore.7.0.0\lib\net461\Nethereum.KeyStore.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.RPC"><HintPath>..\packages\Nethereum.RPC.7.0.0\lib\net461\Nethereum.RPC.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Signer"><HintPath>..\packages\Nethereum.Signer.7.0.0\lib\net461\Nethereum.Signer.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Util"><HintPath>..\packages\Nethereum.Util.7.0.0\lib\net461\Nethereum.Util.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.EVM"><HintPath>..\packages\Nethereum.EVM.7.0.0\lib\net461\Nethereum.EVM.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Util.Rest"><HintPath>..\packages\Nethereum.Util.Rest.7.0.0\lib\net461\Nethereum.Util.Rest.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="ADRaffy.ENSNormalize"><HintPath>..\packages\ADRaffy.ENSNormalize.0.3.1\lib\net461\ADRaffy.ENSNormalize.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.JsonRpc.Client"><HintPath>..\packages\Nethereum.JsonRpc.Client.7.0.0\lib\net461\Nethereum.JsonRpc.Client.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="BouncyCastle.Crypto"><HintPath>..\packages\Portable.BouncyCastle.1.9.0\lib\net40\BouncyCastle.Crypto.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Merkle.Patricia"><HintPath>..\packages\Nethereum.Merkle.Patricia.7.0.0\lib\net461\Nethereum.Merkle.Patricia.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.Model"><HintPath>..\packages\Nethereum.Model.7.0.0\lib\net461\Nethereum.Model.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Nethereum.RLP"><HintPath>..\packages\Nethereum.RLP.7.0.0\lib\net461\Nethereum.RLP.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>..\packages\Microsoft.Extensions.Logging.Abstractions.6.0.0\lib\net461\Microsoft.Extensions.Logging.Abstractions.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Memory"><HintPath>..\packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Buffers"><HintPath>..\packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Numerics.Vectors"><HintPath>..\packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe"><HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.4.5.3\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath><Private>True</Private></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PrivateCoin.Core\PrivateCoin.Core.csproj">
+      <Project>{FAE5CD1C-714D-4225-8BF2-B553B95BC35B}</Project>
+      <Name>PrivateCoin.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Povix.Bridge.Native.csproj"><Project>{52959E4D-C2FC-4893-9601-01D370C7C45A}</Project><Name>Povix.Bridge.Native</Name></ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="Povix.Bridge.csproj"><Project>{A61BDA76-38F8-4B5A-80FB-17F957298A48}</Project><Name>Povix.Bridge</Name></ProjectReference>
+    <Compile Include="test\CSharpRegression.cs" />
+    <None Include="App.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
