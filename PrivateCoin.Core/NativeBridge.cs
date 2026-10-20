@@ -7,6 +7,18 @@ namespace PrivateCoin.Core
     /// <summary>Federated bridge registration; external deposit verification is performed by operators.</summary>
     public static class NativeBridge
     {
+        internal static string ClaimKey(string binding, string depositId) => "@bridge-deposit:" + Crypto.Sha256(binding + "|" + depositId);
+        public static string Payload(Transaction tx) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(tx.SigningPayload()));
+        internal static void ValidateClaim(Transaction tx, System.Collections.Generic.IDictionary<string, UnspentOutput> utxo, TokenPolicy policy, int version) {
+            var cmd = tx.TokenCommand;
+            bool mainnet = policy.BridgeBinding?.StartsWith("56:", StringComparison.Ordinal) == true;
+            if (!mainnet && cmd.BridgeDepositId == null && cmd.BridgeBlockHash == null) return;
+            if (version < 38 || !IsAssetId(cmd.TokenId) || policy.BridgeBinding == null ||
+                !TokenPolicy.Address(cmd.BridgeDepositId) || !cmd.BridgeDepositId.Any(c => c != '0') ||
+                !TokenPolicy.Address(cmd.BridgeBlockHash) || !cmd.BridgeBlockHash.Any(c => c != '0') ||
+                utxo.ContainsKey(ClaimKey(policy.BridgeBinding, cmd.BridgeDepositId)))
+                throw new InvalidOperationException("Missing, invalid or already claimed bridge deposit.");
+        }
         public static bool IsRepresentationId(string id) => id != null && id.Length == 64 && id.StartsWith("b9b0", StringComparison.Ordinal) && TokenPolicy.Address(id);
         public static bool IsAssetId(string id) => id == InitialLaunch.PusdtTokenId || IsRepresentationId(id);
         public static string RepresentationId(long chainId, string asset) {
@@ -76,6 +88,8 @@ namespace PrivateCoin.Core
             if (!policy.Mintable || !policy.Burnable || !policy.Pausable || policy.MaximumSupply <= 0 || policy.HasAutomaticBurn ||
                 policy.VestingTranches != 0 || policy.Administrators.Count < 3 || policy.RequiredSignatures <= policy.Administrators.Count / 2)
                 throw new InvalidOperationException("Bridge representations require a majority of at least three administrators and no transfer burn or vesting.");
+            if (policy.BridgeBinding?.StartsWith("56:", StringComparison.Ordinal) == true && (policy.Administrators.Count < 5 || policy.RequiredSignatures < 3))
+                throw new InvalidOperationException("Mainnet bridge requires at least five independent administrators and a majority of at least three.");
             var parts = (policy.BridgeBinding ?? "").Split(':'); long chainId;
             if (parts.Length != 3 || !long.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out chainId) || Binding(chainId, parts[1], parts[2]) != policy.BridgeBinding)
                 throw new InvalidOperationException("Bridge representation must be bound to a BNB asset and vault.");

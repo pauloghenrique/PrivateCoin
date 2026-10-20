@@ -1,0 +1,47 @@
+{
+  "mode": "production",
+  "chainId": 56,
+  "rpcUrl": "https://RPC_PROVIDER_1.example",
+  "rpcUrls": [
+    "https://RPC_PROVIDER_1.example",
+    "https://RPC_PROVIDER_2.example"
+  ],
+  "asset": "REPLACE_WITH_VERIFIED_BNB_TOKEN_CONTRACT",
+  "assetCodeHash": "REPLACE_WITH_VERIFIED_RUNTIME_CODE_HASH",
+  "bridge": null,
+  "vaultCodeHash": null,
+  "factory": null,
+  "factoryCodeHash": null,
+  "nativeNetwork": "povix-mainnet-rules-v1-REPLACE_WITH_NETWORK_ID",
+  "nativeToken": "c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d",
+  "nativeAdministrators": [
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_1",
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_2",
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_3",
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_4",
+    "PUBLIC_POVIX_ADDRESS_OPERATOR_5"
+  ],
+  "nativeSigningPublicKeys": [
+    "PUBLIC_RSA_XML_OPERATOR_1",
+    "PUBLIC_RSA_XML_OPERATOR_2",
+    "PUBLIC_RSA_XML_OPERATOR_3"
+  ],
+  "nativeThreshold": 3,
+  "operators": [
+    "PUBLIC_BNB_ADDRESS_OPERATOR_1",
+    "PUBLIC_BNB_ADDRESS_OPERATOR_2",
+    "PUBLIC_BNB_ADDRESS_OPERATOR_3",
+    "PUBLIC_BNB_ADDRESS_OPERATOR_4",
+    "PUBLIC_BNB_ADDRESS_OPERATOR_5"
+  ],
+  "threshold": 3,
+  "nativeSnapshot": "/var/lib/povix-node-1/Blockchain.json",
+  "nativeSnapshots": [
+    "/var/lib/povix-node-1/Blockchain.json",
+    "/var/lib/povix-node-2/Blockchain.json"
+  ],
+  "nativeConfirmations": 120,
+  "bscConfirmations": 64,
+  "reserveCap": "100000000000",
+  "dailyReleaseCap": "1000000000"
+}

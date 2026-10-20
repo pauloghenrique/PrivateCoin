@@ -223,7 +223,7 @@
     <Content Include="Views\Home\Index.cshtml" />
     <Content Include="Views\Bridge\Index.cshtml" />
     <Content Include="Scripts\povix-bridge.js" />
-    <Content Include="Scripts\ethers-6.15.0.umd.min.js" />
+    <Content Include="Scripts\ethers-6.17.0.umd.min.js" />
     <Content Include="Scripts\ethers-LICENSE.md" />
   </ItemGroup>
   <ItemGroup>
