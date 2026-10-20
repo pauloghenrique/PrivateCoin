@@ -20,7 +20,8 @@ namespace PrivateCoin.Core
         public static BigInteger Target => (BigInteger.One << (256 - DifficultyBits)) - 1;
         public static BigInteger InitialTarget => (BigInteger.One << (256 - InitialDifficultyBits)) - 1;
         public static BigInteger WorkPerBlock => (BigInteger.One << 256) / (Target + 1);
-        public static long GetBlockReward(int height) => ProofOfStake.GetBlockReward(height);
+        /// <summary>v35 reward ordinal among remunerated blocks; not the absolute chain height.</summary>
+        public static long GetBlockReward(int rewardIndex) => ProofOfStake.GetBlockReward(rewardIndex);
 
         public static string FormatTarget(BigInteger target)
         {

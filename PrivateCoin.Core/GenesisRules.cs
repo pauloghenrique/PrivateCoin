@@ -15,11 +15,15 @@ namespace PrivateCoin.Core
         [DataMember(Order = 1)] public int FirstHeight { get; private set; }
         [DataMember(Order = 2)] public int LastHeight { get; private set; }
         [DataMember(Order = 3)] public long RewardAtomicUnits { get; private set; }
+        [DataMember(Order = 4)] public long RemainderAtomicUnits { get; private set; }
+        [DataMember(Order = 5)] public long TotalRewardAtomicUnits { get; private set; }
         internal GenesisRewardPhase(RewardPhase phase)
         {
             FirstHeight = phase.FirstHeight;
             LastHeight = phase.LastHeight;
             RewardAtomicUnits = phase.RewardPerBlock;
+            RemainderAtomicUnits = phase.RemainderAtomicUnits;
+            TotalRewardAtomicUnits = phase.TotalReward;
         }
     }
 
@@ -71,6 +75,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 35)] public int ProofOfWorkInitialDifficultyBits { get; private set; }
         [DataMember(Order = 36)] public int ProofOfWorkMaximumAdjustmentFactor { get; private set; }
         [DataMember(Order = 37)] public int MaximumFutureBlockSeconds { get; private set; }
+        [DataMember(Order = 38)] public string EmissionRule { get; private set; }
 
         private static readonly string implementationHash = CalculateImplementationHash();
 
@@ -78,7 +83,8 @@ namespace PrivateCoin.Core
         {
             return new GenesisRules
             {
-                SchemaVersion = 7,
+                SchemaVersion = 8,
+                EmissionRule = "Four phases of 15778800 remunerated validator blocks each (five Julian years at ten seconds); exclude genesis, unsigned operations and wallet registrations. Reward phase bounds are reward ordinals, not chain heights. Preserve phase budgets 7220000, 5600000, 3000000 and 2000000 POVIX exactly: pay floor(budgetAtomic/blockCount), plus one atomic unit on each of the last budgetAtomic%blockCount blocks of that phase. After 63115200 remunerated blocks no subsidy remains; transaction fees are separate. Calendar duration extends when blocks are unremunerated or absent.",
                 TargetBlockSeconds = ProofOfWork.TargetBlockSeconds,
                 ProofOfWorkRetargetWindow = ProofOfWork.RetargetWindow,
                 ProofOfWorkInitialDifficultyBits = ProofOfWork.InitialDifficultyBits,

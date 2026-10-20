@@ -310,11 +310,49 @@ de blocos nem zeros extras encontrados por sorte. Blocos históricos/genesis
 continuam usando o alvo fixo aplicável ao seu formato; não há migração automática.
 
 Dez segundos são uma meta média, não uma espera obrigatória ou garantia.
-Sem operações, não são gerados blocos vazios. A tabela de recompensas por altura
-não foi alterada: 8 milhões de blocos em produção contínua de 10 segundos levam
-aproximadamente 2,5 anos, e não 20 anos de calendário. Registros continuam sem
-recompensa de validador e o teto da emissão permanece igual.
+Sem operações, não são gerados blocos vazios. A partir do consenso v35, a emissão
+avança apenas em blocos remunerados: registros, bootstrap e operações sem
+recompensa não consomem a tabela. São 63.115.200 blocos remunerados, aproximadamente
+vinte anos de atividade contínua; períodos sem esses blocos prolongam o calendário.
 
-A alteração exige Core, Desktop e DEX v34, manifesto de genesis esquema 7 e
+A alteração exige Core, Desktop e DEX v35, manifesto de genesis esquema 8 e
 nova identidade da rede. Não publica nem reinicia a rede e não substitui auditoria
 das demais regras de validação, quorum, sincronização ou distribuição inicial.
+
+
+## Emissão exata em quatro estágios (v35)
+
+Cada estágio tem 15.778.800 blocos remunerados, cerca de cinco anos a dez segundos
+por bloco remunerado. O estágio é contado por ordinal remunerado, nunca pela
+altura de todos os blocos. Registros assinados não recebem recompensa nem consomem
+o orçamento. Um bloco com várias transações remuneradas consome uma única posição.
+A primeira compra sem aprovação continua sem emissão; compras assinadas continuam
+pagando a recompensa prevista e a taxa separada de aprovação.
+
+| Estágio | Base em POVIX por bloco | Blocos finais com +0,00000001 | Total exato em POVIX |
+| --- | ---: | ---: | ---: |
+| 1 | 0,45757598 | 12.677.600 | 7.220.000 |
+| 2 | 0,35490658 | 5.549.600 | 5.600.000 |
+| 3 | 0,19012852 | 10.862.400 | 3.000.000 |
+| 4 | 0,12675235 | 1.982.000 | 2.000.000 |
+
+A soma preserva exatamente 17.820.000 POVIX de recompensas. O máximo geral
+continua em 18.180.000 POVIX, incluindo os 600 iniciais e os 359.400 da pool.
+A soma é preservada se todo o cronograma remunerado for concluído; não se promete
+que uma rede inativa alcance esse total em vinte anos corridos. Depois do fim,
+não há novos subsídios, mas taxas continuam sendo pagas pelos usuários.
+
+O replay verifica cada pagamento pela contagem anterior confirmada. Reorganizações
+recalculam contagem e emissão. Consulta e extrato usam os mesmos ordinais; o resumo
+expõe `RewardedBlockCount`, `RewardedBlocksRemaining`, `ValidatorIssuedTokenAmount`,
+`RemainingValidatorRewardAmount` e `CurrentReward` (próximo bloco remunerado).
+Os nomes históricos `FirstHeight`/`LastHeight` das fases agora representam ordinais
+remunerados, como declarado em `GenesisRules.EmissionRule`.
+
+A alteração é de consenso (v35), com novo genesis de esquema 8 e manifesto do Core
+v2. Requer planejamento de transição e atualização coordenada. Não migra uma
+cadeia existente nem modifica recompensas já confirmadas automaticamente.
+
+O primeiro bloco após o novo genesis também precisa usar consenso v35. Começar
+uma cadeia v35 com uma versão antiga não permite recuperar recompensas maiores
+nem contornar o cronograma de vinte anos.

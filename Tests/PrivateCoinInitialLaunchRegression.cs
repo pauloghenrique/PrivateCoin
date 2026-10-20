@@ -137,7 +137,7 @@ internal static class PrivateCoinInitialLaunchRegression
             using (var batch = new ValidationBatchFixture(chain))
             {
                 foreach (var address in new[] { l })
-                    batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], address, 6 * Blockchain.OneCoin, 1) }, validators);
+                    batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], address, Blockchain.OneCoin / 10, 1) }, validators);
                 Check(chain.GetInitialLaunchStatus().Created && chain.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply - 2 * InitialLaunch.PurchaseAmount, "initial reserve is reduced only by the two confirmed bootstrap purchases");
                 Check(chain.GetTokens().Count == 2 && InitialLaunch.FundingTokens().All(token => chain.GetTokenRuntime(token.Id).Supply == (token.Id == InitialLaunch.UsdcTokenId ? 13 * InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply) && chain.GetTokenBalance(new[] { p }, token.Id) == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply)), "USDC distributes 100 per registered identity while USDT issues one million");
                 Check(chain.GetTokenBalances(new[] { p }).Count == 2, "local funding tokens appear in the wallet token catalogue");
@@ -145,7 +145,7 @@ internal static class PrivateCoinInitialLaunchRegression
                 Reject(() => chain.ValidatePendingTransactions(new[] { duplicate }), "a second launch cannot mint more POVIX or funding tokens");
                 foreach (var address in new[] { b, l }) batch.Confirm(chain, new[] { provider.CreateTokenTransferTransaction(chain, new Transaction[0], InitialLaunch.UsdcTokenId, address, 10 * InitialLaunch.FundingUnit, 1) }, validators);
                 batch.Confirm(chain, new[] { provider.CreateTokenTransferTransaction(chain, new Transaction[0], InitialLaunch.UsdcTokenId, l, 10 * InitialLaunch.FundingUnit, 1) }, validators);
-                batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], l, Blockchain.OneCoin, 1) }, validators);
+                batch.Confirm(chain, new[] { provider.CreateTransaction(chain, new Transaction[0], l, Blockchain.OneCoin / 10, 1) }, validators);
                 var status = chain.GetInitialLaunchStatus();
                 var reserves = chain.GetUnspentOutputs(new[] { q }).Where(item => item.TransactionId == status.ReserveTransactionId && item.OutputIndex < 2).OrderBy(item => item.OutputIndex).ToArray();
                 Check(reserves.Length == 2 && reserves[1].Output.Amount == 2 * InitialLaunch.FundingUnit && reserves.All(item => item.InitialLaunchCollecting), "funding reserve tracks the bootstrap purchases and stays paired and locked");
@@ -199,7 +199,7 @@ internal static class PrivateCoinInitialLaunchRegression
                     "confirmed purchase automatically becomes validator collateral without a staking transaction");
                 var localBuyerStake = buyer.CreateValidatorStake(b, buyerStake.LockedAmount);
                 var allValidators = validators.Concat(new[] { localBuyerStake }).ToArray();
-                var unrelated = provider.CreateTransaction(chain, new Transaction[0], l, Blockchain.OneCoin, 1);
+                var unrelated = provider.CreateTransaction(chain, new Transaction[0], l, Blockchain.OneCoin / 10, 1);
                 unrelated.TransactionApproval = chain.CreateTransactionApproval(unrelated, new[] { unrelated }, new[] { localBuyerStake });
                 Check(unrelated.TransactionApproval != null && unrelated.TransactionApproval.CollateralTransactionId == purchase.Id &&
                     unrelated.TransactionApproval.CollateralOutputIndex == 2, "locked purchased POVIX can approve unrelated transfers");

@@ -666,7 +666,9 @@ namespace PrivateCoin.Desktop
                     if (block.Validators != null && block.Validators.Count > 0)
                     {
                         BlockValidator creator = block.Validators.Single(item => item.IsCreator);
-                        decimal reward = (decimal)Blockchain.GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion) / Blockchain.OneCoin;
+                        decimal reward = (decimal)(block.ConsensusVersion >= ProofOfStake.EmissionConsensusVersion
+                            ? block.Transactions[0].Outputs.Sum(output => output.Amount)
+                            : Blockchain.GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion)) / Blockchain.OneCoin;
                         Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
                             "”" + (block.Validators.Count == 1 ? ", como único validador elegível neste bloco" : ", confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) + " validador(es)") +
                             (reward == 0 ? ", sem recompensa para os validadores" : " e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX") + ": " + ShortId(block.Hash) + ".", true);
