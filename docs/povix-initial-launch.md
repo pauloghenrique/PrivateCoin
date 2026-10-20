@@ -266,3 +266,25 @@ retroativo dos blocos anteriores.
 A regra exige consenso v32 em nós, Desktop e DEX, com nova identidade no genesis;
 não migra nem reinicia a rede existente. É preciso recompilar e distribuir os
 componentes atualizados a todos os nós que produzem blocos.
+
+
+## Registros assinados sem recompensa de validador (consenso v33)
+
+Criar ou registrar uma carteira não remunera os validadores. Eles continuam
+assinando e confirmando o bloco pelas regras de elegibilidade existentes,
+inclusive com apenas um validador durante a captação, mas a saída de recompensa
+do bloco fica vazia. A regra vale também com vários validadores, vários registros
+no mesmo bloco e recibos antigos de registro. Registros ficam separados das
+operações remuneradas para que uma troca não altere essa condição.
+
+O resumo público e o extrato contabilizam zero emissão de recompensa nesses
+blocos. Os 600 POVIX exclusivos da primeira carteira, o bloqueio até a meta,
+os 100 USDC por identidade até o limite existente e a liquidez principal
+permanente continuam preservados. As trocas e demais operações remuneradas
+mantêm a tabela vigente e suas taxas; o teto total continua 18.180.000 POVIX.
+A tabela por altura de bloco não é reiniciada nem redistribui retroativamente
+as recompensas não emitidas nos registros.
+
+O Desktop identifica o registro assinado como sem recompensa para os validadores.
+Core, Desktop e verificador DEX passam ao consenso v33, alterando o compromisso
+do genesis e a identidade da rede. O PR não migra, reinicia ou publica a cadeia.

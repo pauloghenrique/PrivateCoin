@@ -128,7 +128,7 @@ namespace PrivateCoin.Core
             int initialBlocks = snapshot.Skip(1).Count(IsInitialDistributionBlock) + snapshot.Skip(1).SelectMany(block => block.Transactions)
                 .Count(tx => (tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.WalletDistribution || tx.Kind == TransactionKind.InitialLaunchCreate) && InitialLaunch.WalletReward(tx) == Blockchain.WalletCreationReward);
             long validatorIssuance = snapshot.Skip(1).Where(IsProofOfStakeBlock)
-                .Aggregate(0L, (total, block) => checked(total + ProofOfStake.GetBlockReward(block.Height)));
+                .Aggregate(0L, (total, block) => checked(total + Blockchain.GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion)));
             long launchIssuance = snapshot.SelectMany(block => block.Transactions).Count(tx => tx.Kind == TransactionKind.InitialLaunchCreate) * InitialLaunch.ReserveSupply;
             long issued = checked((long)initialBlocks * Blockchain.WalletCreationReward + launchIssuance + validatorIssuance);
             return new BlockchainSummary(Math.Max(0, snapshot.Length - 1), issued,
@@ -165,7 +165,7 @@ namespace PrivateCoin.Core
                     if (transactionIndex == 0 && IsProofOfStakeBlock(block))
                     {
                         type = LedgerEntryType.ValidatorReward;
-                        issuedAmount = ProofOfStake.GetBlockReward(block.Height);
+                        issuedAmount = Blockchain.GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion);
                     }
                     else if (transaction.Kind == TransactionKind.WalletCreate || transaction.Kind == TransactionKind.WalletDistribution || (transactionIndex == 0 && IsInitialDistributionBlock(block)))
                     {

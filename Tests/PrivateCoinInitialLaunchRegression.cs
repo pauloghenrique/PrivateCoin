@@ -106,7 +106,10 @@ internal static class PrivateCoinInitialLaunchRegression
             for (int index = 0; index < 8; index++)
             {
                 var bootstrap = chain.CreateWalletCreationTransaction(Hash("launch-reward-test-" + index), new Transaction[0]);
-                rewardBlock = chain.AddProofOfStakeBlock(new[] { bootstrap }, validators);
+                chain.AddProofOfStakeBlock(new[] { bootstrap }, validators);
+                var activity = v1.CreateTokenTransferTransaction(chain, new Transaction[0], InitialLaunch.UsdcTokenId, l, 1, 1);
+                activity.TransactionApproval = chain.CreateTransactionApproval(activity, new[] { activity }, validators);
+                rewardBlock = chain.AddProofOfStakeBlock(new[] { activity }, validators);
             }
             Check(rewardBlock.Validators.Any(item => item.ValidatorId == p) &&
                 chain.GetSpendableBalance(new[] { p }, new Transaction[0]) > 0 &&

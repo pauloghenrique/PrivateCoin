@@ -43,8 +43,8 @@ internal static class PrivateCoinRegistrationRewardPropagationRegression
             Check(validatorNode.CanCreateUnsignedBlock(new[] { bootstrap }), "initial bootstrap remains available without a preexisting validator");
             var earlyWallet = new Wallet();
             var earlyRegistration = validatorNode.CreateWalletCreationTransaction(earlyWallet.CreateReceiveAddress(), new[] { bootstrap });
-            Check(!validatorNode.CanCreateUnsignedBlock(new[] { bootstrap, earlyRegistration }), "second wallet queued before bootstrap cannot share its unpaid block");
-            Reject(() => validatorNode.AddBlock(new[] { bootstrap, earlyRegistration }), "bootstrap cannot absorb a later registration without reward");
+            Check(!validatorNode.CanCreateUnsignedBlock(new[] { bootstrap, earlyRegistration }), "second wallet queued before bootstrap must wait for the initial collateral");
+            Reject(() => validatorNode.AddBlock(new[] { bootstrap, earlyRegistration }), "bootstrap cannot absorb a later registration without its validator");
             TimeSpan bootstrapTime = TimeSpan.Zero;
             var bootstrapScheduler = new BlockProductionScheduler(() => bootstrapTime);
             Func<IReadOnlyList<Transaction>, bool> bootstrapPolicy = candidate => Blockchain.HasCompatibleValidatorRules(candidate) && validatorNode.CanCreateUnsignedBlock(candidate);
@@ -64,8 +64,8 @@ internal static class PrivateCoinRegistrationRewardPropagationRegression
                 var registration = walletNumber == 2 ? earlyRegistration : validatorNode.CreateWalletCreationTransaction(wallet.CreateReceiveAddress(), empty);
                 var batch = new[] { registration };
                 Check(!validatorNode.CanCreateUnsignedBlock(batch) && !observerNode.CanCreateUnsignedBlock(batch),
-                    "wallet " + walletNumber + ": both nodes require the signed reward path regardless of local keys");
-                Reject(() => observerNode.AddBlock(batch), "wallet " + walletNumber + ": keyless peer cannot confirm without paying a validator", "signed block");
+                    "wallet " + walletNumber + ": both nodes require the signed unpaid path regardless of local keys");
+                Reject(() => observerNode.AddBlock(batch), "wallet " + walletNumber + ": keyless peer must still obtain a validator signature", "signed block");
                 Check(!observerNode.CanCreateUnsignedBlock(new[] { registration, new Transaction { Kind = TransactionKind.StakeLock } }),
                     "wallet " + walletNumber + ": mixing a self-validated operation cannot enable unsigned fallback");
                 TimeSpan elapsed = TimeSpan.Zero;
@@ -73,7 +73,7 @@ internal static class PrivateCoinRegistrationRewardPropagationRegression
                 Func<IReadOnlyList<Transaction>, bool> observerPolicy = candidate => observerNode.CanCreateUnsignedBlock(candidate);
                 observerScheduler.SelectBatch(batch, observerPolicy); elapsed = TimeSpan.FromSeconds(20);
                 Check(observerScheduler.SelectBatch(batch, observerPolicy).Count == 0 && observerScheduler.CandidateCount == 0,
-                    "wallet " + walletNumber + ": keyless Desktop production waits instead of losing the reward");
+                    "wallet " + walletNumber + ": keyless Desktop production waits for a validator signature");
                 var fork = new Block { ConsensusVersion = Blockchain.ConsensusVersion, Height = observerNode.Blocks.Count,
                     PreviousHash = observerNode.Blocks.Last().Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks,
                     Transactions = new List<Transaction> { registration } };
@@ -84,17 +84,17 @@ internal static class PrivateCoinRegistrationRewardPropagationRegression
                 long before = validatorNode.GetBalance(new[] { address });
                 int height = validatorNode.Blocks.Count;
                 var block = validatorNode.AddProofOfStakeBlock(batch, new[] { signer });
-                long reward = ProofOfStake.GetBlockReward(height); paid = checked(paid + reward);
+                long reward = 0; paid = checked(paid + reward);
                 Check(block.Validators.Count == 1 && validatorNode.GetBalance(new[] { address }) - before == reward,
-                    "wallet " + walletNumber + ": the sole founder receives exactly the scheduled reward");
+                    "wallet " + walletNumber + ": the sole founder signs the block without receiving a reward");
                 bool changed;
                 Check(observerNode.TrySynchronizeChain(Copy(validatorNode.Blocks.ToArray()), out changed) && changed,
-                    "wallet " + walletNumber + ": peer accepts and synchronizes the signed rewarded block");
+                    "wallet " + walletNumber + ": peer accepts and synchronizes the signed unpaid block");
                 Check(observerNode.GetBalance(new[] { address }) == Blockchain.WalletCreationReward + paid,
-                    "wallet " + walletNumber + ": synchronized rewards do not alternate or disappear");
+                    "wallet " + walletNumber + ": synchronized registrations never credit validator rewards");
             }
             earlyWallet.Dispose();
-            Check(new Blockchain(Copy(validatorNode.Blocks.ToArray())).IsValid(), "all three consecutive rewards survive full replay");
+            Check(new Blockchain(Copy(validatorNode.Blocks.ToArray())).IsValid(), "all three signed unpaid registrations survive full replay");
             Check(validatorNode.GetInitialLaunchLockedBalance(new[] { address }) == Blockchain.WalletCreationReward &&
                 validatorNode.GetInitialLaunchStatus().Remaining == InitialLaunch.ReserveSupply,
                 "consecutive registration rewards preserve the locked 600 and the principal reserve");
