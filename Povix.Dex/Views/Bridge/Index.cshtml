@@ -1,0 +1,22 @@
+@{ ViewBag.Title = "Swap USDT → pUSDT"; }
+<main id="bridge-app" data-config-url="@Url.Action("Configuration", "Bridge")">
+    <div class="page-intro"><span class="eyebrow">PONTE BNB → POVIX</span><h1>Swap USDT por pUSDT.</h1><p>Deposite USDT no cofre da ponte e receba pUSDT no endereço da sua carteira POVIX.</p></div>
+    <div class="notice"><strong>Ambiente de teste · BNB Smart Chain Testnet</strong><p>Use somente USDT de teste. A ponte ainda não opera com USDT real. A emissão de pUSDT depende da confirmação do depósito e da validação pelos operadores.</p></div>
+    <form id="bridge-form" class="card token-form">
+        <section class="form-section"><h2>USDT <span aria-hidden="true">→</span> pUSDT</h2><p>Conversão de 1 USDT para 1 pUSDT. Você precisa de BNB de teste para pagar o gás.</p>
+            <button id="bridge-connect" class="button" type="button" disabled>Conectar carteira BNB</button><p id="bridge-account">Carteira BNB desconectada</p>
+            <label for="bridge-amount">Enviar USDT de teste</label><input id="bridge-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" maxlength="32" required disabled />
+            <label for="bridge-recipient">Receber na carteira POVIX</label><input id="bridge-recipient" autocomplete="off" placeholder="Endereço público POVIX de 64 caracteres" minlength="64" maxlength="64" pattern="[0-9a-fA-F]{64}" required disabled />
+            <p>Confira o endereço: o depósito não pode ser cancelado. Nunca informe sua chave privada.</p>
+            <p>Você receberá: <strong id="bridge-quote">— pUSDT</strong></p>
+            <button id="bridge-submit" class="button" type="submit" disabled>Autorizar USDT e depositar</button>
+        </section>
+    </form>
+    <p id="bridge-status" class="notice" role="status" aria-live="polite">Verificando disponibilidade da ponte…</p>
+    <p id="bridge-reference" hidden></p>
+    <p><a href="@Url.Action("Index", "Liquidity")">Ver pools POVIX/pUSDT</a></p>
+</main>
+@section scripts {
+    <script src="@Url.Content("~/Scripts/ethers-6.15.0.umd.min.js")"></script>
+    <script src="@Scripts.Url("~/bundles/povix-bridge")"></script>
+}

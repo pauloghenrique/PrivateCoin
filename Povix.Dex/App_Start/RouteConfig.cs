@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
@@ -12,6 +12,8 @@ namespace Povix.Dex
         public static void RegisterRoutes(RouteCollection routes)
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
+
+            routes.MapRoute("BridgeSwap", "swap-usdt", new { controller = "Bridge", action = "Index" });
 
             routes.MapRoute("TokenList", "tokens", new { controller = "Tokens", action = "Index" });
 
