@@ -312,6 +312,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 9, EmitDefaultValue = false)] public List<TransactionValidation> TransactionValidations { get; set; }
 
         [DataMember(Order = 10, EmitDefaultValue = false)] public GenesisRules Rules { get; set; }
+        [DataMember(Order = 11, EmitDefaultValue = false)] public string ProofOfWorkTarget { get; set; }
 
         internal string CalculateHash()
         {
@@ -322,7 +323,8 @@ namespace PrivateCoin.Core
             return Crypto.Sha256(Height.ToString(CultureInfo.InvariantCulture) + "|" + PreviousHash + "|" +
                 TimestampUtcTicks.ToString(CultureInfo.InvariantCulture) + "|" + Nonce.ToString(CultureInfo.InvariantCulture) + "|" +
                 string.Join("|", Transactions.Select(t => t.Id)) + (Validators == null ? string.Empty : "|pos|" + validatorProof) +
-                ValidationProofPayload() + (Rules == null ? string.Empty : "|genesis-rules:" + Rules.CalculateHash()));
+                ValidationProofPayload() + (ConsensusVersion >= ProofOfWork.DynamicConsensusVersion ? "|pow-target-v1:" + ProofOfWorkTarget : string.Empty) +
+                (Rules == null ? string.Empty : "|genesis-rules:" + Rules.CalculateHash()));
         }
 
         internal string ValidationProofPayload()

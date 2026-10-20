@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 33;
+        public const int ConsensusVersion = 34;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -69,8 +69,9 @@ namespace PrivateCoin.Core
                 ValidateBatch(pending);
                 if (!CanCreateUnsignedBlock(pending))
                     throw new InvalidOperationException("This batch requires an eligible validator's signed block.");
-                var block = new Block { ConsensusVersion = ConsensusVersion, Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
+                var block = new Block { ConsensusVersion = ConsensusVersion, Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = ProofOfWork.GetNextTimestamp(blocks, DateTime.UtcNow), ProofOfWorkTarget = ProofOfWork.FormatTarget(ProofOfWork.GetRequiredTarget(blocks)), Transactions = pending };
                 Mine(block);
+                ProofOfWork.ValidateHeader(block, blocks, DateTime.UtcNow);
                 blocks.Add(block);
                 return block;
             }
@@ -102,7 +103,7 @@ namespace PrivateCoin.Core
                 ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
                 IReadOnlyList<ValidatorReward> rewards = GetValidatorBlockReward(height, pending) == 0 ? new ValidatorReward[0] : ProofOfStake.DistributeReward(height, creator, confirmers);
                 var validations = pending.Where(RequiresLockedTokenApproval).Select(transaction => transaction.TransactionApproval.Proof).ToList();
-                var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
+                var reward = new Transaction { TimestampUtcTicks = ProofOfWork.GetNextTimestamp(blocks, DateTime.UtcNow) };
                 foreach (ValidatorReward share in rewards)
                     reward.Outputs.Add(new TransactionOutput
                     {
@@ -113,6 +114,7 @@ namespace PrivateCoin.Core
                 var block = new Block
                 {
                     ConsensusVersion = ConsensusVersion,
+                    ProofOfWorkTarget = ProofOfWork.FormatTarget(ProofOfWork.GetRequiredTarget(blocks)),
                     TransactionValidations = validations,
                     Height = height,
                     PreviousHash = blocks[blocks.Count - 1].Hash,
@@ -136,6 +138,7 @@ namespace PrivateCoin.Core
                 }
                 ValidateProofOfStakeBlock(block, block.PreviousHash, BuildUtxo(), blocks);
                 Mine(block);
+                ProofOfWork.ValidateHeader(block, blocks, DateTime.UtcNow);
                 blocks.Add(block);
                 return block;
             }
@@ -669,11 +672,12 @@ namespace PrivateCoin.Core
                 try
                 {
                     if (blocks.Count == 0 || blocks[0] == null || !IsCanonicalGenesis(blocks[0])) return false;
+                    DateTime utcNow = DateTime.UtcNow;
                     for (int i = 0; i < blocks.Count; i++)
                     {
                         var block = blocks[i];
                         if (block == null || (i > 0 && block.Rules != null) || block.Height != i || block.Hash != block.CalculateHash() || !ProofOfWork.MeetsTarget(block.Hash)) return false;
-                        if (i > 0 && block.PreviousHash != blocks[i - 1].Hash) return false;
+                        if (i > 0) ProofOfWork.ValidateHeader(block, blocks, utcNow, i);
                     }
                     ValidateWholeChain(); return true;
                 }
@@ -1430,7 +1434,8 @@ namespace PrivateCoin.Core
                 string.Join("|", block.Transactions.Select(item => item.Id)) + "|" +
                 string.Join("|", block.Validators.OrderBy(item => item.ValidatorId, StringComparer.Ordinal).Select(item =>
                     item.ValidatorId + ":" + item.RewardAddress + ":" + item.LockedAmount.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + item.IsCreator)) +
-                block.ValidationProofPayload();
+                block.ValidationProofPayload() + (block.ConsensusVersion >= ProofOfWork.DynamicConsensusVersion ?
+                    "|pow-header-v1:" + block.ProofOfWorkTarget + "|" + block.TimestampUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
         }
 
         private static Block BuildCanonicalGenesis()
@@ -1466,7 +1471,7 @@ namespace PrivateCoin.Core
                 block.PreviousHash == new string('0', 64) &&
                 block.TimestampUtcTicks == GenesisTimestampUtcTicks &&
                 block.Nonce == canonicalGenesis.Nonce && block.Hash == GenesisHash &&
-                block.ConsensusVersion == 0 && block.TransactionValidations == null &&
+                block.ConsensusVersion == 0 && block.ProofOfWorkTarget == null && block.TransactionValidations == null &&
                 block.Transactions != null && block.Transactions.Count == 0 &&
                 block.Validators == null && block.Rules != null && block.Rules.IsCanonical() &&
                 block.CalculateHash() == GenesisHash;

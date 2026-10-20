@@ -288,3 +288,33 @@ as recompensas não emitidas nos registros.
 O Desktop identifica o registro assinado como sem recompensa para os validadores.
 Core, Desktop e verificador DEX passam ao consenso v33, alterando o compromisso
 do genesis e a identidade da rede. O PR não migra, reinicia ou publica a cadeia.
+
+
+## Dificuldade dinâmica para 10 segundos por bloco (consenso v34)
+
+A mineração usa alvo inicial de 14 bits, com limite mínimo de dificuldade de
+12 bits, igual ao piso anterior. A cada 30 blocos minerados, o próximo alvo é
+calculado a partir dos 29 intervalos entre os últimos 30 blocos, excluindo o
+horário fixo do genesis. O alvo é multiplicado pelo tempo observado dividido
+pelo esperado (29 × 10 segundos), com fator limitado ao intervalo de 1/4 a 4.
+No intervalo entre ajustes, o alvo permanece igual. Assim, blocos com média
+de 2 segundos endurecem a dificuldade (até 4× por ajuste); média de 30 segundos
+a reduz; média de 10 segundos mantém o alvo. O piso pode impedir novas reduções.
+
+O alvo exigido fica no bloco e integra o hash e os votos dos validadores,
+junto com o horário. Cada nó recalcula o valor exigido a partir da sua cadeia.
+Horários precisam avançar em relação ao pai e não podem exceder o UTC local
+em mais de 30 segundos; os relógios dos nós precisam estar sincronizados.
+A escolha entre cadeias soma trabalho por alvo exigido, não apenas quantidade
+de blocos nem zeros extras encontrados por sorte. Blocos históricos/genesis
+continuam usando o alvo fixo aplicável ao seu formato; não há migração automática.
+
+Dez segundos são uma meta média, não uma espera obrigatória ou garantia.
+Sem operações, não são gerados blocos vazios. A tabela de recompensas por altura
+não foi alterada: 8 milhões de blocos em produção contínua de 10 segundos levam
+aproximadamente 2,5 anos, e não 20 anos de calendário. Registros continuam sem
+recompensa de validador e o teto da emissão permanece igual.
+
+A alteração exige Core, Desktop e DEX v34, manifesto de genesis esquema 7 e
+nova identidade da rede. Não publica nem reinicia a rede e não substitui auditoria
+das demais regras de validação, quorum, sincronização ou distribuição inicial.

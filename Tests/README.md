@@ -803,3 +803,17 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationNoReward.exe
 As suítes Desktop e de propagação agora esperam zero pagamento em registros.
 A fixture de lançamento financia seus validadores por atividades remuneradas
 reais, mantendo os registros assinados sem recompensa.
+
+
+## Dificuldade dinâmica (v34)
+
+```sh
+mcs -out:work/DynamicProofOfWork.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinDynamicProofOfWorkRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/DynamicProofOfWork.exe
+```
+
+Verifica médias de 2, 10 e 30 segundos, limites de ajuste, piso, fronteiras da
+janela, alvo errado mesmo com PoW válido, codificação, horários regressivos e
+futuros, relógio local, assinatura vinculada ao horário, manifesto, trabalho
+acumulado, confirmações e replay de blocos reais. As janelas sintéticas testam
+somente a aritmética dos cabeçalhos; não representam cadeias com transações válidas.
