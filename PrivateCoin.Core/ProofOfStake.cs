@@ -10,12 +10,13 @@ namespace PrivateCoin.Core
     /// <summary>An immutable phase in the validator reward schedule.</summary>
     public sealed class RewardPhase
     {
-        internal RewardPhase(int number, int firstHeight, int lastHeight, long rewardPerBlock)
+        internal RewardPhase(int number, int firstHeight, int lastHeight, long rewardPerBlock, long remainderAtomicUnits = 0)
         {
             Number = number;
             FirstHeight = firstHeight;
             LastHeight = lastHeight;
             RewardPerBlock = rewardPerBlock;
+            RemainderAtomicUnits = remainderAtomicUnits;
         }
 
         public int Number { get; }
@@ -23,7 +24,15 @@ namespace PrivateCoin.Core
         public int LastHeight { get; }
         public long RewardPerBlock { get; }
         public int BlockCount => LastHeight - FirstHeight + 1;
-        public long TotalReward => checked((long)BlockCount * RewardPerBlock);
+        /// <summary>One extra atomic unit is paid on each of the last N blocks of this phase.</summary>
+        public long RemainderAtomicUnits { get; }
+        public long TotalReward => checked((long)BlockCount * RewardPerBlock + RemainderAtomicUnits);
+
+        public long GetReward(int rewardIndex)
+        {
+            if (rewardIndex < FirstHeight || rewardIndex > LastHeight) return 0;
+            return RewardPerBlock + (rewardIndex > LastHeight - RemainderAtomicUnits ? 1L : 0L);
+        }
     }
 
     /// <summary>A validator's coins locked as collateral for consensus.</summary>
@@ -96,22 +105,31 @@ namespace PrivateCoin.Core
 
     /// <summary>
     /// Monetary policy and deterministic stake-weighted validator selection.
-    /// Heights are one-based: height zero remains the genesis block.
+    /// Reward indices are one-based and count only remunerated validator blocks, not chain heights.
     /// </summary>
     public static class ProofOfStake
     {
-        public const int BlocksPerPhase = 2000000;
+        // Five Julian years (365.25 days/year) at the ten-second target per remunerated block.
+        public const int BlocksPerPhase = 15778800;
+        public const int EmissionConsensusVersion = 35;
         public const int RewardedBlockCount = 4 * BlocksPerPhase;
         public const int CreatorPercentage = 30;
         public const int ConfirmerPercentage = 70;
         public const long MaximumSupply = 17820000L * Blockchain.OneCoin;
 
+        private static RewardPhase CreatePhase(int number, long budgetCoins)
+        {
+            long budget = checked(budgetCoins * Blockchain.OneCoin);
+            return new RewardPhase(number, (number - 1) * BlocksPerPhase + 1, number * BlocksPerPhase,
+                budget / BlocksPerPhase, budget % BlocksPerPhase);
+        }
+
         private static readonly RewardPhase[] rewardPhases =
         {
-            new RewardPhase(1, 1, BlocksPerPhase, 361L * Blockchain.OneCoin / 100L),
-            new RewardPhase(2, BlocksPerPhase + 1, 2 * BlocksPerPhase, 280L * Blockchain.OneCoin / 100L),
-            new RewardPhase(3, 2 * BlocksPerPhase + 1, 3 * BlocksPerPhase, 150L * Blockchain.OneCoin / 100L),
-            new RewardPhase(4, 3 * BlocksPerPhase + 1, RewardedBlockCount, Blockchain.OneCoin)
+            CreatePhase(1, 7220000L),
+            CreatePhase(2, 5600000L),
+            CreatePhase(3, 3000000L),
+            CreatePhase(4, 2000000L)
         };
 
         internal static bool VerifyVote(string publicKey, string payload, string signature)
@@ -136,10 +154,34 @@ namespace PrivateCoin.Core
         /// <summary>Total amount issued by all rewarded blocks in atomic units.</summary>
         public static long ScheduledIssuance => rewardPhases.Aggregate(0L, (total, phase) => checked(total + phase.TotalReward));
 
-        public static long GetBlockReward(int height)
+        /// <summary>Subsidy for a remunerated block ordinal, never the chain height.</summary>
+        public static long GetBlockReward(int rewardIndex, int consensusVersion = Blockchain.ConsensusVersion)
         {
-            RewardPhase phase = rewardPhases.FirstOrDefault(item => height >= item.FirstHeight && height <= item.LastHeight);
-            return phase == null ? 0 : phase.RewardPerBlock;
+            if (consensusVersion < EmissionConsensusVersion) return GetLegacyBlockReward(rewardIndex);
+            RewardPhase phase = rewardPhases.FirstOrDefault(item => rewardIndex >= item.FirstHeight && rewardIndex <= item.LastHeight);
+            return phase == null ? 0 : phase.GetReward(rewardIndex);
+        }
+
+        internal static long GetLegacyBlockReward(int height)
+        {
+            if (height <= 0 || height > 8000000) return 0;
+            long[] rewards = { 361L * Blockchain.OneCoin / 100, 280L * Blockchain.OneCoin / 100,
+                150L * Blockchain.OneCoin / 100, Blockchain.OneCoin };
+            return rewards[(height - 1) / 2000000];
+        }
+
+        /// <summary>Exact scheduled issuance after N remunerated blocks, including atomic remainders.</summary>
+        public static long GetScheduledIssuance(int rewardedBlockCount)
+        {
+            if (rewardedBlockCount < 0) throw new ArgumentOutOfRangeException(nameof(rewardedBlockCount));
+            long total = 0;
+            foreach (RewardPhase phase in rewardPhases)
+            {
+                int count = Math.Max(0, Math.Min(phase.BlockCount, rewardedBlockCount - phase.FirstHeight + 1));
+                total = checked(total + (long)count * phase.RewardPerBlock +
+                    Math.Max(0L, count - (phase.BlockCount - phase.RemainderAtomicUnits)));
+            }
+            return total;
         }
 
         /// <summary>
@@ -170,10 +212,18 @@ namespace PrivateCoin.Core
         /// validator-id order, so every node obtains exactly the same result.
         /// </summary>
         public static IReadOnlyList<ValidatorReward> DistributeReward(
-            int height,
+            int rewardIndex,
             ValidatorStake creator,
-            IEnumerable<ValidatorStake> confirmingValidators)
+            IEnumerable<ValidatorStake> confirmingValidators,
+            int consensusVersion = Blockchain.ConsensusVersion)
         {
+            return DistributeRewardAmount(GetBlockReward(rewardIndex, consensusVersion), creator, confirmingValidators);
+        }
+
+        internal static IReadOnlyList<ValidatorReward> DistributeRewardAmount(long reward,
+            ValidatorStake creator, IEnumerable<ValidatorStake> confirmingValidators)
+        {
+            if (reward < 0) throw new ArgumentOutOfRangeException(nameof(reward));
             if (creator == null) throw new ArgumentNullException(nameof(creator));
             if (confirmingValidators == null) throw new ArgumentNullException(nameof(confirmingValidators));
             var candidates = confirmingValidators.ToArray();
@@ -181,7 +231,6 @@ namespace PrivateCoin.Core
             if (confirmers.Any(item => item.ValidatorId == creator.ValidatorId))
                 throw new ArgumentException("The creator cannot also confirm the same block.", nameof(confirmingValidators));
 
-            long reward = GetBlockReward(height);
             if (reward == 0) return new ValidatorReward[0];
             if (confirmers.Length == 0) return new[] { new ValidatorReward(creator.ValidatorId, creator.RewardAddress, reward, true) };
             long creatorAmount = reward * CreatorPercentage / 100L;

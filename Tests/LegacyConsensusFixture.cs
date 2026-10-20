@@ -78,7 +78,7 @@ internal static class LegacyConsensusFixture
         var active = validators.ToArray();
         var parent = chain.Blocks.Last(); int height = chain.Blocks.Count;
         var creator = ProofOfStake.SelectCreator(active, parent.Hash, height);
-        var rewards = ProofOfStake.DistributeReward(height, creator, active.Where(item => item.ValidatorId != creator.ValidatorId));
+        var rewards = ProofOfStake.DistributeReward(height, creator, active.Where(item => item.ValidatorId != creator.ValidatorId), version);
         var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
         reward.Outputs.AddRange(rewards.Select(item => new TransactionOutput { Amount = item.Amount, OneTimeAddress = item.RewardAddress }));
         reward.Id = Id(reward);
@@ -111,7 +111,7 @@ internal static class LegacyConsensusFixture
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
                 ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
-                IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
+                IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers, consensusVersion);
                 var validations = pending.Select(transaction =>
                 {
                     ValidatorStake validator = SelectTransactionValidator(active, transaction, blocks[blocks.Count - 1].Hash, height);

@@ -15,11 +15,15 @@ namespace PrivateCoin.Core
         [DataMember(Order = 1)] public int FirstHeight { get; private set; }
         [DataMember(Order = 2)] public int LastHeight { get; private set; }
         [DataMember(Order = 3)] public long RewardAtomicUnits { get; private set; }
+        [DataMember(Order = 4)] public long RemainderAtomicUnits { get; private set; }
+        [DataMember(Order = 5)] public long TotalRewardAtomicUnits { get; private set; }
         internal GenesisRewardPhase(RewardPhase phase)
         {
             FirstHeight = phase.FirstHeight;
             LastHeight = phase.LastHeight;
             RewardAtomicUnits = phase.RewardPerBlock;
+            RemainderAtomicUnits = phase.RemainderAtomicUnits;
+            TotalRewardAtomicUnits = phase.TotalReward;
         }
     }
 
@@ -66,13 +70,26 @@ namespace PrivateCoin.Core
         [DataMember(Order = 31)] public long WalletUsdcRewardAtomicUnits { get; private set; }
         [DataMember(Order = 32)] public int UsdcRewardedWalletLimit { get; private set; }
 
+        [DataMember(Order = 33)] public int TargetBlockSeconds { get; private set; }
+        [DataMember(Order = 34)] public int ProofOfWorkRetargetWindow { get; private set; }
+        [DataMember(Order = 35)] public int ProofOfWorkInitialDifficultyBits { get; private set; }
+        [DataMember(Order = 36)] public int ProofOfWorkMaximumAdjustmentFactor { get; private set; }
+        [DataMember(Order = 37)] public int MaximumFutureBlockSeconds { get; private set; }
+        [DataMember(Order = 38)] public string EmissionRule { get; private set; }
+
         private static readonly string implementationHash = CalculateImplementationHash();
 
         internal static GenesisRules CreateCanonical()
         {
             return new GenesisRules
             {
-                SchemaVersion = 6,
+                SchemaVersion = 8,
+                EmissionRule = "Four phases of 15778800 remunerated validator blocks each (five Julian years at ten seconds); exclude genesis, unsigned operations and wallet registrations. Reward phase bounds are reward ordinals, not chain heights. Preserve phase budgets 7220000, 5600000, 3000000 and 2000000 POVIX exactly: pay floor(budgetAtomic/blockCount), plus one atomic unit on each of the last budgetAtomic%blockCount blocks of that phase. After 63115200 remunerated blocks no subsidy remains; transaction fees are separate. Calendar duration extends when blocks are unremunerated or absent.",
+                TargetBlockSeconds = ProofOfWork.TargetBlockSeconds,
+                ProofOfWorkRetargetWindow = ProofOfWork.RetargetWindow,
+                ProofOfWorkInitialDifficultyBits = ProofOfWork.InitialDifficultyBits,
+                ProofOfWorkMaximumAdjustmentFactor = ProofOfWork.MaximumAdjustmentFactor,
+                MaximumFutureBlockSeconds = ProofOfWork.MaximumFutureSeconds,
                 WalletUsdcRewardAtomicUnits = InitialLaunch.WalletUsdcReward,
                 UsdcRewardedWalletLimit = InitialLaunch.UsdcRewardedWalletLimit,
                 InitialLaunchReserveAtomicUnits = InitialLaunch.ReserveSupply,
@@ -100,7 +117,7 @@ namespace PrivateCoin.Core
                 MaximumTransferFeeAtomicUnits = Blockchain.MaximumTransferFee,
                 PoolFeeBasisPoints = TokenExchange.PoolFeeBasisPoints,
                 BlockProductionRule = "Produce a nonempty eligible batch at the operation limit or after the wait from first local observation. The local monotonic wait is not remotely verifiable consensus.",
-                BlockValidationRule = "Every block requires proof of work, valid ordered operations, supply and UTXO conservation. Wallet and collateral operations are self-validated. The first native initial-launch purchase may bootstrap without approval, or receive a signed approval and rewarded block from an eligible nonparticipant. Later launch purchases require approval and block votes from confirmed unspent locked launch receipts or the original locked 600 POVIX; collateral is aggregated per identity; a nonempty subset with at least one nonparticipant holder may produce a launch-only block. Single-validator launch blocks pay the full scheduled block reward to the creator, plus the purchase fee through its approving validator. These rights expire at launch activation. While the native launch is collecting, a block containing only fresh wallet registrations may be signed by a nonempty subset of confirmed eligible collateral, including the initial locked 600 POVIX. Wallet creation, registration and registration receipts never pay validator block rewards, regardless of validator count; their signed blocks have no reward outputs or native reward issuance. Registration blocks cannot mix with remunerated operations. A fresh registration with any confirmed nonparticipant eligible collateral during collection must be included in a signed block without validator reward; local absence of private keys cannot authorize an unsigned fallback. This applies even if other operations are mixed with the registration. Registration receipts, the initial pool bootstrap and mixed ordinary blocks do not gain the one-validator exception. User liquidity pool creation, token launch pool creation and all liquidity additions require the confirmed native initial launch target; the automatic initial pool is exempt. The first purchase fee has no validator payout. All signature, UTXO, identity and limit checks remain mandatory. Other transfers, tokens and pool operations require signed collateral-backed approvals; stake blocks require the globally eligible validator set, deterministic creator selection and signed votes. Fork choice uses cumulative required work.",
+                BlockValidationRule = "Every block requires proof of work; v34 targets adjust every 30 mined blocks toward a 10-second average using 29 intervals, excluding genesis, with a fourfold adjustment cap and legacy 12-bit minimum difficulty. The initial dynamic difficulty is 14 bits. Required targets are bound to block hashes and validator votes; block times must strictly advance and stay within 30 seconds of local UTC. Fork choice sums work from each verified required target, never actual lucky extra zeroes. Every block requires valid ordered operations, supply and UTXO conservation. Wallet and collateral operations are self-validated. The first native initial-launch purchase may bootstrap without approval, or receive a signed approval and rewarded block from an eligible nonparticipant. Later launch purchases require approval and block votes from confirmed unspent locked launch receipts or the original locked 600 POVIX; collateral is aggregated per identity; a nonempty subset with at least one nonparticipant holder may produce a launch-only block. Single-validator launch blocks pay the full scheduled block reward to the creator, plus the purchase fee through its approving validator. These rights expire at launch activation. While the native launch is collecting, a block containing only fresh wallet registrations may be signed by a nonempty subset of confirmed eligible collateral, including the initial locked 600 POVIX. Wallet creation, registration and registration receipts never pay validator block rewards, regardless of validator count; their signed blocks have no reward outputs or native reward issuance. Registration blocks cannot mix with remunerated operations. A fresh registration with any confirmed nonparticipant eligible collateral during collection must be included in a signed block without validator reward; local absence of private keys cannot authorize an unsigned fallback. This applies even if other operations are mixed with the registration. Registration receipts, the initial pool bootstrap and mixed ordinary blocks do not gain the one-validator exception. User liquidity pool creation, token launch pool creation and all liquidity additions require the confirmed native initial launch target; the automatic initial pool is exempt. The first purchase fee has no validator payout. All signature, UTXO, identity and limit checks remain mandatory. Other transfers, tokens and pool operations require signed collateral-backed approvals; stake blocks require the globally eligible validator set, deterministic creator selection and signed votes. Fork choice uses cumulative required work.",
                 InitialDistributionRule = "No premine in genesis. The first registered wallet receives 600 POVIX once, locked until the native pool target; later registrations receive zero. These initial 600 and purchased locked receipts are automatic collateral eligible for validation, block creation and scheduled rewards while locked, with ownership proved by the matching public key and signature. At the target their automatic collateral ends and the coins become spendable; rewards remain separate outputs. The first rewarded registration automatically issues 359400 POVIX into an ownerless local-USDC launch escrow; one gross purchase of 6 per registered wallet identity for one protocol-defined local USDC unit (six decimals), deducting the native transaction fee from those 6 POVIX before assigning the locked net receipt; no preexisting native balance is needed. The first 10000 registered wallet identities each receive 100 local USDC, including the first; total USDC issuance is capped at 1000000 units and advances only on registration. The first wallet receives 1000000 local USDT. Purchased outputs unlock at 29950 purchases, leaving 179700 POVIX and all funding in permanently locked principal liquidity. No bridge or external backing is implied.",
                 ImplementationHash = implementationHash,
                 CoreConfigurationManifest = CoreConfiguration.Manifest

@@ -803,3 +803,37 @@ MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationNoReward.exe
 As suítes Desktop e de propagação agora esperam zero pagamento em registros.
 A fixture de lançamento financia seus validadores por atividades remuneradas
 reais, mantendo os registros assinados sem recompensa.
+
+
+## Dificuldade dinâmica (v34)
+
+```sh
+mcs -out:work/DynamicProofOfWork.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinDynamicProofOfWorkRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/DynamicProofOfWork.exe
+```
+
+Verifica médias de 2, 10 e 30 segundos, limites de ajuste, piso, fronteiras da
+janela, alvo errado mesmo com PoW válido, codificação, horários regressivos e
+futuros, relógio local, assinatura vinculada ao horário, manifesto, trabalho
+acumulado, confirmações e replay de blocos reais. As janelas sintéticas testam
+somente a aritmética dos cabeçalhos; não representam cadeias com transações válidas.
+
+
+## Emissão de vinte anos sem perder orçamento (v35)
+
+```sh
+mcs -out:work/TwentyYearEmission.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinTwentyYearEmissionRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/TwentyYearEmission.exe
+```
+
+Verifica os quatro limites e orçamentos, divisão inteira e acréscimo de uma unidade
+atômica nas fronteiras do resto, emissão parcial e total exatas, fim do subsídio,
+divisão entre criador/confirmadores, registros sem consumo da contagem, cálculo
+legado preservado e rejeição de downgrade desde o primeiro bloco após o novo genesis. Exercita uma cadeia real curta com compras remuneradas,
+registros sem recompensa, resumo/extrato, rejeição de valores forjados com novos
+votos e PoW, restauração e reorganização para uma cadeia mais longa com menos
+blocos remunerados. Os limites de milhões de blocos são verificados pela aritmética
+da tabela, não por mineração de uma cadeia completa de vinte anos.
+
+Reexecute também as regressões de dificuldade dinâmica, registro sem recompensa,
+Desktop, propagação e lançamento. O verificador do navegador exige consenso v35.

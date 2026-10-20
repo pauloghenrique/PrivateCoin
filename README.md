@@ -356,8 +356,9 @@ pendências e cadeias recebidas.
 `000`). O trabalho de um bloco vem de `floor(2^256 / (target + 1))`: **4096**
 unidades. Zeros adicionais encontrados por acaso não aumentam esse valor.
 `ChainWork` soma o trabalho validado em `BigInteger`, incluindo o gênese.
-Com esse alvo fixo, mais trabalho equivale a mais blocos; não existe preferência
-automática pela cadeia menor. Em empate, vence a menor hash da ponta.
+Esse alvo fixo é usado no genesis e como piso de dificuldade. Blocos dinâmicos
+usam o alvo exigido por sua janela; uma cadeia menor com alvos mais difíceis pode
+ter mais trabalho acumulado. Em empate, vence a menor hash da ponta.
 
 Cada nó valida integralmente a cadeia candidata, incluindo assinaturas de
 transações e votos, garantias no estado anterior, prova de trabalho, gastos
@@ -374,25 +375,45 @@ e os comprovantes do DEX refletem a cadeia atual, inclusive após reinício.
 
 **Não há checkpoint nem finalização irreversível.** Uma cadeia válida com maior
 trabalho pode substituir o histórico local. Seis confirmações são uma referência,
-não uma garantia de segurança de 100%. O alvo atual é baixo e não tem ajuste
-automático: esta implementação experimental não tem a resistência econômica
+não uma garantia de segurança de 100%. A dificuldade inicial e seu piso são
+baixos, mesmo com ajuste automático: esta implementação experimental não tem a resistência econômica
 da rede Bitcoin. As regras de stake, distribuição promocional e seleção de
 validadores também tornam este protocolo diferente do Bitcoin.
 
-A emissão destinada ao consenso dura 8 milhões de blocos (aproximadamente 20 anos, considerando 2 milhões de blocos a cada cinco anos) e totaliza **17.820.000 POVIX**:
+A emissão destinada ao consenso abrange **63.115.200 blocos remunerados**, em
+quatro estágios de 15.778.800 blocos cada, e preserva exatamente **17.820.000 POVIX**.
+A média de dez segundos corresponde a aproximadamente cinco anos por estágio e
+vinte anos ao todo (ano de 365,25 dias). É uma estimativa de atividade: registros,
+operações sem recompensa e períodos sem blocos prolongam o calendário.
 
-| Fase | Alturas | Recompensa por bloco | Total da fase |
+| Fase | Ordinais dos blocos remunerados | Recompensa base por bloco | Total exato da fase |
 | --- | ---: | ---: | ---: |
-| 1 | 1–2.000.000 | 3,61 POVIX | 7.220.000 POVIX |
-| 2 | 2.000.001–4.000.000 | 2,80 POVIX | 5.600.000 POVIX |
-| 3 | 4.000.001–6.000.000 | 1,50 POVIX | 3.000.000 POVIX |
-| 4 | 6.000.001–8.000.000 | 1,00 POVIX | 2.000.000 POVIX |
+| 1 | 1–15.778.800 | 0,45757598 POVIX | 7.220.000 POVIX |
+| 2 | 15.778.801–31.557.600 | 0,35490658 POVIX | 5.600.000 POVIX |
+| 3 | 31.557.601–47.336.400 | 0,19012852 POVIX | 3.000.000 POVIX |
+| 4 | 47.336.401–63.115.200 | 0,12675235 POVIX | 2.000.000 POVIX |
+
+Para preservar cada orçamento até a última unidade, os últimos **12.677.600**,
+**5.549.600**, **10.862.400** e **1.982.000** blocos das respectivas fases recebem
+**uma unidade atômica extra (0,00000001 POVIX)**. O valor é calculado por divisão
+inteira do orçamento da fase pelo número de blocos; o resto define quantos blocos
+finais recebem essa unidade. Não existe perda por arredondamento nem emissão
+acima do orçamento. Depois do último bloco remunerado, a emissão se encerra;
+as taxas continuam sendo pagas separadamente pelas transações.
+
+O consenso **v35** conta apenas os blocos assinados de operações remuneradas.
+O genesis, o bootstrap, registros de carteira (inclusive assinados ou em lote),
+operações auto-validadas e a primeira compra se confirmada sem validador não
+consomem posições dessa tabela. Criar carteiras não acelera nem reduz a emissão.
+Cada nó reconstrói a contagem no replay e após reorganizações; um bloco só avança
+a contagem uma vez, independentemente do número de transações ou validadores.
+`GetBlockReward` recebe esse **ordinal remunerado**, não a altura absoluta.
 
 `ProofOfStake` representa as regras determinísticas do consenso. Os participantes informam as moedas bloqueadas em garantia por meio de `ValidatorStake`; `SelectCreator` escolhe o criador de forma ponderada pelo valor bloqueado, usando a hash anterior e a altura como semente. Em cada nova altura o sorteio é refeito, portanto um participante pode criar um bloco em uma rodada e confirmar outro bloco em uma rodada posterior.
 
-`DistributeReward` reserva **30%** da recompensa ao criador escolhido e distribui os **70%** restantes entre os validadores que confirmaram corretamente, proporcionalmente às garantias bloqueadas. O arredondamento da menor unidade é determinístico e a soma das parcelas é sempre exatamente a recompensa prevista para a altura. O criador não pode confirmar o próprio bloco. Além disso, as carteiras que enviam ou recebem qualquer transferência do bloco são excluídas tanto da criação quanto da confirmação desse bloco; seus endereços públicos são incluídos na prova para que essa regra seja revalidada ao carregar ou sincronizar a cadeia.
+`DistributeReward` reserva **30%** da recompensa ao criador escolhido e distribui os **70%** restantes entre os validadores que confirmaram corretamente, proporcionalmente às garantias bloqueadas. O arredondamento da menor unidade é determinístico e a soma das parcelas é sempre exatamente a recompensa prevista para o ordinal remunerado. O criador não pode confirmar o próprio bloco. Além disso, as carteiras que enviam ou recebem qualquer transferência do bloco são excluídas tanto da criação quanto da confirmação desse bloco; seus endereços públicos são incluídos na prova para que essa regra seja revalidada ao carregar ou sincronizar a cadeia.
 
-A propriedade `RewardPhases` expõe as quatro fases (limites, recompensa unitária e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 POVIX**.
+A propriedade `RewardPhases` expõe as quatro fases (limites por ordinal remunerado, recompensa base, resto atômico e total) para que carteiras e exploradores possam apresentar a política sem duplicar números. `ScheduledIssuance` calcula o total diretamente dessas fases e permite verificar programaticamente que a emissão prevista é exatamente **17.820.000 POVIX**.
 
 Quando há uma transferência aprovada e pelo menos dois validadores locais elegíveis ativos, o Desktop seleciona o criador, usa os demais validadores como confirmadores, cria o bloco e inclui nele a transação que paga as parcelas de 30%/70%. A prova contém os validadores, garantias, endereços de recompensa e o papel do criador; ela faz parte da hash e é revalidada ao carregar ou sincronizar a cadeia. As recompensas tornam-se UTXOs das carteiras e aparecem no saldo.
 
@@ -727,3 +748,33 @@ as recompensas não emitidas nos registros.
 O Desktop identifica o registro assinado como sem recompensa para os validadores.
 Core, Desktop e verificador DEX passam ao consenso v33, alterando o compromisso
 do genesis e a identidade da rede. O PR não migra, reinicia ou publica a cadeia.
+
+
+## Dificuldade dinâmica para 10 segundos por bloco (consenso v34)
+
+A mineração usa alvo inicial de 14 bits, com limite mínimo de dificuldade de
+12 bits, igual ao piso anterior. A cada 30 blocos minerados, o próximo alvo é
+calculado a partir dos 29 intervalos entre os últimos 30 blocos, excluindo o
+horário fixo do genesis. O alvo é multiplicado pelo tempo observado dividido
+pelo esperado (29 × 10 segundos), com fator limitado ao intervalo de 1/4 a 4.
+No intervalo entre ajustes, o alvo permanece igual. Assim, blocos com média
+de 2 segundos endurecem a dificuldade (até 4× por ajuste); média de 30 segundos
+a reduz; média de 10 segundos mantém o alvo. O piso pode impedir novas reduções.
+
+O alvo exigido fica no bloco e integra o hash e os votos dos validadores,
+junto com o horário. Cada nó recalcula o valor exigido a partir da sua cadeia.
+Horários precisam avançar em relação ao pai e não podem exceder o UTC local
+em mais de 30 segundos; os relógios dos nós precisam estar sincronizados.
+A escolha entre cadeias soma trabalho por alvo exigido, não apenas quantidade
+de blocos nem zeros extras encontrados por sorte. Blocos históricos/genesis
+continuam usando o alvo fixo aplicável ao seu formato; não há migração automática.
+
+Dez segundos são uma meta média, não uma espera obrigatória ou garantia.
+Sem operações, não são gerados blocos vazios. O consenso v35 estende a emissão a
+63.115.200 blocos remunerados, aproximadamente vinte anos de atividade contínua.
+Blocos sem recompensa não consomem a tabela; o calendário pode se prolongar.
+O teto de recompensas permanece exatamente em 17.820.000 POVIX.
+
+A alteração exige Core, Desktop e DEX v35, manifesto de genesis esquema 8 e
+nova identidade da rede. Não publica nem reinicia a rede e não substitui auditoria
+das demais regras de validação, quorum, sincronização ou distribuição inicial.

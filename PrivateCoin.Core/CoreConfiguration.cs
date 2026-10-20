@@ -9,7 +9,7 @@ namespace PrivateCoin.Core
     /// <summary>Canonical public protocol configuration committed by the genesis block.</summary>
     public static class CoreConfiguration
     {
-        public const int ManifestVersion = 1;
+        public const int ManifestVersion = 2;
 
         // Cache only immutable text. Never expose a shared mutable genesis configuration.
         public static string Manifest { get; } = BuildManifest();
@@ -34,8 +34,10 @@ namespace PrivateCoin.Core
                 entries.Add(prefix + "FirstHeight", phase.FirstHeight.ToString(CultureInfo.InvariantCulture));
                 entries.Add(prefix + "LastHeight", phase.LastHeight.ToString(CultureInfo.InvariantCulture));
                 entries.Add(prefix + "RewardPerBlock", phase.RewardPerBlock.ToString(CultureInfo.InvariantCulture));
+                entries.Add(prefix + "RemainderAtomicUnits", phase.RemainderAtomicUnits.ToString(CultureInfo.InvariantCulture));
+                entries.Add(prefix + "TotalReward", phase.TotalReward.ToString(CultureInfo.InvariantCulture));
             }
-            var result = new StringBuilder("privatecoin-core-configuration-v1|");
+            var result = new StringBuilder("privatecoin-core-configuration-v2|");
             foreach (var entry in entries)
                 result.Append(entry.Key.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(entry.Key)
                     .Append(entry.Value.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(entry.Value);

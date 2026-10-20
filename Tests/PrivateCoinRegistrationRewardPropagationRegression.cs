@@ -75,7 +75,8 @@ internal static class PrivateCoinRegistrationRewardPropagationRegression
                 Check(observerScheduler.SelectBatch(batch, observerPolicy).Count == 0 && observerScheduler.CandidateCount == 0,
                     "wallet " + walletNumber + ": keyless Desktop production waits for a validator signature");
                 var fork = new Block { ConsensusVersion = Blockchain.ConsensusVersion, Height = observerNode.Blocks.Count,
-                    PreviousHash = observerNode.Blocks.Last().Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks,
+                    PreviousHash = observerNode.Blocks.Last().Hash, TimestampUtcTicks = ProofOfWork.GetNextTimestamp(observerNode.Blocks, DateTime.UtcNow),
+                    ProofOfWorkTarget = ProofOfWork.FormatTarget(ProofOfWork.GetRequiredTarget(observerNode.Blocks)),
                     Transactions = new List<Transaction> { registration } };
                 LegacyConsensusFixture.Mine(fork);
                 Check(ProofOfWork.MeetsTarget(fork.Hash), "wallet " + walletNumber + ": competing unsigned block has real valid proof of work");
