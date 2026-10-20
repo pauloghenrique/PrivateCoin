@@ -70,6 +70,7 @@
     <Compile Include="TokenExchange.cs" />
     <Compile Include="TokenLaunch.cs" />
     <Compile Include="InitialLaunch.cs" />
+    <Compile Include="NativeBridge.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

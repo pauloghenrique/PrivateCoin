@@ -1,0 +1,25 @@
+{
+  "chainId": 97,
+  "rpcUrl": "https://YOUR-BSC-TESTNET-RPC.example",
+  "asset": "0x1111111111111111111111111111111111111111",
+  "bridge": null,
+  "nativeNetwork": "povix-mainnet-rules-v1-REPLACE_WITH_NETWORK_ID",
+  "nativeToken": "c834c6b8054805426ae71bc9b71815feaa6728985ed403706ee26e12094d6a0d",
+  "nativeAdministrators": [
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  ],
+  "nativeThreshold": 2,
+  "nativeSnapshot": "/path/to/fresh/Blockchain.json",
+  "nativeConfirmations": 12,
+  "bscConfirmations": 15,
+  "operators": [
+    "0x2222222222222222222222222222222222222222",
+    "0x3333333333333333333333333333333333333333",
+    "0x4444444444444444444444444444444444444444"
+  ],
+  "threshold": 2,
+  "reserveCap": "100000000000",
+  "dailyReleaseCap": "10000000000"
+}

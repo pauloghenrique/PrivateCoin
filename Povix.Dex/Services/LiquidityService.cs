@@ -174,10 +174,10 @@ namespace Povix.Dex.Services
                     if (model.InputSide != 1 || model.InputAssetId != pool.AssetB.Id || model.OutputAssetId != pool.AssetA.Id ||
                         ParseAmount(model.Amount, pool.AssetB.Decimals) != InitialLaunch.FundingUnit ||
                         ParseAmount(model.MinimumReceive, pool.AssetA.Decimals) != InitialLaunch.PurchaseAmount - GetSelectedFee(model.FeePriority, model.FeeAtomic))
-                        throw new TokenOperationException("launch_fixed_rate", "No lançamento, troque exatamente 1 USDC local por 6 POVIX brutos, descontando a taxa da rede do recebimento bloqueado.");
+                        throw new TokenOperationException("launch_fixed_rate", "No lançamento, troque exatamente 1 pUSDT por 6 POVIX brutos, descontando a taxa da rede do recebimento bloqueado.");
                     var registrations = blockchain.Blocks.SelectMany(block => block.Transactions)
                         .Where(operation => operation.WalletDistributionId == null && (operation.Kind == TransactionKind.WalletCreate || operation.Kind == TransactionKind.InitialLaunchCreate))
-                        .Select(operation => operation.Outputs[operation.Kind == TransactionKind.InitialLaunchCreate ? 4 : 0].OneTimeAddress).ToArray();
+                        .Select(operation => operation.Outputs[operation.Kind == TransactionKind.InitialLaunchCreate ? 2 : 0].OneTimeAddress).ToArray();
                     var purchased = blockchain.Blocks.SelectMany(block => block.Transactions).Concat(pending)
                         .Where(operation => operation.Kind == TransactionKind.InitialLaunchPurchase).Select(operation => operation.InitialLaunchIdentity.PublicKey).ToArray();
                     string identity = publicKeys.FirstOrDefault(key => registrations.Contains(AddressFor(key)) && !purchased.Contains(key));

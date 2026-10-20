@@ -14,7 +14,7 @@ class PrivateCoinDesktopRegistrationRegression
     public static void Main()
     {
         CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
-        using (var first = new Wallet()) using (var second = new Wallet())
+        using (var first = new Wallet()) using (var second = new Wallet()) using (var bridgeAdmin = new Wallet())
         {
             var chain = new Blockchain(); var empty = new Transaction[0];
             Check(!WalletRegistration.HasRegistration(chain, first, empty) && chain.Blocks.Count == 1 && first.OwnedOneTimeAddresses.Count == 0, "opening a local wallet does not register or issue coins");
@@ -31,11 +31,11 @@ class PrivateCoinDesktopRegistrationRegression
             var balance = WalletBalanceSummary.Read(chain, first, empty);
             Check(balance.Available == 0 && balance.LaunchLocked == 600 * Blockchain.OneCoin && balance.Total == 600 * Blockchain.OneCoin && balance.LaunchLockText.Contains("Bloqueado no lançamento"), "Desktop displays the first 600 POVIX as locked guarantee, without adding pool reserves");
             Check(WalletRegistration.LaunchStatus(chain, empty).Contains("Pool criada") && WalletRegistration.LaunchStatus(chain, empty).Contains("359.400"), "Desktop shows the automatically confirmed pool in collection");
-            Check(chain.GetTokenBalances(first.OwnedOneTimeAddresses).Count == 2 && chain.GetTokenBalances(first.OwnedOneTimeAddresses).All(token => token.Amount == (token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : InitialLaunch.FundingTokenSupply)), "Desktop token catalogue receives 100 USDC and one million USDT");
+            Check(chain.GetTokenBalances(first.OwnedOneTimeAddresses).Count == 1 && chain.GetTokenBalances(first.OwnedOneTimeAddresses).Single().Id == InitialLaunch.PusdtTokenId && chain.GetTokenBalances(first.OwnedOneTimeAddresses).Single().Amount == 0, "Desktop catalogue shows only protocol pUSDT, with zero allocation");
             string original = second.CreateReceiveAddress();
             var later = WalletRegistration.Prepare(chain, second, empty);
             Check(later.Kind == TransactionKind.WalletCreate && later.Outputs[0].Amount == 0 && later.Outputs[0].OneTimeAddress == original, "later selected wallet reuses its receiving identity and gets zero reward");
-            Check(WalletRegistration.Describe(later).StartsWith("Registro com 100 USDC"), "Desktop explains the 100-USDC registration reward");
+            Check(WalletRegistration.Describe(later).StartsWith("Registro sem recompensa"), "Desktop explains that later registration grants no free tokens");
             Check(chain.GetMinimumValidatorsForTransactions(new[] { later }) == 1, "registration during launch needs one eligible signer");
             string validatorAddress = first.OwnedOneTimeAddresses.Single();
             var stake = first.CreateValidatorStake(validatorAddress, Blockchain.WalletCreationReward);
@@ -60,6 +60,8 @@ class PrivateCoinDesktopRegistrationRegression
             Check(chain.GetMinimumValidatorsForTransactions(new[] { later, new Transaction { Kind = TransactionKind.StakeLock } }) == 2,
                 "mixed registration batches do not acquire single-validator rights");
             Check(WalletBalanceSummary.Read(chain, second, empty).Available == 0, "second wallet remains at zero after registration");
+            bridgeAdmin.CreateReceiveAddress();
+            PusdtBridgeFixture.Seed(chain, first, second, bridgeAdmin);
             // Reproduce two Desktop wallets: founder validates the registration, then its buyer's first swap.
             var purchase = second.CreateInitialLaunchPurchase(chain, empty, original, original, 1);
             Check(chain.GetValidatorsForTransactions(new[] { purchase }).Single().ValidatorId == validatorAddress,
@@ -68,7 +70,7 @@ class PrivateCoinDesktopRegistrationRegression
                 "first launch swap needs only the existing founder validator");
             purchase.TransactionApproval = chain.CreateTransactionApproval(purchase, new[] { purchase }, new[] { stake });
             Check(purchase.TransactionApproval != null && purchase.TransactionApproval.CollateralTransactionId == registration.Id &&
-                purchase.TransactionApproval.CollateralOutputIndex == 4 && chain.HasValidTransactionApproval(purchase, new[] { purchase }),
+                purchase.TransactionApproval.CollateralOutputIndex == 2 && chain.HasValidTransactionApproval(purchase, new[] { purchase }),
                 "first launch swap approval uses the confirmed original 600-POVIX collateral");
             Check(!Blockchain.IsSelfValidatedOperation(purchase) && Blockchain.RequiresLockedTokenApproval(purchase),
                 "signed first swap follows rewarded validation instead of unsigned bootstrap");
@@ -85,11 +87,13 @@ class PrivateCoinDesktopRegistrationRegression
                 var nextRegistration = WalletRegistration.Prepare(chain, third, empty);
                 chain.AddProofOfStakeBlock(new[] { nextRegistration }, new[] { stake });
                 string thirdAddress = third.OwnedOneTimeAddresses.Single();
+                PusdtBridgeFixture.Mint(chain, new[] { first, second, bridgeAdmin }, thirdAddress, InitialLaunch.FundingUnit);
                 var nextSwap = third.CreateInitialLaunchPurchase(chain, empty, thirdAddress, thirdAddress, 1);
                 nextSwap.TransactionApproval = chain.CreateTransactionApproval(nextSwap, new[] { nextSwap }, new[] { stake });
                 var nextBlock = chain.AddProofOfStakeBlock(new[] { nextSwap }, new[] { stake });
                 Check(nextBlock.Validators.Count == 1 && nextBlock.Validators[0].ValidatorId == validatorAddress,
                     "founder remains eligible for later swaps even when another locked buyer exists");
+                PusdtBridgeFixture.Mint(chain, new[] { first, second, bridgeAdmin }, validatorAddress, InitialLaunch.FundingUnit);
                 var ownPurchase = first.CreateInitialLaunchPurchase(chain, empty, validatorAddress, validatorAddress, 1);
                 Check(chain.CreateTransactionApproval(ownPurchase, new[] { ownPurchase }, new[] { stake }) == null,
                     "600-POVIX founder cannot approve its own purchase");

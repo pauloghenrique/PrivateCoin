@@ -198,7 +198,7 @@
         }
         try {
             if (!pool) throw new Error();
-            if (nativeCollecting(pool)) { byId('swap-estimate').textContent = '1 USDC local → 6 POVIX bloqueados até a meta. Uma participação por identidade. A taxa da rede é descontada dos 6 POVIX; não exige saldo POVIX anterior.'; return; }
+            if (nativeCollecting(pool)) { byId('swap-estimate').textContent = '1 pUSDT → 6 POVIX bloqueados até a meta. Uma participação por identidade. A taxa da rede é descontada dos 6 POVIX; não exige saldo POVIX anterior.'; return; }
             const side = Number(swapSide()), input = side === 0 ? pool.assetA : pool.assetB, output = side === 0 ? pool.assetB : pool.assetA;
             const amount = wallet.parseSupply(byId('swap-amount').value, input.decimals);
             const quote = wallet.quotePoolSwap(side === 0 ? pool.reserveAAtomic : pool.reserveBAtomic, side === 0 ? pool.reserveBAtomic : pool.reserveAAtomic, amount, pool.assetA, pool.assetB, side, pool.burnPolicy);
@@ -254,7 +254,7 @@
             addReview('Bloco limite', String(result.launch.deadlineHeight));
             addReview('Abertura', 'Captação integral na liquidez da carteira criadora; compradores recebem tokens proporcionais.');
         }
-        if (result.initialLaunchPurchase) addReview('Lançamento inicial', '1 USDC local por 6 POVIX brutos menos a taxa da rede. O líquido fica bloqueado até a meta de 179.700 POVIX na reserva. Uma participação por identidade.');
+        if (result.initialLaunchPurchase) addReview('Lançamento inicial', '1 pUSDT por 6 POVIX brutos menos a taxa da rede. O líquido fica bloqueado até a meta de 179.700 POVIX na reserva. Uma participação por identidade.');
         addReview('Taxa da rede paga pelo solicitante', atomicText(result.feeAtomic, 8) + ' POVIX');
         result.outputs.forEach((output, index) => {
             const token = output.assetId === 'povix' ? { decimals: 8, symbol: 'POVIX' } : output.assetId === result.assetA.id ? result.assetA : result.assetB;
@@ -616,7 +616,7 @@
                     reserves.append(reserve);
                 }
                 const price = node('p', 'pool-item-price');
-                try { price.textContent = pool.nativeInitialLaunch && pool.status === 'collecting' ? 'Lançamento inicial: 6 POVIX por 1 USDC local' : priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
+                try { price.textContent = pool.nativeInitialLaunch && pool.status === 'collecting' ? 'Lançamento inicial: 6 POVIX por 1 pUSDT' : priceText(pool.assetA, pool.assetB, pool.reserveAAtomic, pool.reserveBAtomic); }
                 catch (_) { price.textContent = 'Preço: indisponível.'; }
                 const details = node('details', 'pool-item-details');
                 if (pool.nativeInitialLaunch) details.append(node('p', '', pool.statusMessage));

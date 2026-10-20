@@ -780,3 +780,17 @@ O teto de recompensas permanece exatamente em 17.820.000 POVIX.
 A alteração exige Core, Desktop e DEX v35, manifesto de genesis esquema 8 e
 nova identidade da rede. Não publica nem reinicia a rede e não substitui auditoria
 das demais regras de validação, quorum, sincronização ou distribuição inicial.
+
+
+### Ponte de USDT (laboratório)
+
+O módulo [`Povix.Bridge`](Povix.Bridge/README.md) implementa um protótipo de custódia de ativo de teste na BNB e emissão/resgate de representação na POVIX, destinada a pools POVIX/pUSDT no Povix.Dex. Não está publicado nem habilitado para USDT real ou BNB mainnet. Consulte as instruções, limites de confiança e testes do módulo.
+
+
+### Lançamento POVIX/pUSDT — consenso v36
+
+A primeira carteira mantém os 600 POVIX bloqueados e cria automaticamente a pool POVIX/pUSDT com 359.400 POVIX. O pUSDT é registrado com **oferta e emissão zero**; USDT/USDC locais e o crédito de 100 USDC por registro foram removidos. As demais carteiras não recebem stablecoins.
+
+A ponte recebe USDT BNB em custódia e prepara a emissão equivalente de pUSDT. A primeira carteira vincula a ponte e o quórum uma única vez, antes de qualquer emissão. Depois, a maioria dos administradores autoriza emissões; usuários assinam queimas para resgatar o ativo BNB. Essas operações específicas podem ser gratuitas em POVIX e não geram recompensa de validação, permitindo iniciar o lançamento sem saldo nativo livre. O protótipo da ponte continua restrito a testes e a coordenação da emissão depende do diário dos operadores.
+
+A compra inicial passa a usar 1 pUSDT por 6 POVIX brutos menos a taxa. Permanecem a participação única por identidade, 29.950 compras, a liberação na meta, os 179.700 POVIX de liquidez principal permanente e a emissão/recompensa nativa anterior. A atualização altera a identidade da rede (genesis esquema 9), exige versões coordenadas e não executa migração, publicação ou reinício de rede.

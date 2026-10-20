@@ -243,7 +243,7 @@ namespace Povix.Dex.Services
                         var confirmed = new HashSet<string>(candidate.Blocks.SelectMany(block => block.Transactions).Select(tx => tx.Id));
                         var valid = new List<Transaction>();
                         var recoverable = pending.Concat(candidate.GetUncountedWalletCreations()).Concat(blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate))
+                                .Where(tx => tx.Inputs.Count > 0 || NativeBridge.IsFeeFree(tx) || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate))
                             .Concat(submitted.Select(item => item.Transaction)).Where(tx => !confirmed.Contains(tx.Id))
                             .GroupBy(tx => tx.Id, StringComparer.Ordinal).Select(group => group.First());
                         foreach (Transaction transaction in Blockchain.OrderByFeePriority(recoverable))

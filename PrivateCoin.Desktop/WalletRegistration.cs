@@ -10,7 +10,7 @@ namespace PrivateCoin.Desktop
     internal static class WalletRegistration
     {
         internal static bool IsRegistration(Transaction tx) => tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate;
-        private static TransactionOutput Reward(Transaction tx) => tx.Outputs[tx.Kind == TransactionKind.InitialLaunchCreate ? 4 : 0];
+        private static TransactionOutput Reward(Transaction tx) => tx.Outputs[tx.Kind == TransactionKind.InitialLaunchCreate ? 2 : 0];
         internal static bool HasRegistration(Blockchain chain, Wallet wallet, IEnumerable<Transaction> pending)
         {
             if (wallet == null) return false;
@@ -32,8 +32,7 @@ namespace PrivateCoin.Desktop
             long reward = Reward(tx).Amount;
             if (tx.Kind == TransactionKind.InitialLaunchCreate)
                 return "A primeira carteira receberá " + Coins(reward) + " POVIX bloqueados após a confirmação, como garantia automática de validação e criação de blocos até a meta da pool. A mesma operação cria a pool com " +
-                    Coins(InitialLaunch.ReserveSupply) + " POVIX e credita 100 USDC locais e 1.000.000 de USDT local nesta carteira.";
-            if (reward == 0 && tx.Outputs.Count == 2) return "Registro com 100 USDC locais, disponíveis após confirmação em bloco.";
+                    Coins(InitialLaunch.ReserveSupply) + " POVIX no par POVIX/pUSDT. O pUSDT começa com oferta zero e só é emitido pela ponte após depósitos de USDT BNB confirmados.";
             return reward == 0 ? "Registro sem recompensa em POVIX: os 600 POVIX são exclusivos da primeira carteira confirmada." :
                 "Recompensa de " + Coins(reward) + " POVIX aguardando confirmação em bloco.";
         }

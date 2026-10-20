@@ -24,7 +24,8 @@ internal static class PrivateCoinRegistrationNoRewardRegression
             var registrationBlock = chain.AddProofOfStakeBlock(new[] { second }, new[] { founderStake });
             Check(registrationBlock.Validators.Count == 1 && registrationBlock.Transactions[0].Outputs.Count == 0, "one validator signs registration without reward outputs");
             Check(chain.GetSpendableBalance(new[] { a }, empty) == 0 && new BlockchainQueryApi(chain).GetSummary().IssuedTokenAmount == Blockchain.MaximumSupply, "registration credits no founder reward and increases no public native issuance");
-            Check(chain.GetTokenBalance(new[] { b }, InitialLaunch.UsdcTokenId) == InitialLaunch.WalletUsdcReward, "new wallet still receives the existing 100 local USDC");
+            Check(chain.GetTokenBalance(new[] { b }, InitialLaunch.PusdtTokenId) == 0, "new wallet receives no free stablecoin");
+            PusdtBridgeFixture.Seed(chain, founder, buyer, third);
             var purchase = buyer.CreateInitialLaunchPurchase(chain, empty, b, b, 1);
             purchase.TransactionApproval = chain.CreateTransactionApproval(purchase, new[] { purchase }, new[] { founderStake });
             int purchaseHeight = chain.Blocks.Count;

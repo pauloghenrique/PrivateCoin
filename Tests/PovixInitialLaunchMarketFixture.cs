@@ -27,6 +27,7 @@ class PovixInitialLaunchMarketFixture
         chain.AddBlock(new[]{chain.CreateWalletCreationTransaction(founderAddress,new Transaction[0])});
         chain.AddProofOfStakeBlock(new[]{chain.CreateWalletCreationTransaction(address,new Transaction[0])},
             new[]{provider.CreateValidatorStake(founderAddress,Blockchain.WalletCreationReward)});
+        using (var bridgeAdmin = new Wallet()) { bridgeAdmin.CreateReceiveAddress(); PusdtBridgeFixture.Seed(chain, provider, wallet, bridgeAdmin); }
         if(chain.GetBalance(new[]{address})!=0) throw new Exception("Buyer must start with zero POVIX");
         var reserves=chain.GetUnspentOutputs(new[]{Hash(InitialLaunch.ProviderPublicKey)}).Where(item=>item.OutputIndex>=0).OrderBy(item=>item.OutputIndex).ToArray();
         var json=new JavaScriptSerializer();
@@ -50,7 +51,7 @@ class PovixInitialLaunchMarketFixture
             var catalogue = (Dictionary<string,object>)json.DeserializeObject(json.Serialize(service.GetExchangeCatalogue(new[]{key})));
             if ((bool)catalogue["canCreatePools"]) throw new Exception("Catalogue enables early pool creation");
             Console.WriteLine("DEX gates both pool types and liquidity additions while principal collects");
-            var request=new SwapViewModel {PoolId=chain.GetInitialLaunchStatus().RootTransactionId,InputSide=1,InputAssetId=InitialLaunch.UsdcTokenId,OutputAssetId="povix",Amount="1",MinimumReceive="5.99999999",FeeAtomic=1,FeePriority=1};
+            var request=new SwapViewModel {PoolId=chain.GetInitialLaunchStatus().RootTransactionId,InputSide=1,InputAssetId=InitialLaunch.PusdtTokenId,OutputAssetId="povix",Amount="1",MinimumReceive="5.99999999",FeeAtomic=1,FeePriority=1};
             var response=service.PrepareSwap(request,new[]{key},address,"test");
             File.WriteAllText(args[0]+".service.json",json.Serialize(response));
             request.InputSide=0;
