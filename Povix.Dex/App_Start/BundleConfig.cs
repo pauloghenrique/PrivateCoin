@@ -1,4 +1,4 @@
-﻿using System.Web;
+using System.Web;
 using System.Web.Optimization;
 
 namespace Povix.Dex
@@ -13,6 +13,7 @@ namespace Povix.Dex
             // Plain bundles preserve the modern wallet scripts without legacy minification.
             // Scripts.Url versions the combined wallet and page code by their contents,
             // even when ASP.NET compilation debugging is enabled.
+            bundles.Add(new Bundle("~/bundles/povix-bridge").Include("~/Scripts/povix-bridge.js"));
             bundles.Add(new Bundle("~/bundles/povix-wallet").Include("~/Scripts/povix-token-wallet.js", "~/Scripts/povix-wallet-menu.js"));
             bundles.Add(new Bundle("~/bundles/povix-token-create").Include(
                 "~/Scripts/povix-token-create.js"));

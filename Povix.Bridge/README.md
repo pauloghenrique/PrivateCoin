@@ -88,3 +88,21 @@ A ponte é federada: o contrato BNB verifica assinaturas, não provas de consens
 Antes de produção ainda são necessários: assinatura nativa distribuída sem reunião de chaves, plano de recuperação e reconciliação do diário, monitoramento de lastro, tratamento operacional de reorganizações, revisão/auditoria dos contratos e serviços e implantação própria com parâmetros e operadores reais. Não há endpoints, chaves ou USDT oficiais configurados neste repositório. Mainnet exige uma versão revisada que remova intencionalmente a restrição de teste.
 
 A mudança do lançamento exige Core, Desktop e DEX v36 e genesis esquema 9. A identidade da rede muda; isto não migra saldos nem conecta automaticamente nós antigos à nova rede. Nenhuma rede foi reiniciada ou publicada por este módulo.
+
+## Tela de depósito no Povix.Dex
+
+Acesse `/swap-usdt` pelo menu **Swap USDT**. A carteira EVM assina a autorização e o depósito diretamente, sem enviar chaves ao DEX. A tela aceita somente BNB Smart Chain Testnet (97), com 15 confirmações; não oferece USDT real da mainnet.
+
+Após publicar e verificar o `UsdtVault` de teste, configurar a política nativa correspondente e ativar os operadores, defina em `Povix.Dex/Web.config`:
+
+- `BridgeTestEnabled`: `true`;
+- `BridgeTestAsset`: endereço do ERC20 USDT de teste usado pelo cofre;
+- `BridgeTestVault`: endereço do cofre publicado.
+
+Não coloque credenciais, chaves ou endereços fictícios nessa configuração. A configuração padrão mantém os depósitos desabilitados. A carteira precisa de BNB de teste para gás. O cliente verifica o código dos contratos, ativo, hash da rede POVIX, identificador pUSDT, escala e estado de pausa antes de solicitar o depósito. O limite de reserva também é consultado. Esses testes não substituem a verificação do bytecode publicado e da configuração da federação pelo operador.
+
+O usuário informa o endereço público POVIX (64 caracteres hexadecimais). A entrada aceita até oito casas decimais, sem arredondamento, com cotação 1:1. Se necessário, autoriza somente o valor da operação; uma autorização insuficiente anterior é zerada primeiro. Uma autorização suficiente preexistente é reaproveitada.
+
+O hash da transação e o identificador do evento `Deposited` devem ser preservados pelo usuário. A tela comprova o recibo BNB e informa **aguardando emissão**, sem afirmar que o saldo nativo já foi creditado. Os operadores continuam utilizando `prepare-mint` e submetendo a transação nativa pelo fluxo existente; esta tela não inicia um coordenador e não publica um endpoint privilegiado de emissão. Se houver timeout ou mudança de rede depois do envio, consulte o hash BNB antes de repetir qualquer operação. O histórico fica disponível na carteira EVM e no explorador de teste, inclusive após recarregar a página.
+
+Verificação da interface: `node Tests/PovixBridgeSwapRegression.js` na raiz (usa o jsdom instalado em `work/liquidity-tools/node_modules/jsdom` e ethers de `Povix.Bridge/node_modules`). O teste usa carteiras e contratos simulados; o build .NET valida o controlador. Nenhuma dessas verificações publica contratos nem movimenta fundos reais.

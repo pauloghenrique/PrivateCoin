@@ -468,3 +468,14 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; } .form-section { pad
 .transaction-review-dialog #exchange-status { padding: 28px; }
 .transaction-review-dialog #exchange-status .receipt-data dd { overflow-wrap: anywhere; }
 .transaction-review-dialog #close-exchange-result { display: block; width: 100%; margin-top: 24px; }
+
+/* Cross-chain deposit screen shares the DEX form and notice styles. */
+#bridge-app { max-width: 720px; margin: 0 auto; }
+#bridge-form { padding: 26px; }
+#bridge-form label { margin-top: 22px; }
+#bridge-form input { margin-bottom: 8px; }
+#bridge-form p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+#bridge-account, #bridge-reference { overflow-wrap: anywhere; }
+#bridge-submit { margin-top: 14px; }
+#bridge-form button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 740px) { .site-header { height: auto; min-height: 77px; flex-wrap: wrap; gap: 12px; padding-top: 14px; padding-bottom: 14px; } .site-header nav { flex-wrap: wrap; } }
