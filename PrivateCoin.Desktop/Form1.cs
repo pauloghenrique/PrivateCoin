@@ -666,10 +666,10 @@ namespace PrivateCoin.Desktop
                     if (block.Validators != null && block.Validators.Count > 0)
                     {
                         BlockValidator creator = block.Validators.Single(item => item.IsCreator);
-                        decimal reward = (decimal)ProofOfStake.GetBlockReward(block.Height) / Blockchain.OneCoin;
+                        decimal reward = (decimal)Blockchain.GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion) / Blockchain.OneCoin;
                         Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " criado por “" + creator.ValidatorId +
                             "”" + (block.Validators.Count == 1 ? ", como único validador elegível neste bloco" : ", confirmado por " + (block.Validators.Count - 1).ToString(CultureInfo.InvariantCulture) + " validador(es)") +
-                            " e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX: " + ShortId(block.Hash) + ".", true);
+                            (reward == 0 ? ", sem recompensa para os validadores" : " e recompensado com " + reward.ToString("N8", CultureInfo.CurrentCulture) + " POVIX") + ": " + ShortId(block.Hash) + ".", true);
                     }
                     else Log("Bloco #" + block.Height.ToString(CultureInfo.InvariantCulture) + " confirmado sem recompensa de validador (bootstrap ou sem validadores elegíveis): " + ShortId(block.Hash) + ".", true);
                     SaveState();
@@ -687,7 +687,7 @@ namespace PrivateCoin.Desktop
                 miningInProgress = false;
                 Transaction[] remaining = SnapshotPending();
                 miningStatusLabel.Text = waitingForRegistrationValidator
-                    ? "Registro aguardando bloco assinado de um validador elegível; recompensa preservada"
+                    ? "Registro aguardando bloco assinado de um validador elegível; sem recompensa por registro"
                     : blockScheduler.RemainingWait > TimeSpan.Zero
                     ? "Aguardando até 20 operações ou " + Math.Ceiling(blockScheduler.RemainingWait.TotalSeconds).ToString(CultureInfo.InvariantCulture) + " s para criar o bloco"
                     : remaining.Length > 0

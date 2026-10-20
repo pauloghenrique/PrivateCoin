@@ -44,14 +44,14 @@ class PrivateCoinDesktopRegistrationRegression
             var paidBlock = chain.AddProofOfStakeBlock(new[] { later }, new[] { stake });
             Check(paidBlock.Validators.Count == 1 && paidBlock.Validators.Single().IsCreator, "Desktop registration produces a signed block with one confirmed validator");
             var paidBalance = WalletBalanceSummary.Read(chain, first, empty);
-            Check(paidBalance.Available == ProofOfStake.GetBlockReward(rewardHeight) && paidBalance.LaunchLocked == Blockchain.WalletCreationReward,
-                "block reward is spendable in Desktop while the first 600 POVIX remain locked");
-            Check(paidBlock.Transactions[0].Outputs.Sum(item => item.Amount) == ProofOfStake.GetBlockReward(rewardHeight), "registration pays the scheduled reward once");
+            Check(paidBalance.Available == 0 && paidBalance.LaunchLocked == Blockchain.WalletCreationReward,
+                "signed registration pays no validator reward and keeps the first 600 POVIX locked");
+            Check(paidBlock.Transactions[0].Outputs.Count == 0, "registration has no reward outputs");
             long totalCap = checked(Blockchain.MaximumSupply + ProofOfStake.MaximumSupply);
             long issuedNative = chain.GetBalance(first.OwnedOneTimeAddresses) + chain.GetBalance(second.OwnedOneTimeAddresses) + chain.GetInitialLaunchStatus().Remaining;
-            Check(issuedNative == Blockchain.MaximumSupply + ProofOfStake.GetBlockReward(rewardHeight), "validator reward is counted in issued native supply without changing pool reserves");
+            Check(issuedNative == Blockchain.MaximumSupply, "registration leaves issued native supply and pool reserves unchanged");
             Check(totalCap == 18180000L * Blockchain.OneCoin && totalCap - issuedNative == ProofOfStake.MaximumSupply - paidBalance.Available,
-                "paid block reward reduces the unissued budget within the unchanged 18,180,000-POVIX cap");
+                "registration does not spend the reward budget within the unchanged 18,180,000-POVIX cap");
             Check(ProofOfStake.RewardPhases.Sum(phase => phase.TotalReward) == ProofOfStake.MaximumSupply,
                 "registration rewards use the existing capped reward schedule");
             Reject(() => chain.AddProofOfStakeBlock(new[] { later }, new[] { stake }), "replaying the same registration cannot issue a second block reward");

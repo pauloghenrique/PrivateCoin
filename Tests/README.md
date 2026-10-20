@@ -786,3 +786,20 @@ Também cobre mistura de operações, bloqueios e teto total preservados.
 mcs -out:work/RegistrationPropagation.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinRegistrationRewardPropagationRegression.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationPropagation.exe
 ```
+
+
+## Registro sem recompensa de validador (v33)
+
+`PrivateCoinRegistrationNoRewardRegression.cs` cobre um e dois validadores,
+registros em lote, emissão e extrato iguais a zero, preservação dos 100 USDC,
+rejeição de recompensa forjada mesmo com assinaturas e prova de trabalho válidas,
+separação de registros e trocas, remuneração das compras e replay completo.
+
+```sh
+mcs -out:work/RegistrationNoReward.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinRegistrationNoRewardRegression.cs Tests/LegacyConsensusFixture.cs
+MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationNoReward.exe
+```
+
+As suítes Desktop e de propagação agora esperam zero pagamento em registros.
+A fixture de lançamento financia seus validadores por atividades remuneradas
+reais, mantendo os registros assinados sem recompensa.

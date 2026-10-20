@@ -19,7 +19,7 @@ namespace PrivateCoin.Core
         // One atomic unit: 0.00000001 POVIX.
         public const long TransferFeeStep = 1L;
         public const long MaximumTransferFee = OneCoin;
-        public const int ConsensusVersion = 32;
+        public const int ConsensusVersion = 33;
         private const int LaunchValidatorVersion = 26;
         private const int PoolReserveVersion = 17;
         private const int VariableBatchVersion = 16;
@@ -68,7 +68,7 @@ namespace PrivateCoin.Core
                 ValidateTransactions(pending);
                 ValidateBatch(pending);
                 if (!CanCreateUnsignedBlock(pending))
-                    throw new InvalidOperationException("This batch requires an eligible validator's signed block; it cannot confirm without its reward.");
+                    throw new InvalidOperationException("This batch requires an eligible validator's signed block.");
                 var block = new Block { ConsensusVersion = ConsensusVersion, Height = blocks.Count, PreviousHash = blocks[blocks.Count - 1].Hash, TimestampUtcTicks = DateTime.UtcNow.Ticks, Transactions = pending };
                 Mine(block);
                 blocks.Add(block);
@@ -100,7 +100,7 @@ namespace PrivateCoin.Core
                 int height = blocks.Count;
                 ValidatorStake creator = ProofOfStake.SelectCreator(active, blocks[blocks.Count - 1].Hash, height);
                 ValidatorStake[] confirmers = active.Where(item => item.ValidatorId != creator.ValidatorId).ToArray();
-                IReadOnlyList<ValidatorReward> rewards = ProofOfStake.DistributeReward(height, creator, confirmers);
+                IReadOnlyList<ValidatorReward> rewards = GetValidatorBlockReward(height, pending) == 0 ? new ValidatorReward[0] : ProofOfStake.DistributeReward(height, creator, confirmers);
                 var validations = pending.Where(RequiresLockedTokenApproval).Select(transaction => transaction.TransactionApproval.Proof).ToList();
                 var reward = new Transaction { TimestampUtcTicks = DateTime.UtcNow.Ticks };
                 foreach (ValidatorReward share in rewards)
@@ -239,7 +239,16 @@ namespace PrivateCoin.Core
         {
             var batch = transactions.ToArray();
             if (batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchCreate)) return batch.Length == 1;
+            if (batch.Any(tx => tx.Kind == TransactionKind.WalletCreate)) return batch.All(tx => tx.Kind == TransactionKind.WalletCreate);
             return !batch.Any(tx => tx.Kind == TransactionKind.InitialLaunchPurchase) || IsLaunchValidationBatch(batch);
+        }
+
+        public static long GetValidatorBlockReward(int height, IEnumerable<Transaction> transactions, int consensusVersion = ConsensusVersion)
+        {
+            if (transactions == null) throw new ArgumentNullException(nameof(transactions));
+            if (consensusVersion >= 33 && transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate ||
+                tx.Kind == TransactionKind.WalletDistribution || tx.Kind == TransactionKind.InitialLaunchCreate)) return 0;
+            return ProofOfStake.GetBlockReward(height);
         }
 
         public static int MinimumValidatorsForTransactions(IEnumerable<Transaction> transactions) => IsLaunchValidationBatch(transactions) ? 1 : 2;
@@ -742,7 +751,7 @@ namespace PrivateCoin.Core
                     ValidateBatch(block.Transactions, block.ConsensusVersion);
                     if (block.Transactions.Any(tx => !IsSelfValidatedOperation(tx))) throw new InvalidOperationException("Unsigned blocks can contain only self-validated operations.");
                     if (block.ConsensusVersion >= 32 && RequiresSignedRegistrationBlock(block.Transactions, utxo, block.ConsensusVersion))
-                        throw new InvalidOperationException("A confirmed eligible validator must sign the registration block and receive its scheduled reward.");
+                        throw new InvalidOperationException("A confirmed eligible validator must sign the registration block.");
                 }
                 if (block.ConsensusVersion >= LegacyWalletBatchVersion && block.ConsensusVersion < SelfValidatedVersion && (block.Validators == null || block.Validators.Count == 0) &&
                     block.Transactions.Any(tx => tx.Kind == TransactionKind.WalletCreate) && !block.Transactions.All(tx => tx.Kind == TransactionKind.WalletCreate))
@@ -751,7 +760,7 @@ namespace PrivateCoin.Core
                 if (block.Validators != null && block.Validators.Count > 0)
                 {
                     ValidateProofOfStakeBlock(block, blocks[blockIndex - 1].Hash, utxo, blocks.Take(blockIndex).ToList());
-                    validatorIssued = checked(validatorIssued + ProofOfStake.GetBlockReward(block.Height));
+                    validatorIssued = checked(validatorIssued + GetValidatorBlockReward(block.Height, block.Transactions.Skip(1), block.ConsensusVersion));
                     regularTransactionIndex = 1;
                 }
                 else if (block.ConsensusVersion == LegacyImmediateVersion && block.Transactions.Count == 1 && block.Transactions[0].Kind == TransactionKind.WalletDistribution)
@@ -852,8 +861,8 @@ namespace PrivateCoin.Core
             BlockValidator recordedCreator = records.Single(item => item.IsCreator);
             if (recordedCreator.ValidatorId != expectedCreator.ValidatorId)
                 throw new InvalidOperationException("The recorded validator was not selected to create this block.");
-            IReadOnlyList<ValidatorReward> expected = ProofOfStake.DistributeReward(block.Height, expectedCreator,
-                stakes.Where(item => item.ValidatorId != expectedCreator.ValidatorId));
+            IReadOnlyList<ValidatorReward> expected = GetValidatorBlockReward(block.Height, transfers, block.ConsensusVersion) == 0 ? new ValidatorReward[0] :
+                ProofOfStake.DistributeReward(block.Height, expectedCreator, stakes.Where(item => item.ValidatorId != expectedCreator.ValidatorId));
             Transaction reward = block.Transactions[0];
             if (block.ConsensusVersion >= LegacySignedVersion)
             {
