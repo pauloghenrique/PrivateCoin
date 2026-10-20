@@ -29,6 +29,7 @@ namespace PrivateCoin.Core
         [DataMember(Order = 14)] public string Privacy { get; set; } = "public";
         [DataMember(Order = 15, EmitDefaultValue = false)] public int AutoBurnBasisPoints { get; set; }
         [DataMember(Order = 16, EmitDefaultValue = false)] public long AutoBurnFixedAtomic { get; set; }
+        [DataMember(Order = 17, EmitDefaultValue = false)] public string BridgeBinding { get; set; }
         public long CalculateTransferBurn(long amount)
         {
             if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
@@ -46,6 +47,7 @@ namespace PrivateCoin.Core
                 Description, LogoUrl, Website, SocialUrl, VestingStartHeight.ToString(CultureInfo.InvariantCulture),
                 VestingIntervalBlocks.ToString(CultureInfo.InvariantCulture), VestingTranches.ToString(CultureInfo.InvariantCulture), Privacy };
             return string.Concat(fields.Select(field => "|" + (field == null ? -1 : field.Length).ToString(CultureInfo.InvariantCulture) + ":" + field)) +
+                (BridgeBinding == null ? "" : "|bridge-binding-v1|" + BridgeBinding.Length.ToString(CultureInfo.InvariantCulture) + ":" + BridgeBinding) +
                 (HasAutomaticBurn ? "|auto-burn-v1:" + AutoBurnBasisPoints.ToString(CultureInfo.InvariantCulture) + ":" + AutoBurnFixedAtomic.ToString(CultureInfo.InvariantCulture) : "");
         }
         public TokenPolicy Copy()
@@ -88,7 +90,9 @@ namespace PrivateCoin.Core
         [DataMember(Order = 2)] public string Operation { get; set; }
         [DataMember(Order = 3)] public long Amount { get; set; }
         [DataMember(Order = 4)] public long Revision { get; set; }
-        internal string Canonical() => TokenId + ":" + Operation + ":" + Amount.ToString(CultureInfo.InvariantCulture) + ":" + Revision.ToString(CultureInfo.InvariantCulture);
+        [DataMember(Order = 5, EmitDefaultValue = false)] public TokenPolicy BridgePolicy { get; set; }
+        internal string Canonical() => TokenId + ":" + Operation + ":" + Amount.ToString(CultureInfo.InvariantCulture) + ":" + Revision.ToString(CultureInfo.InvariantCulture) + (BridgePolicy == null ? "" : "|bridge-policy-v1|" + BridgePolicy.Canonical()) +
+            (TokenId == InitialLaunch.PusdtTokenId ? "|native-bridge-domain-v1|" + Blockchain.NetworkId : "");
     }
     [DataContract]
     public sealed class TokenAuthorization
@@ -155,20 +159,10 @@ namespace PrivateCoin.Core
         internal static void Record(Transaction tx, IDictionary<string, UnspentOutput> utxo)
         {
             if (tx.Kind == TransactionKind.InitialLaunchCreate)
-                foreach (var token in InitialLaunch.FundingTokens())
+                foreach (var token in InitialLaunch.FundingTokens(InitialLaunch.WalletAddress(tx)))
                     utxo[Key(token.Id)] = new UnspentOutput { TransactionId = Key(token.Id), OutputIndex = -1,
                         Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
-                        TokenRuntime = new TokenRuntime { Token = token, Supply = token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply, Issued = token.Id == InitialLaunch.UsdcTokenId ? InitialLaunch.WalletUsdcReward : token.Supply } };
-            if (tx.Kind == TransactionKind.WalletCreate && tx.WalletDistributionId == null && tx.Outputs.Count == 2) {
-                var prior = State(utxo, InitialLaunch.UsdcTokenId);
-                long supply = checked(prior.Supply + InitialLaunch.WalletUsdcReward);
-                long issued = checked(prior.Issued + InitialLaunch.WalletUsdcReward);
-                if (issued > InitialLaunch.FundingTokenSupply) throw new InvalidOperationException("USDC distribution cap exceeded.");
-                utxo[Key(InitialLaunch.UsdcTokenId)] = new UnspentOutput { TransactionId = Key(InitialLaunch.UsdcTokenId), OutputIndex = -1,
-                    Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
-                    TokenRuntime = new TokenRuntime { Token = prior.Token, Supply = supply, Issued = issued,
-                        Paused = prior.Paused, Revision = prior.Revision } };
-            }
+                        TokenRuntime = new TokenRuntime { Token = token, Supply = 0, Issued = 0 } };
             TokenRuntime next = null;
             if (tx.Token != null && tx.Kind == TransactionKind.TokenCreate)
                 next = new TokenRuntime { Token = tx.Token, Supply = tx.Token.Supply, Issued = tx.Token.Supply };
@@ -179,6 +173,11 @@ namespace PrivateCoin.Core
                 var command = tx.TokenCommand;
                 next = new TokenRuntime { Token = prior.Token, Supply = prior.Supply, Issued = prior.Issued,
                     Paused = prior.Paused, Revision = checked(prior.Revision + 1) };
+                if (command.Operation == "bridge-configure") {
+                    var token = prior.Token;
+                    next.Token = new TokenDefinition { Id = token.Id, Name = token.Name, Symbol = token.Symbol, Decimals = token.Decimals,
+                        Supply = 0, Policy = command.BridgePolicy.Copy() };
+                }
                 if (command.Operation == "mint") { next.Supply = checked(next.Supply + command.Amount); next.Issued = checked(next.Issued + command.Amount); }
                 if (command.Operation == "burn") next.Supply = checked(next.Supply - command.Amount);
                 if (command.Operation == "pause") next.Paused = true;
@@ -223,6 +222,7 @@ namespace PrivateCoin.Core
             }
             foreach (var output in tx.Outputs.Where(output => output.AssetId != null))
                 if (State(utxo, output.AssetId)?.Paused == true && tx.Kind != TransactionKind.LaunchRefund) throw new InvalidOperationException("Token transfers are paused.");
+            if (tx.Token?.Policy?.BridgeBinding != null) throw new InvalidOperationException("Bridge binding belongs only to the protocol pUSDT configuration.");
             if (tx.Kind == TransactionKind.TokenCreate && tx.Token?.Policy != null)
             {
                 var policy = tx.Token.Policy;
@@ -246,7 +246,15 @@ namespace PrivateCoin.Core
                 !TokenPolicy.Address(cmd.TokenId) || tx.Token != null || tx.TokenAuthorizations == null)
                 throw new InvalidOperationException("Invalid or stale token command.");
             var rules = state.Token.Policy;
-            if (cmd.Operation == "mint")
+            if (cmd.BridgePolicy != null && !NativeBridge.IsConfiguration(tx)) throw new InvalidOperationException("Unexpected bridge policy.");
+            if (cmd.Operation == "bridge-configure") {
+                if (version < 36 || !NativeBridge.IsConfiguration(tx) || state.Revision != 0 || state.Supply != 0 || state.Issued != 0 ||
+                    rules.Mintable || rules.BridgeBinding != null || tx.Fee != 0 || tx.Inputs.Count != 0 || tx.Outputs.Count != 0 || cmd.Amount != 0 ||
+                    tx.ValidatorPublicKey != null || tx.ValidatorRewardAddress != null || tx.ValidatorOwnedAddresses != null)
+                    throw new InvalidOperationException("pUSDT bridge may be configured once, before issuance, by the initial wallet.");
+                NativeBridge.ValidatePolicy(cmd.BridgePolicy);
+            }
+            else if (cmd.Operation == "mint")
             {
                 // Cap cumulative issuance: burning does not reopen minting capacity.
                 if (!rules.Mintable || cmd.Amount <= 0 || cmd.Amount > rules.MaximumSupply - state.Issued)

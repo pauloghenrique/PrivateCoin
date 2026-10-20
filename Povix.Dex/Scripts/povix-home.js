@@ -39,7 +39,7 @@
                 element('small', reserveText(pool.reserveBAtomic, pool.assetB)));
             const action = element('td', '');
             if (!launchingPool(pool) && pool.nativeInitialLaunch) {
-                action.append(element('div', pool.available ? 'Negociação aberta' : launchingPool(pool) ? (pool.nativeInitialLaunch ? 'Em captação · 6 POVIX por 1 USDC local' : 'Em captação') : pool.statusMessage || 'Aguardando disponibilidade'));
+                action.append(element('div', pool.available ? 'Negociação aberta' : launchingPool(pool) ? (pool.nativeInitialLaunch ? 'Em captação · 6 POVIX por 1 pUSDT' : 'Em captação') : pool.statusMessage || 'Aguardando disponibilidade'));
             }
             const link = element('a', pool.available ? 'Negociar ↗' : 'Ver pool ↗', 'button button-secondary');
             const url = new URL(app.dataset.marketUrl, window.location.href);

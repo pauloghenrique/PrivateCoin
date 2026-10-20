@@ -614,7 +614,7 @@ Após compilar o Core em Release:
 mkdir -p work
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -r:System.Numerics -r:System.Runtime.Serialization -r:System.Web.Extensions -out:work/InitialLaunchRegression.exe \
-  Tests/PrivateCoinInitialLaunchRegression.cs Tests/LegacyConsensusFixture.cs \
+  Tests/PrivateCoinInitialLaunchRegression.cs Tests/PusdtBridgeFixture.cs Tests/LegacyConsensusFixture.cs \
   Tests/ValidationBatchFixture.cs PrivateCoin.Desktop/WalletBalanceSummary.cs
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/InitialLaunchRegression.exe work/initial-launch-swap.json
 node Tests/PovixInitialLaunchWalletRegression.js work/initial-launch-swap.json
@@ -640,7 +640,7 @@ A regressão usa a consulta real de catálogo, sem iniciar um servidor HTTP/TCP.
 ```sh
 mcs -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core \
   -r:System.Runtime.Serialization -out:work/DesktopRegistration.exe \
-  Tests/PrivateCoinDesktopRegistrationRegression.cs \
+  Tests/PrivateCoinDesktopRegistrationRegression.cs Tests/PusdtBridgeFixture.cs \
   PrivateCoin.Desktop/WalletRegistration.cs PrivateCoin.Desktop/WalletBalanceSummary.cs
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/DesktopRegistration.exe
 ```
@@ -672,7 +672,7 @@ O teste completo de blocos do lançamento cobre restauração e negociação.
 Com Core e Models/Services do DEX compilados:
 
 ```sh
-mcs -out:work/LaunchMarketFixture.exe -r:work/Povix.Dex.Services.dll -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Runtime.Serialization -r:System.Web.Extensions -r:System.ComponentModel.DataAnnotations Tests/PovixInitialLaunchMarketFixture.cs
+mcs -out:work/LaunchMarketFixture.exe -r:work/Povix.Dex.Services.dll -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Runtime.Serialization -r:System.Web.Extensions -r:System.ComponentModel.DataAnnotations Tests/PovixInitialLaunchMarketFixture.cs Tests/PusdtBridgeFixture.cs
 MONO_PATH=PrivateCoin.Core/bin/Release:work mono work/LaunchMarketFixture.exe work/launch-market
 node Tests/PovixInitialLaunchMarketWalletRegression.js work/launch-market
 node Tests/PovixDexBuySellUiRegression.js
@@ -796,7 +796,7 @@ rejeição de recompensa forjada mesmo com assinaturas e prova de trabalho váli
 separação de registros e trocas, remuneração das compras e replay completo.
 
 ```sh
-mcs -out:work/RegistrationNoReward.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinRegistrationNoRewardRegression.cs Tests/LegacyConsensusFixture.cs
+mcs -out:work/RegistrationNoReward.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinRegistrationNoRewardRegression.cs Tests/PusdtBridgeFixture.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/RegistrationNoReward.exe
 ```
 
@@ -822,7 +822,7 @@ somente a aritmética dos cabeçalhos; não representam cadeias com transações
 ## Emissão de vinte anos sem perder orçamento (v35)
 
 ```sh
-mcs -out:work/TwentyYearEmission.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinTwentyYearEmissionRegression.cs Tests/LegacyConsensusFixture.cs
+mcs -out:work/TwentyYearEmission.exe -r:PrivateCoin.Core/bin/Release/PrivateCoin.Core.dll -r:System.Core -r:System.Numerics -r:System.Runtime.Serialization Tests/PrivateCoinTwentyYearEmissionRegression.cs Tests/PusdtBridgeFixture.cs Tests/LegacyConsensusFixture.cs
 MONO_PATH=PrivateCoin.Core/bin/Release mono work/TwentyYearEmission.exe
 ```
 
@@ -851,3 +851,12 @@ prioridade, dependências, rejeição de duplicadas e preservação da elegibili
 O relógio legado não é consultado. O manifesto declara espera zero; a meta
 da dificuldade continua em dez segundos. `--scheduler-only` isola esta política
 local das fixtures históricas da suíte, anteriores ao novo genesis v35.
+
+
+## Lançamento com pUSDT e ponte BNB (v36)
+
+As descrições históricas de USDT/USDC locais e distribuição de 100 USDC acima foram substituídas. `PrivateCoinUsdcDistributionRegression.cs` agora verifica a remoção dessas emissões e rejeita o crédito indevido de USDC ou pUSDT por registro. `PrivateCoinDesktopRegistrationRegression.cs` verifica o catálogo com apenas pUSDT e saldo inicial zero.
+
+`PusdtBridgeFixture.cs` fornece somente atestações de quórum para cenários de teste. Deve acompanhar a compilação das regressões de lançamento, mercado, emissão de vinte anos e registro sem recompensa. Não é um serviço de emissão real nem uma comprovação BNB.
+
+Para o ciclo completo com depósito e resgate na EVM, compile e execute `Povix.Bridge` conforme [suas instruções](../Povix.Bridge/README.md). A suíte cobre oferta zero, configuração única pelo primeiro proprietário, quórum, emissão, queima, replay, resgate, precisão, diário persistente e a primeira compra POVIX/pUSDT. O teste de vinte anos conserva os quatro orçamentos, os limites de oferta e o índice de blocos remunerados, inclusive após reorganização. A configuração e as operações gratuitas da ponte não avançam esse índice.

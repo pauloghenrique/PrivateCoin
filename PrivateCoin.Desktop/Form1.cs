@@ -511,7 +511,7 @@ namespace PrivateCoin.Desktop
                         () => ReferenceEquals(sender, peerNode) && IsNetworkConnected(), () =>
                         {
                             var orphaned = blockchain.Blocks.SelectMany(block => block.Transactions)
-                                .Where(tx => tx.Inputs.Count > 0 || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate).ToArray();
+                                .Where(tx => tx.Inputs.Count > 0 || NativeBridge.IsFeeFree(tx) || tx.Kind == TransactionKind.WalletCreate || tx.Kind == TransactionKind.InitialLaunchCreate).ToArray();
                             if (!blockchain.TrySynchronizeChain(e.Blocks, out changed)) return false;
                             if (changed)
                             {
@@ -896,7 +896,7 @@ namespace PrivateCoin.Desktop
         {
             var queue = SnapshotPending();
             initialLaunchLabel.Text = WalletRegistration.LaunchStatus(blockchain, queue);
-            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX brutos menos a taxa por 1 USDC local. Durante a captação, um comprador com POVIX bloqueados confirmados pode validar e criar blocos de compras. Após a meta, valem as regras normais de staking. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
+            toolTip.SetToolTip(initialLaunchLabel, "A pool começa com 359.400 POVIX. Cada identidade compra uma vez: 6 POVIX brutos menos a taxa por 1 pUSDT. Durante a captação, um comprador com POVIX bloqueados confirmados pode validar e criar blocos de compras. Após a meta, valem as regras normais de staking. A negociação e os saldos são liberados quando restarem 179.700 POVIX. A liquidez principal é permanente.");
         }
 
         private void RefreshValidatorState()

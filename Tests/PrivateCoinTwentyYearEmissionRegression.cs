@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Json;
+using System.Security.Cryptography;
+using System.Text;
 using PrivateCoin.Core;
 
 internal static class PrivateCoinTwentyYearEmissionRegression
@@ -85,6 +87,8 @@ internal static class PrivateCoinTwentyYearEmissionRegression
             Check(initial.RewardedBlockCount == 0 && initial.ValidatorIssuedTokenAmount == 0 && initial.CurrentReward == 45757598L,
                 "bootstrap and signed registration leave first subsidy and reward index untouched");
             Check(initial.RemainingValidatorRewardAmount == ProofOfStake.MaximumSupply && initial.RewardedBlocksRemaining == 63115200, "initial emission budget and block count are intact");
+            PusdtBridgeFixture.Seed(chain, founder, buyer, next);
+            Check(Blockchain.GetRewardedBlockCount(chain.Blocks) == 0, "quorum test issuance leaves validator subsidy untouched");
             var beforePurchase = Copy(chain.Blocks.ToArray());
             Block first = Buy(chain, buyer, b, signer);
             Check(first.Height > 1 && first.Transactions[0].Outputs.Sum(x => x.Amount) == 45757598L && Blockchain.GetRewardedBlockCount(chain.Blocks) == 1,
@@ -110,8 +114,8 @@ internal static class PrivateCoinTwentyYearEmissionRegression
                 "query reports next remunerated subsidy and exact remaining budget");
             Check(new Blockchain(Copy(chain.Blocks.ToArray())).IsValid(), "paid and unpaid blocks replay with identical emission");
             // More-work branch with only one paid block: confirmed reward count must be rebuilt, not cached by height.
-            for (int i = 0; i < 4; i++) using (var extra = new Wallet())
-                fork.AddProofOfStakeBlock(new[] { fork.CreateWalletCreationTransaction(extra.CreateReceiveAddress(), empty) }, new[] { signer });
+            for (int i = 0; i < 4; i++)
+                fork.AddProofOfStakeBlock(new[] { fork.CreateWalletCreationTransaction(i.ToString("x64"), empty) }, new[] { signer });
             Check(fork.Blocks.Count > chain.Blocks.Count && Blockchain.GetRewardedBlockCount(fork.Blocks) == 1,
                 "longer alternate chain contains more unpaid blocks but only one paid block");
             Check(chain.TryReplaceChain(Copy(fork.Blocks.ToArray())), "node adopts valid greater-work alternative");
@@ -120,7 +124,7 @@ internal static class PrivateCoinTwentyYearEmissionRegression
                 summary.RemainingValidatorRewardAmount == ProofOfStake.MaximumSupply - 45757598L,
                 "reorganization restores exact confirmed reward count and budget");
             var rules = chain.Blocks[0].Rules;
-            Check(rules.SchemaVersion == 8 && rules.ConsensusVersion == 35 && rules.EmissionRule.Contains("not chain heights") &&
+            Check(rules.SchemaVersion == 9 && rules.ConsensusVersion == 36 && rules.EmissionRule.Contains("not chain heights") &&
                 rules.RewardPhases.Sum(x => x.TotalRewardAtomicUnits) == ProofOfStake.MaximumSupply && rules.RewardPhases[0].RemainderAtomicUnits == 12677600L &&
                 CoreConfiguration.Manifest.Contains("RewardPhase.1.RemainderAtomicUnits") && CoreConfiguration.Manifest.Contains("RewardPhase.4.TotalReward"),
                 "genesis binds reward ordinals, exact phase budgets and remainder rule");

@@ -1,0 +1,25 @@
+{
+  "name": "povix-bnb-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "node src/compile.mjs",
+    "test": "node --test test/*.test.mjs",
+    "deploy:testnet": "node src/cli.mjs deploy",
+    "bridge": "node src/cli.mjs",
+    "test:native-build": "sh test/native-build.sh"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.4.0",
+    "ethers": "6.15.0"
+  },
+  "devDependencies": {
+    "ganache": "7.9.2",
+    "solc": "0.8.30"
+  },
+  "description": "Test-only BNB USD asset custody and native POVIX representation bridge"
+}
