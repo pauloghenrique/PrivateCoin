@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="Povix.Bridge/Povix.Bridge.csproj" Id="a61bda76-38f8-4b5a-80fb-17f957298a48" />
+  <Project Path="Povix.Bridge/Povix.Bridge.Native.csproj" Id="52959e4d-c2fc-4893-9601-01d370c7c45a" />
   <Project Path="Povix.Dex/Povix.Dex.csproj" Id="b1f9a0cb-b94b-4160-a1c2-9b5f4b376485" />
   <Project Path="Povix.WalletBridge/Povix.WalletBridge.csproj" Id="cb75f2d6-409b-40a5-84e6-36043a090287" />
   <Project Path="PrivateCoin.Core/PrivateCoin.Core.csproj" Id="fae5cd1c-714d-4225-8bf2-b553b95bc35b" />

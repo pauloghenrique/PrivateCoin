@@ -1,0 +1,3 @@
+contracts/artifacts/*.json text eol=lf
+contracts/artifacts/*.json linguist-generated=true
+contracts/*.sol text eol=lf

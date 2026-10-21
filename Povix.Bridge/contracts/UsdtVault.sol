@@ -7,7 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-/// @notice Test-only federated USDT custody backing a POVIX token. No swap or yield is performed here.
+/// @notice Test-only federated BEP-20 custody. Transfer fees and rebasing are unsupported.
 contract UsdtVault is EIP712, ReentrancyGuard {
     using SafeERC20 for IERC20;
     bytes32 public constant RELEASE_TYPEHASH = keccak256("Release(bytes32 burnId,address recipient,uint256 nativeAmount,uint256 deadline)");
@@ -16,6 +16,7 @@ contract UsdtVault is EIP712, ReentrancyGuard {
     bytes32 public immutable nativeNetwork;
     bytes32 public immutable nativeToken;
     uint256 public immutable scale;
+    uint8 public immutable nativeDecimals;
     uint256 public immutable threshold;
     uint256 public immutable reserveCap;
     uint256 public immutable dailyReleaseCap;
@@ -36,14 +37,14 @@ contract UsdtVault is EIP712, ReentrancyGuard {
         require(block.chainid == 97 || block.chainid == 31337, "test networks only");
         require(token.code.length > 0 && network != bytes32(0) && representation != bytes32(0), "invalid asset or network");
         uint8 precision = IERC20Metadata(token).decimals();
-        require(precision >= 8 && precision <= 18, "unsupported precision");
+        require(precision <= 18, "unsupported precision");
         require(members.length >= 3 && members.length <= 10 && quorum > members.length / 2 && quorum <= members.length, "majority required");
         require(cap > 0 && dailyCap > 0 && dailyCap <= cap, "invalid caps");
         for (uint256 i; i < members.length; ++i) {
             require(members[i] != address(0) && !isOperator[members[i]], "invalid operator");
             isOperator[members[i]] = true; operators.push(members[i]);
         }
-        asset = IERC20(token); scale = 10 ** (precision - 8); nativeNetwork = network; nativeToken = representation;
+        asset = IERC20(token); nativeDecimals = precision < 8 ? precision : 8; scale = 10 ** (precision - nativeDecimals); nativeNetwork = network; nativeToken = representation;
         threshold = quorum; reserveCap = cap; dailyReleaseCap = dailyCap;
     }
     function deposit(uint256 assetAmount, bytes32 nativeRecipient) external nonReentrant returns (bytes32 id) {
@@ -52,6 +53,7 @@ contract UsdtVault is EIP712, ReentrancyGuard {
         uint256 nativeAmount = assetAmount / scale;
         require(nativeAmount <= uint256(uint64(type(int64).max)) && accountedReserve + nativeAmount <= reserveCap, "reserve cap");
         uint256 beforeBalance = asset.balanceOf(address(this));
+        require(beforeBalance >= accountedReserve * scale, "reserve deficit");
         asset.safeTransferFrom(msg.sender, address(this), assetAmount);
         require(asset.balanceOf(address(this)) == beforeBalance + assetAmount, "fee-on-transfer unsupported");
         accountedReserve += nativeAmount;
@@ -68,7 +70,12 @@ contract UsdtVault is EIP712, ReentrancyGuard {
         processedBurns[burnId] = true;
         releasedPerDay[day] += nativeAmount;
         accountedReserve -= nativeAmount;
-        asset.safeTransfer(recipient, nativeAmount * scale);
+        uint256 assetAmount = nativeAmount * scale;
+        uint256 beforeBalance = asset.balanceOf(address(this));
+        uint256 beforeRecipient = asset.balanceOf(recipient);
+        require(recipient != address(this) && beforeBalance >= (accountedReserve + nativeAmount) * scale, "reserve deficit or self release");
+        asset.safeTransfer(recipient, assetAmount);
+        require(asset.balanceOf(address(this)) == beforeBalance - assetAmount && asset.balanceOf(recipient) == beforeRecipient + assetAmount, "nonstandard transfer unsupported");
         emit Released(burnId, recipient, nativeAmount, nativeAmount * scale);
     }
     function setPaused(bool value, uint256 deadline, bytes[] calldata signatures) external {

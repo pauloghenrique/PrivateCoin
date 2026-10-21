@@ -82,7 +82,7 @@ namespace PrivateCoin.Core
         {
             return new GenesisRules
             {
-                SchemaVersion = 9,
+                SchemaVersion = 11,
                 EmissionRule = "Four phases of 15778800 remunerated validator blocks each (five Julian years at ten seconds); exclude genesis, unsigned operations and wallet registrations. Reward phase bounds are reward ordinals, not chain heights. Preserve phase budgets 7220000, 5600000, 3000000 and 2000000 POVIX exactly: pay floor(budgetAtomic/blockCount), plus one atomic unit on each of the last budgetAtomic%blockCount blocks of that phase. After 63115200 remunerated blocks no subsidy remains; transaction fees are separate. Calendar duration extends when blocks are unremunerated or absent.",
                 TargetBlockSeconds = ProofOfWork.TargetBlockSeconds,
                 ProofOfWorkRetargetWindow = ProofOfWork.RetargetWindow,

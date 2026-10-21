@@ -91,8 +91,11 @@ namespace PrivateCoin.Core
         [DataMember(Order = 3)] public long Amount { get; set; }
         [DataMember(Order = 4)] public long Revision { get; set; }
         [DataMember(Order = 5, EmitDefaultValue = false)] public TokenPolicy BridgePolicy { get; set; }
+        [DataMember(Order = 6, EmitDefaultValue = false)] public string BridgeDepositId { get; set; }
+        [DataMember(Order = 7, EmitDefaultValue = false)] public string BridgeBlockHash { get; set; }
         internal string Canonical() => TokenId + ":" + Operation + ":" + Amount.ToString(CultureInfo.InvariantCulture) + ":" + Revision.ToString(CultureInfo.InvariantCulture) + (BridgePolicy == null ? "" : "|bridge-policy-v1|" + BridgePolicy.Canonical()) +
-            (TokenId == InitialLaunch.PusdtTokenId ? "|native-bridge-domain-v1|" + Blockchain.NetworkId : "");
+            (BridgeDepositId == null && BridgeBlockHash == null ? "" : "|bridge-deposit-v1|" + BridgeDepositId + "|" + BridgeBlockHash) +
+            (NativeBridge.IsAssetId(TokenId) ? "|native-bridge-domain-v1|" + Blockchain.NetworkId : "");
     }
     [DataContract]
     public sealed class TokenAuthorization
@@ -164,7 +167,7 @@ namespace PrivateCoin.Core
                         Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" },
                         TokenRuntime = new TokenRuntime { Token = token, Supply = 0, Issued = 0 } };
             TokenRuntime next = null;
-            if (tx.Token != null && tx.Kind == TransactionKind.TokenCreate)
+            if (tx.Token != null && (tx.Kind == TransactionKind.TokenCreate || NativeBridge.IsRegistration(tx)))
                 next = new TokenRuntime { Token = tx.Token, Supply = tx.Token.Supply, Issued = tx.Token.Supply };
             else if (tx.Kind == TransactionKind.TokenManage && tx.TokenCommand != null)
             {
@@ -189,6 +192,11 @@ namespace PrivateCoin.Core
                 if (prior?.Token.Policy == null) throw new InvalidOperationException("Unknown automatic burn token.");
                 next = new TokenRuntime { Token = prior.Token, Supply = checked(prior.Supply - prior.Token.Policy.CalculateTransferBurn(tx.TokenTransferTerms.Amount)),
                     Issued = prior.Issued, Paused = prior.Paused, Revision = prior.Revision };
+            }
+            if (tx.TokenCommand?.BridgeDepositId != null) {
+                var key = NativeBridge.ClaimKey(next.Token.Policy.BridgeBinding, tx.TokenCommand.BridgeDepositId);
+                utxo.Add(key, new UnspentOutput { TransactionId = key, OutputIndex = -1,
+                    Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@bridge-deposit" } });
             }
             if (next != null) utxo[Key(next.Token.Id)] = new UnspentOutput { TransactionId = Key(next.Token.Id), OutputIndex = -1,
                 Output = new TransactionOutput { Amount = 0, OneTimeAddress = "@token-state" }, TokenRuntime = next };
@@ -222,7 +230,7 @@ namespace PrivateCoin.Core
             }
             foreach (var output in tx.Outputs.Where(output => output.AssetId != null))
                 if (State(utxo, output.AssetId)?.Paused == true && tx.Kind != TransactionKind.LaunchRefund) throw new InvalidOperationException("Token transfers are paused.");
-            if (tx.Token?.Policy?.BridgeBinding != null) throw new InvalidOperationException("Bridge binding belongs only to the protocol pUSDT configuration.");
+            if (tx.Token?.Policy?.BridgeBinding != null && !NativeBridge.IsRegistration(tx)) throw new InvalidOperationException("Bridge binding belongs only to the protocol pUSDT configuration.");
             if (tx.Kind == TransactionKind.TokenCreate && tx.Token?.Policy != null)
             {
                 var policy = tx.Token.Policy;
@@ -241,6 +249,12 @@ namespace PrivateCoin.Core
             }
             if (tx.TokenCommand == null) return;
             var cmd = tx.TokenCommand;
+            if ((cmd.BridgeDepositId != null || cmd.BridgeBlockHash != null) && cmd.Operation != "mint")
+                throw new InvalidOperationException("Only a bridge mint may claim a deposit.");
+            if (NativeBridge.IsRegistration(tx)) {
+                var authority = NativeBridge.ValidateRegistration(tx, utxo, version);
+                ValidateSignatures(tx, authority); return;
+            }
             var state = State(utxo, cmd.TokenId);
             if (tx.Kind != TransactionKind.TokenManage || state?.Token.Policy == null || cmd.Revision != state.Revision ||
                 !TokenPolicy.Address(cmd.TokenId) || tx.Token != null || tx.TokenAuthorizations == null)
@@ -256,6 +270,7 @@ namespace PrivateCoin.Core
             }
             else if (cmd.Operation == "mint")
             {
+                NativeBridge.ValidateClaim(tx, utxo, rules, version);
                 // Cap cumulative issuance: burning does not reopen minting capacity.
                 if (!rules.Mintable || cmd.Amount <= 0 || cmd.Amount > rules.MaximumSupply - state.Issued)
                     throw new InvalidOperationException("Token issuance exceeds its policy.");
@@ -269,6 +284,10 @@ namespace PrivateCoin.Core
                 if (!rules.Pausable || cmd.Amount != 0 || state.Paused == (cmd.Operation == "pause")) throw new InvalidOperationException("Invalid pause transition.");
             }
             else throw new InvalidOperationException("Unknown token command.");
+            ValidateSignatures(tx, rules);
+        }
+        private static void ValidateSignatures(Transaction tx, TokenPolicy rules) {
+            var cmd = tx.TokenCommand;
             var signers = new HashSet<string>(StringComparer.Ordinal);
             foreach (var proof in tx.TokenAuthorizations)
             {
@@ -278,6 +297,9 @@ namespace PrivateCoin.Core
                 {
                     rsa.PersistKeyInCsp = false;
                     rsa.FromXmlString(proof.PublicKey);
+                    if (rules.BridgeBinding?.StartsWith("56:", StringComparison.Ordinal) == true &&
+                        (rsa.KeySize < 3072 || rsa.KeySize > 4096 || rsa.ToXmlString(false) != proof.PublicKey))
+                        throw new InvalidOperationException("Mainnet administrators require canonical public-only RSA keys of 3072-4096 bits.");
                     if (proof.Signature == null || !rsa.VerifyData(Encoding.UTF8.GetBytes(tx.SigningPayload()), CryptoConfig.MapNameToOID(Crypto.SignatureHashAlgorithm), Convert.FromBase64String(proof.Signature)))
                         throw new InvalidOperationException("Invalid token administrator signature.");
                 }
