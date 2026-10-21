@@ -79,6 +79,7 @@
     <Compile Include="native\BridgeNative.cs" />
     <Compile Include="csharp\OperatorKeys.cs" />
     <Compile Include="csharp\Program.cs" />
+    <Compile Include="csharp\ReceiptProof.cs" />
 
     <None Include="App.config" />
     <None Include="packages.config" />

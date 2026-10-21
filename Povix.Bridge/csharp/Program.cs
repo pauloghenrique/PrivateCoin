@@ -12,6 +12,7 @@ namespace Povix.Bridge.CSharp {
     public static class Program {
         const string Help = "POVIX Bridge — C# / .NET Framework 4.8\n" +
             "Povix.Bridge.exe <command> <production.local.json> [arguments]\n" +
+            "inspect-receipt-proof <proof.json> (offline inclusion only; NOT consensus/mint authorization)\n" +
             "network | create-native-operator <keystore> | create-operator <keystore>\n" +
             "audit | deploy <relay-keystore> | deploy-factory <relay-keystore>\n" +
             "configure-native <founder-keys>\n" +
@@ -43,6 +44,7 @@ namespace Povix.Bridge.CSharp {
         public static async Task<JToken> Run(string[] args) {
             if (args.Length == 0 || args[0] == "help" || args[0] == "--help") { Console.WriteLine(Help); return null; }
             string command = args[0];
+            if (command == "inspect-receipt-proof") { if (args.Length != 2) throw new ArgumentException("inspect-receipt-proof <proof.json>"); return ReceiptProof.InspectFile(args[1]); }
             if (command == "network") { if (args.Length != 1) throw new ArgumentException("network takes no arguments."); Console.WriteLine(PrivateCoin.Core.Blockchain.NetworkId); return null; }
             if (args.Length < 2) throw new ArgumentException("Specify a configuration file; use --help for syntax.");
             if (command == "create-native-operator") { if (args.Length != 2) throw new ArgumentException("create-native-operator <keystore>"); return OperatorKeys.CreateNative(args[1]); }

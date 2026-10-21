@@ -72,3 +72,7 @@ Claims no consenso continuam impedindo mint repetido após perda do journal, mas
 Execute `bin/Tests/Release/CSharpRegression.exe self-test` para rodar as regressões locais sem Node.js ou RPCs. `Povix.Bridge.Tests.csproj` contém regressões C# de quorum, durabilidade, concorrência, escopo e precisão Int64. `test/csharp-production.integration.mjs` usa Node/Ganache **apenas como infraestrutura de teste**, invocando os EXEs C#: não é dependência do cliente em operação. As ferramentas de teste ficam em `bin/Tests`, separadas do pacote do operador em `bin/CSharp`; não distribua a pasta de testes. Testa keystores entre implementações, assinaturas C# verificadas pelo contrato/Ethers, depósito, ledger POVIX, claims, pausa e resgate com espera simulada. A infraestrutura JavaScript anterior permanece para comparação e manutenção.
 
 É uma migração candidata, sem publicação de contratos ou chaves reais. Limitações federadas, reorganizações, ausência de rotação e requisitos de revisão independente de PRODUCTION.md continuam válidos. Dependências .NET e nova persistência também precisam dessa revisão; build aprovado não significa liberação para receber fundos reais.
+
+## Inspeção experimental de provas
+
+`Povix.Bridge.exe inspect-receipt-proof prova.json` verifica apenas inclusão de recibo em uma raiz fornecida. Não autentica consenso nem autoriza emissão ou saque. A ponte continua federada. Veja [RECEIPT-INCLUSION.md](docs/RECEIPT-INCLUSION.md).
