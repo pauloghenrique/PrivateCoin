@@ -37,6 +37,7 @@ namespace Povix.Bridge.CSharp {
                 Record("scope", scope);
             } catch { stream.Dispose(); throw; }
         }
+        public string[] Keys { get { return new System.Collections.Generic.List<string>(entries.Keys).ToArray(); } }
         public JToken Get(string key) { JToken value; return entries.TryGetValue(key, out value) ? value.DeepClone() : null; }
         public void Record(string key, JToken value) {
             var old = Get(key); if (old != null) { if (Native.Canonical(old) != Native.Canonical(value)) throw new InvalidOperationException("Conflicting journal decision or bridge scope."); return; }

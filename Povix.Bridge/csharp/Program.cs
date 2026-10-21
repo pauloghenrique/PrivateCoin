@@ -13,6 +13,8 @@ namespace Povix.Bridge.CSharp {
         const string Help = "POVIX Bridge — C# / .NET Framework 4.8\n" +
             "Povix.Bridge.exe <command> <production.local.json> [arguments]\n" +
             "network | create-native-operator <keystore> | create-operator <keystore>\n" +
+            "run-coordinator <automation.json> [--once] | run-operator <automation.json> [--once]\n" +
+            "enqueue-burn <automation.json> <signed-binding.json>\n" +
             "audit | deploy <relay-keystore> | deploy-factory <relay-keystore>\n" +
             "configure-native <founder-keys>\n" +
             "propose-native <mint|register|pause|resume> <reference.json|-> <coordinator.journal>\n" +
@@ -49,6 +51,11 @@ namespace Povix.Bridge.CSharp {
             if (command == "create-operator") { if (args.Length != 2) throw new ArgumentException("create-operator <keystore>"); return OperatorKeys.CreateEvm(args[1]); }
             var c = BridgeConfig.Load(args[1]); var a = args.Skip(2).ToArray();
             Func<int, string> arg = i => { if (i >= a.Length) throw new ArgumentException("Missing command argument; use --help."); return a[i]; };
+            if (command == "run-coordinator" || command == "run-operator") {
+                if (a.Length < 1 || a.Length > 2 || a.Length == 2 && a[1] != "--once") throw new ArgumentException("Specify automation.json and optional --once.");
+                bool coordinator = command == "run-coordinator"; await Automation.Run(c, AutomationConfig.Load(a[0], coordinator), coordinator, a.Length == 2); return null;
+            }
+            if (command == "enqueue-burn") { if (a.Length != 2) throw new ArgumentException("enqueue-burn <automation.json> <signed-binding.json>"); return new JObject { ["requestId"] = Automation.EnqueueBurn(c, AutomationConfig.Load(a[0], true), AutomationFiles.Read(a[1])) }; }
             if (command == "audit") return await BridgeService.Audit(c);
             if (command == "propose-native") using (var db = new Journal(arg(2), c)) return await BridgeService.Propose(c, arg(0), arg(0) == "mint" ? Obj(arg(1)) : null, db);
             if (command == "refresh-native") using (var db = new Journal(arg(1), c)) return await BridgeService.RefreshExpired(c, Obj(arg(0)), db);

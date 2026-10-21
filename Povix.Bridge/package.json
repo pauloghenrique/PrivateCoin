@@ -15,7 +15,8 @@
     "test:production": "node --test test/production*.test.mjs",
     "deploy:production": "node src/cli.mjs deploy",
     "package:production": "node src/package-production.mjs",
-    "test:csharp": "node --test test/csharp-keystores.integration.mjs test/csharp-production.integration.mjs"
+    "test:csharp": "node --test test/csharp-keystores.integration.mjs test/csharp-production.integration.mjs",
+    "test:automation": "node --test test/automation.integration.mjs"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.4.0",

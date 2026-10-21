@@ -75,6 +75,7 @@
   <ItemGroup>
     <ProjectReference Include="Povix.Bridge.csproj"><Project>{A61BDA76-38F8-4B5A-80FB-17F957298A48}</Project><Name>Povix.Bridge</Name></ProjectReference>
     <Compile Include="test\CSharpRegression.cs" />
+    <Compile Include="test\AutomationRegression.cs" />
     <None Include="App.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

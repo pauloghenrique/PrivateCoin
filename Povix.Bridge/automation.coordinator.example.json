@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "exchangeDirectory": "\\\\SERVIDOR\\PovixBridgeExchange",
+  "stateDirectory": "C:\\PovixBridgeCoordinatorState",
+  "pollSeconds": 15,
+  "processReleases": true,
+  "startBlock": 0,
+  "nativePeers": [
+    "127.0.0.1:3333"
+  ],
+  "relayKeystore": "C:\\PovixBridgeKeys\\relay-bnb.local.json",
+  "maxGasPriceWei": "5000000000",
+  "maxGasLimit": 1000000
+}
