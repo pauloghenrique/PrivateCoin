@@ -25,7 +25,7 @@ Preencha:
 - `nativeAdministrators`: os dois endereços POVIX, hashes das chaves públicas RSA;
 - `nativeSigningPublicKeys`: as duas chaves públicas RSA dos operadores. Nunca são XMLs privados. No modelo 2 de 2 não há operador substituto. Em uma federação maior, outro subconjunto válido pode refazer a proposta;
 - `threshold` / `nativeThreshold`: ambos iguais a 2 no modelo de dois operadores; para cinco ou mais, maioria estrita de pelo menos 3;
-- `nativeNetwork`: NetworkId efetivo, obtido do Core compilado (`mono build/native/BridgeNative.exe network`);
+- `nativeNetwork`: NetworkId efetivo, obtido do Core compilado (`Povix.Bridge.exe network`);
 - `nativeSnapshots`: exports atuais de pelo menos dois nós POVIX operados independentemente; `nativeSnapshot` aponta para um desses arquivos;
 - `rpcUrls`: pelo menos dois RPCs BNB HTTPS de provedores independentes; `rpcUrl` é um deles. Domínios diferentes são exigidos em chain 56, mas independência organizacional precisa ser conferida pelos operadores;
 - `asset`: contrato exato do ativo na BNB, confirmado por fontes oficiais. Símbolo “USDT” não comprova identidade. Confira inclusive o emissor, custódia e riscos de representações como Binance-Peg;

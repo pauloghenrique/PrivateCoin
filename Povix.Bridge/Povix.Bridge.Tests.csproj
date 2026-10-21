@@ -71,7 +71,6 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="Povix.Bridge.Native.csproj"><Project>{52959E4D-C2FC-4893-9601-01D370C7C45A}</Project><Name>Povix.Bridge.Native</Name></ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Povix.Bridge.csproj"><Project>{A61BDA76-38F8-4B5A-80FB-17F957298A48}</Project><Name>Povix.Bridge</Name></ProjectReference>

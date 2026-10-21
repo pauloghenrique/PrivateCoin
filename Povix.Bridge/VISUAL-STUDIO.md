@@ -2,6 +2,8 @@
 
 O cliente de operação é um aplicativo de console C# para **.NET Framework 4.8**, sem Node.js. Usa Nethereum para BNB/EIP-712/keystore EVM e o adaptador C# existente para validar o consenso POVIX em processo. Os contratos na BNB continuam em Solidity; mudar a linguagem do cliente não muda o contrato publicado ou o lastro.
 
+O único aplicativo da ponte é `Povix.Bridge`: a validação nativa está compilada no próprio `Povix.Bridge.exe`, sem projeto ou executável `Povix.Bridge.Native` separado. `PrivateCoin.Core` é a biblioteca compartilhada do protocolo e `Povix.Bridge.Tests` contém apenas testes.
+
 ## Abrir e compilar
 
 1. Instale Visual Studio 2022 com **Desenvolvimento para desktop com .NET** e o Developer/Targeting Pack do **.NET Framework 4.8**.
