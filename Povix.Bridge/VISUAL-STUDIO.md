@@ -55,7 +55,7 @@ Povix.Bridge.exe release production.local.json queima.json autorizacoes.json rel
 Povix.Bridge.exe execute-release production.local.json ID_DA_QUEIMA relay-bnb.local.json
 ```
 
-Salve a proposta e reúna as duas assinaturas públicas em um array JSON. Emissão/queima nativa retorna a transação para submissão ao nó POVIX; não há novo relayer automático. `release` agenda e `execute-release` transfere depois da espera e das verificações do contrato. Qualquer operador pode pausar/cancelar filas; a retomada exige ambos.
+Salve a proposta e reúna as duas assinaturas públicas em um array JSON. No fluxo manual, emissão/queima nativa retorna a transação para submissão ao nó POVIX. O modo `run-coordinator` transmite automaticamente as emissões por P2P, conforme AUTOMATION.md. `release` agenda e `execute-release` transfere depois da espera e das verificações do contrato. Qualquer operador pode pausar/cancelar filas; a retomada exige ambos.
 
 Inclui publicação de cofre/factory, depósito com aprovação exata, configuração fundadora, mint/register/pause/resume, atualização de proposta expirada, assinatura, queima/autorização pelo titular, resgate, auditoria e aprovação/configuração de outros ativos. Os comandos legados de teste que reuniam chaves para emitir não são oferecidos pelo cliente C#; use propostas com assinaturas independentes.
 
@@ -72,3 +72,7 @@ Claims no consenso continuam impedindo mint repetido após perda do journal, mas
 Execute `bin/Tests/Release/CSharpRegression.exe self-test` para rodar as regressões locais sem Node.js ou RPCs. `Povix.Bridge.Tests.csproj` contém regressões C# de quorum, durabilidade, concorrência, escopo e precisão Int64. `test/csharp-production.integration.mjs` usa Node/Ganache **apenas como infraestrutura de teste**, invocando os EXEs C#: não é dependência do cliente em operação. As ferramentas de teste ficam em `bin/Tests`, separadas do pacote do operador em `bin/CSharp`; não distribua a pasta de testes. Testa keystores entre implementações, assinaturas C# verificadas pelo contrato/Ethers, depósito, ledger POVIX, claims, pausa e resgate com espera simulada. A infraestrutura JavaScript anterior permanece para comparação e manutenção.
 
 É uma migração candidata, sem publicação de contratos ou chaves reais. Limitações federadas, reorganizações, ausência de rotação e requisitos de revisão independente de PRODUCTION.md continuam válidos. Dependências .NET e nova persistência também precisam dessa revisão; build aprovado não significa liberação para receber fundos reais.
+
+## Automação com operadores
+
+Execute os processos C# `run-coordinator` e `run-operator` para processar depósitos e resgates automaticamente, com chaves separadas. Exemplos de configuração e operação estão em [AUTOMATION.md](AUTOMATION.md).

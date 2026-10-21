@@ -9,6 +9,12 @@ public static class CSharpRegression {
     static void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("PASS " + message); }
     static void Reject(Action action, string message) { try { action(); } catch { Console.WriteLine("PASS " + message); return; } throw new Exception("Accepted " + message); }
     public static void Main(string[] args) {
+        if (args.Length == 3 && args[0] == "automation-peer") {
+            using (var peer = new PrivateCoin.Core.PeerNode(int.Parse(args[1]))) {
+                peer.TransactionReceived += (s, e) => { using (var stream = File.Create(args[2])) new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(PrivateCoin.Core.Transaction)).WriteObject(stream, e.Transaction); Console.WriteLine("RECEIVED " + e.Transaction.Id); };
+                Console.WriteLine("NETWORK " + PrivateCoin.Core.Blockchain.NetworkId); peer.Start(); Console.WriteLine("READY"); System.Threading.Thread.Sleep(TimeSpan.FromMinutes(10));
+            } return;
+        }
         if (args.Length == 3 && args[0] == "native-sign") {
             byte[] payload = Convert.FromBase64String(args[2]);
             using (var rsa = OperatorKeys.LoadNative(args[1])) {
@@ -30,6 +36,7 @@ public static class CSharpRegression {
                     ["nativeAdministrators"] = new JArray(publicKeys.Select(k => Povix.Bridge.BridgeNative.Hash((string)k))), ["nativeSigningPublicKeys"] = publicKeys, ["nativeThreshold"] = 2,
                     ["nativeSnapshot"] = first, ["nativeSnapshots"] = new JArray(first, second), ["nativeConfirmations"] = 12, ["bscConfirmations"] = 64, ["reserveCap"] = "1000000000", ["dailyReleaseCap"] = "1000000"
                 };
+                AutomationRegression.Run(BridgeConfig.From(fixture), temp);
                 string fixtureFile = Path.Combine(temp, "config.json"); File.WriteAllText(fixtureFile, fixture.ToString()); Main(new[] { "unit", fixtureFile, Path.Combine(temp, "state") });
             } finally { Directory.Delete(temp, true); } return;
         }

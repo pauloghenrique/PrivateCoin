@@ -77,7 +77,7 @@ O comando verifica assinatura RSA, identidade, quorum, payload e consenso nos do
 
 O consenso v38 guarda o identificador do depósito por vínculo de custódia e o inclui nas assinaturas. Um depósito não pode gerar dois mints, mesmo com nova revisão/transação e mesmo se o journal do coordenador for perdido. O registro é reconstruído no replay e acompanha reorganizações da cadeia. Isso não detecta um depósito completamente inventado por uma maioria maliciosa; essa verificação segue federada.
 
-A CLI não instala um relayer automático nem serviço público de fila. A troca só fica operacional quando os responsáveis mantêm o processamento/submissão das propostas e a atualização independente dos nós. Automação externa pode chamar esses comandos, preservando a separação das chaves e a política de verificação.
+O cliente C# inclui `run-coordinator` e `run-operator` para automatizar descoberta de depósitos, assinaturas independentes, transmissão P2P de emissões e resgates autorizados pelo titular. Configure os processos e o compartilhamento de dados públicos conforme [AUTOMATION.md](AUTOMATION.md). Os nós e snapshots continuam sendo mantidos independentemente; a CLI não instala os serviços, não cria o compartilhamento e não ativa a ponte automaticamente.
 
 ## Outros ativos e controle nativo
 

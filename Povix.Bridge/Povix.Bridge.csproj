@@ -72,6 +72,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="csharp\BridgeConfig.cs" />
+    <Compile Include="csharp\Automation.cs" />
+    <Compile Include="csharp\AutomationFiles.cs" />
+    <Compile Include="csharp\AutomationRpc.cs" />
+    <Compile Include="csharp\AutomationNative.cs" />
     <Compile Include="csharp\BridgeService.cs" />
     <Compile Include="csharp\Evm.cs" />
     <Compile Include="csharp\Journal.cs" />
@@ -88,6 +92,9 @@
     <Content Include="contracts\artifacts\manifest.json"><Link>contracts\manifest.json</Link><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <None Include="config.example.json" />
     <None Include="PRODUCTION.md" />
+    <None Include="AUTOMATION.md" />
+    <Content Include="automation.coordinator.example.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="automation.operator.example.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <None Include="README.md" />
     <None Include="VISUAL-STUDIO.md" />
   </ItemGroup>
