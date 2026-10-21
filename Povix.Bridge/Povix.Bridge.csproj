@@ -71,14 +71,12 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="Povix.Bridge.Native.csproj"><Project>{52959E4D-C2FC-4893-9601-01D370C7C45A}</Project><Name>Povix.Bridge.Native</Name></ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <Compile Include="csharp\BridgeConfig.cs" />
     <Compile Include="csharp\BridgeService.cs" />
     <Compile Include="csharp\Evm.cs" />
     <Compile Include="csharp\Journal.cs" />
     <Compile Include="csharp\Native.cs" />
+    <Compile Include="native\BridgeNative.cs" />
     <Compile Include="csharp\OperatorKeys.cs" />
     <Compile Include="csharp\Program.cs" />
 

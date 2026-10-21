@@ -57,7 +57,7 @@ test('C# client without Node runtime: key compatibility, deposit, independent si
   const signer=await provider.getSigner(0),mock=compile('test/MockUsdt.sol','MockUsdt'),artifact=compile('contracts/ProductionVault.sol','ProductionVault');
   const token=await new ContractFactory(mock.abi,mock.bytecode,signer).deploy();await token.waitForDeployment();
   const config={mode:'production',chainId:31337,rpcUrl:servers[0].url,rpcUrls:servers.map(s=>s.url),asset:(await token.getAddress()).toLowerCase(),bridge:null,
-   nativeNetwork:execFileSync(mono,[path.join(root,'build/native/BridgeNative.exe'),'network'],{encoding:'utf8'}).trim(),nativeToken:protocolToken,
+   nativeNetwork:execFileSync(mono,[path.join(root,'bin/CSharp/Release/Povix.Bridge.exe'),'network'],{encoding:'utf8'}).trim(),nativeToken:protocolToken,
    nativeAdministrators:operators.map(o=>o.address),nativeThreshold:2,nativeSigningPublicKeys:operators.slice(0,2).map(o=>o.publicKey),nativeConfirmations:12,bscConfirmations:64,
    nativeSnapshot:path.join(dir,'chain.json'),nativeSnapshots:['chain.json','independent-chain.json'].map(f=>path.join(dir,f)),
    operators:evm.slice(0,2).map(w=>w.address),threshold:2,reserveCap:'1000000000',dailyReleaseCap:'100000000',assetCodeHash:keccak256(await provider.getCode(await token.getAddress()))};
