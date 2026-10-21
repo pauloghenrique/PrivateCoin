@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Globalization;
+using System.Collections.Generic;
 using System.Text;
 using System.Runtime.Serialization.Json;
 using System.Threading;
@@ -61,9 +62,16 @@ namespace Povix.Bridge.CSharp {
                 }
             }
             var completed = journal.Keys.Where(k => k.StartsWith("automation:mint-done:", StringComparison.Ordinal)).Select(k => journal.Get(k)).ToArray();
-            if (completed.Length != 0) foreach (var snapshot in config.Strings("nativeSnapshots")) {
+            var burns = journal.Keys.Where(k => k.StartsWith("automation:burn-evidence:", StringComparison.Ordinal)).Select(k => journal.Get(k)).ToArray();
+            if (completed.Length != 0 || burns.Length != 0) foreach (var snapshot in config.Strings("nativeSnapshots")) {
+                // LoadChain validates the entire canonical history. Index it once, rather than
+                // rebuilding the full UTXO set separately for each historical deposit/burn.
                 var chain = BridgeNative.LoadChain(snapshot);
-                if (completed.Any(d => !chain.HasBridgeDeposit(config["nativeToken"], ((string)d["depositId"]).Substring(2)))) throw new InvalidOperationException("Previously included native claim disappeared; stop and reconcile the reorganization.");
+                var operations = chain.Blocks.SelectMany(b => b.Transactions).Where(t => t.TokenCommand != null && t.TokenCommand.TokenId == config["nativeToken"]).ToArray();
+                var claims = new HashSet<string>(operations.Where(t => t.TokenCommand.Operation == "mint" && t.TokenCommand.BridgeDepositId != null).Select(t => t.TokenCommand.BridgeDepositId), StringComparer.Ordinal);
+                var canonicalBurns = new HashSet<string>(operations.Where(t => t.Kind == TransactionKind.TokenManage && t.TokenCommand.Operation == "burn").Select(t => "0x" + BridgeNative.Hash(config["nativeNetwork"] + "|usdt-burn|" + config["nativeToken"] + "|" + t.Id)), StringComparer.Ordinal);
+                if (completed.Any(d => !claims.Contains(((string)d["depositId"]).Substring(2)))) throw new InvalidOperationException("Previously included native claim disappeared; stop and reconcile the reorganization.");
+                if (burns.Any(b => !canonicalBurns.Contains((string)b["burnId"]))) throw new InvalidOperationException("Previously verified native burn disappeared; stop and reconcile the reorganization.");
             }
         }
         async Task Operator() {
@@ -170,6 +178,7 @@ namespace Povix.Bridge.CSharp {
                 catch (IOException) { throw; }
                 catch (Exception e) { Console.Error.WriteLine("Burn not eligible for release: " + e.Message); continue; }
                 string burnId = (string)evidence["depositId"];
+                journal.Record("automation:burn-evidence:" + burnId, new JObject { ["burnId"] = burnId, ["transactionId"] = binding["transactionId"], ["recipient"] = evidence["recipient"], ["amount"] = evidence["amount"] });
                 var state = await AutomationRpc.ReleaseState(config, burnId);
                 if ((bool)state["processed"]) { journal.Record("automation:burn-done:" + requestId, evidence); continue; }
                 if ((string)state["executeAfter"] != "0") {

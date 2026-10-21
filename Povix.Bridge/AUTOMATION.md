@@ -84,7 +84,7 @@ Use Ctrl+C para parada normal. Configure execução na inicialização e reiníc
 
 Logs vão para stderr. Erros de rede/validação bloqueiam e são reavaliados no próximo ciclo; falhas de filesystem/journal encerram o processo para evitar assinar depois de uma gravação incompleta. Antes de reiniciar após esse tipo de falha, reconcilie a causa e o journal. Preserve backup cifrado das chaves e backup consistente dos journals fechados.
 
-Mudanças no hash do último bloco BNB escaneado, no bloco de confirmação de transações do relay ou desaparecimento de claims nativos já incluídos bloqueiam a automação para reconciliação de reorganizações.
+Mudanças no hash do último bloco BNB escaneado, no bloco de confirmação de transações do relay ou desaparecimento de claims/queimas nativos já verificados bloqueiam a automação para reconciliação de reorganizações.
 
 Transações nativas são persistidas antes do broadcast e retransmitidas com o mesmo ID enquanto aguardam inclusão. Transações BNB são assinadas e o raw/hash é gravado antes de broadcast; após falha ou perda da resposta, o serviço procura esse mesmo hash e só retransmite os mesmos bytes. Mantém no máximo um nonce EVM em trânsito por coordenador. Não use a carteira relay em outro software ou em outra instância. Taxas acima dos tetos bloqueiam novas assinaturas. Alterar o teto não revoga uma transação já assinada/persistida, que continua sendo reconciliada pelos bytes e hash originais. Transação substituída, revertida ou presa por preço de gas exige reconciliação: não apague o pending/journal para liberar um novo nonce.
 
@@ -94,4 +94,4 @@ A tela atual do Povix.Dex inicia o depósito e exibe o comprovante. A automaçã
 
 ## Validação
 
-`npm run test:automation` usa BNB local simulada e o ledger POVIX real, com dois processos de operadores, transmissão P2P, reinícios e perda simulada da resposta RPC depois do envio, cancelamento de resgate, recusa de operação administrativa disfarçada de emissão e bloqueio por divergência/reorganização. Node/Ganache são apenas infraestrutura de desenvolvimento; não são instalados nos operadores. O teste não publica contratos reais e não substitui validação Windows/testnet ou auditoria independente.
+`npm run test:automation` usa BNB local simulada e o ledger POVIX real, com dois processos de operadores, transmissão P2P, reinícios e perda simulada da resposta RPC depois do envio, cancelamento de resgate, recusa de operação administrativa disfarçada de emissão e bloqueio por divergência/reorganização, inclusive perda de uma queima apesar de a auditoria agregada ainda indicar lastro. Node/Ganache são apenas infraestrutura de desenvolvimento; não são instalados nos operadores. O teste não publica contratos reais e não substitui validação Windows/testnet ou auditoria independente.

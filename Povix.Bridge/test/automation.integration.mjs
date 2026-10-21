@@ -97,11 +97,13 @@ test('automatic operators: discover deposit, independent signatures, P2P mint, r
   for(let i=0;i<64;i++)await rpc.request({method:'evm_mine',params:[]});
   await coordinator();assert.equal(await provider.getTransactionCount(wallets[2].address),relayBefore+1,'restart does not allocate a second nonce');
   assert.equal(await token.balanceOf(wallets[3].address),0n);
+  const beforeSecondBurn=config.nativeSnapshots.map(f=>readFileSync(f));
   // A separate legitimate burn is queued, then cancelled by one operator.
   // The daemon must never create fresh authorizations or requeue it after cancellation.
   run('burn',wallets[3].address.toLowerCase());
   await cs('enqueue-burn',coordFile,path.join(dir,'burn.json'));await coordinator();await operator(0);await operator(1);await coordinator();
   const cancelled=(await cs('verify-burn',path.join(dir,'burn.json'))).depositId;
+  const afterSecondBurn=config.nativeSnapshots.map(f=>readFileSync(f));
   assert.ok((await vault.pendingReleases(cancelled)).executeAfter>0n);
   for(let i=0;i<64;i++)await rpc.request({method:'evm_mine',params:[]});
   await (await vault.cancelRelease(cancelled)).wait();await coordinator();
@@ -119,6 +121,12 @@ test('automatic operators: discover deposit, independent signatures, P2P mint, r
   assert.equal(await provider.getTransactionCount(wallets[2].address),relayBefore+3,'exactly two queues + one execute; cancelled request never requeues');
   assert.equal((await cs('audit')).backed,true);
   assert.equal((await vault.pendingReleases(cancelled)).executeAfter,0n);
+  // Losing the second native burn still leaves aggregate backing (0.5 supply / 0.6 reserve).
+  // Historical burn tracking must nevertheless stop the relay before it sends anything else.
+  config.nativeSnapshots.forEach((f,i)=>writeFileSync(f,beforeSecondBurn[i]));
+  assert.equal((await cs('audit')).backed,true);
+  await assert.rejects(coordinator(),/native burn disappeared/);
+  config.nativeSnapshots.forEach((f,i)=>writeFileSync(f,afterSecondBurn[i]));
   controls[0].corruptHistoricalBlock=true;
   await assert.rejects(coordinator(),/providers disagree/i);controls[0].corruptHistoricalBlock=false;
   await rpc.request({method:'evm_revert',params:[beforePayout]});
