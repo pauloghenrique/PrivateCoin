@@ -1,8 +1,0 @@
-[
-  {
-    "asset": "REPLACE_WITH_REVIEWED_BNB_CONTRACT",
-    "vault": "REPLACE_WITH_APPROVED_VAULT",
-    "assetCodeHash": "REPLACE_WITH_REVIEWED_RUNTIME_HASH",
-    "vaultCodeHash": "REPLACE_WITH_DEPLOYED_RUNTIME_HASH"
-  }
-]

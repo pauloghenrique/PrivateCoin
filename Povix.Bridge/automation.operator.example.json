@@ -1,9 +1,0 @@
-{
-  "enabled": false,
-  "exchangeDirectory": "\\\\SERVIDOR\\PovixBridgeExchange",
-  "stateDirectory": "C:\\PovixBridgeOperatorState",
-  "pollSeconds": 15,
-  "processReleases": true,
-  "nativeOperatorKeystore": "C:\\PovixBridgeKeys\\operador-povix.local.json",
-  "evmOperatorKeystore": "C:\\PovixBridgeKeys\\operador-bnb.local.json"
-}
